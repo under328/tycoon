@@ -474,7 +474,7 @@ func _show_emoji(seat: int, id: int) -> void:
 	lb.position = pos
 	fx_layer.add_child(lb)
 	var tw := create_tween()
-	tw.tween_parallel().tween_property(lb, "position:y", pos.y - 50.0, 1.6)
+	tw.tween_property(lb, "position:y", pos.y - 50.0, 1.6)
 	tw.parallel().tween_property(lb, "modulate:a", 0.0, 1.6).set_delay(0.4)
 	tw.tween_callback(lb.queue_free)
 
@@ -704,12 +704,12 @@ func _revolution_fx() -> void:
 	big.modulate.a = 0.0
 	fx_layer.add_child(big)
 	var tw := create_tween()
-	tw.tween_parallel().tween_property(flash, "color:a", 0.32, 0.16)
+	tw.tween_property(flash, "color:a", 0.32, 0.16)
 	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.3)\
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.parallel().tween_property(big, "modulate:a", 1.0, 0.2)
 	tw.tween_interval(0.9)
-	tw.tween_parallel().tween_property(flash, "color:a", 0.0, 0.5)
+	tw.tween_property(flash, "color:a", 0.0, 0.5)
 	tw.parallel().tween_property(big, "modulate:a", 0.0, 0.5)
 	tw.tween_callback(func() -> void:
 		flash.queue_free()
@@ -752,6 +752,6 @@ func _end_overlay(view: Dictionary, my_rank: int) -> void:
 	fx_layer.add_child(detail)
 
 	var tw := create_tween()
-	tw.tween_parallel().tween_property(dark, "color:a", 0.55, 0.4)
+	tw.tween_property(dark, "color:a", 0.55, 0.4)
 	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.45)\
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
