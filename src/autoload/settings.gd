@@ -2,6 +2,8 @@ extends Node
 ## 客户端偏好持久化（autoload: GameSettings）
 
 const SAVE_PATH := "user://settings.cfg"
+## 部署时改成实际下载页地址; 版本不符的客户端会收到此提示
+const DOWNLOAD_URL := "https://tycoon.example.com/download"
 
 var nickname := "玩家"
 var bgm_volume := 0.8

@@ -249,7 +249,7 @@ func _bind_net() -> void:
 		_set_status("错误 %s: %s" % [code, msg], COLOR_RED))
 	net.kicked_off.connect(func(reason: String) -> void:
 		if reason == "version":
-			_set_status("版本不符，请更新客户端", COLOR_RED)
+			_set_status("版本不符，请到 %s 下载新版本" % GameSettings.DOWNLOAD_URL, COLOR_RED)
 		else:
 			_set_status("已被移出房间（%s）" % reason, COLOR_RED))
 	net.stats_updated.connect(func(entry: Dictionary) -> void:

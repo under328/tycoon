@@ -36,6 +36,7 @@ var _emoji_cd := 0.0
 var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
+var _leave_confirm_at := 0
 
 # M4 视听状态
 var _last_hand: Array = []
@@ -195,6 +196,16 @@ func _on_rematch_pressed() -> void:
 
 func _on_leave_pressed() -> void:
 	Audio.play("click")
+	# 对局中离开=弃局交给 AI, 需 3 秒内二次确认
+	if mode == "online" and not _at_game_end:
+		var now := Time.get_ticks_msec()
+		if now - _leave_confirm_at > 3000:
+			_leave_confirm_at = now
+			btn_leave.text = "确认弃局?"
+			var tw := create_tween()
+			tw.tween_interval(3.0)
+			tw.tween_callback(func() -> void: btn_leave.text = "返回大厅")
+			return
 	if net != null:
 		net.leave_room()
 	finished.emit()
