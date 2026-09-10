@@ -25,6 +25,28 @@ session_token 重连回座（离线期间 AI 托管）；打完自动回房间�
 服务器按游客 ID 记录场数/胜场/累计积分（`user://stats.json`）。
 规则细节见 [docs/规则规格.md](docs/规则规格.md)。
 
+## 构建发布（Windows）
+
+```bash
+# 需要 Godot 导出模板（Steam 版通常已随 Steam DLC 安装）
+godot --headless --path . --export-release "Windows Desktop" builds/Tycoon.exe
+```
+
+产物 `builds/Tycoon.exe`（内嵌全部资源）可直接双击进本地模式；也可当无头服务器：
+`Tycoon.exe --headless --server --port 24565`。
+发布产物已验证：用导出的 exe 当服务器完整跑通 E2E（含断线重连）。
+
+## 压测
+
+```bash
+# 起服务器后，开 N 个机器人持续打满指定秒数：
+godot --headless --path . --server --port 24575 &
+STRESS_SEC=150 godot --headless --path . --script tests/stress_bot.gd   # 每个进程一个机器人
+```
+
+已验证：6 机器人并发 150 秒完成 65 场完整对局，服务器零脚本错误，
+压测后 E2E 全流程依旧通过。
+
 ## 运行测试
 
 ```bash
