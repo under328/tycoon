@@ -186,6 +186,22 @@ func set_settings(peer: int, rules: Dictionary) -> Array:
 	return out
 
 
+## 房内文本聊天（限长 80 字，广播给全房在线人类）。
+func chat(peer: int, text: String) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null:
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	if seat < 0:
+		return out
+	text = text.strip_edges().substr(0, 80)
+	if text == "":
+		return out
+	_bcast_event(out, room, "s_chat", {"seat": seat, "text": text})
+	return out
+
+
 ## 查询自己的战绩。
 func stats_get(peer: int) -> Array:
 	var cid: String = str(peer_client.get(peer, ""))

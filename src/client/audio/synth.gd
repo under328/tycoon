@@ -91,38 +91,51 @@ static func wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 
 # ---------------------------------------------------------------- BGM
 
-## 和风五声音阶氛围垫（A 羽调式: A C D E G），16 秒无缝循环。
-static func bgm_koto() -> AudioStreamWAV:
+## 五声音阶氛围垫（可变调式/密度）。16 秒无缝循环。
+static func _bgm_base(roots: Array, pluck_seed: int, pluck_min: float, pluck_max: float) -> AudioStreamWAV:
 	var dur := 16.0
 	var n := int(dur * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
-	# 和弦垫: 根音+五度, 每和弦 4 秒, 缓起缓落
-	var chords := [
+	for ci in roots.size():
+		var start: float = ci * (dur / roots.size())
+		for half in 2:
+			var f: float = roots[ci][half]
+			var s0 := int(start * RATE)
+			var len := int((dur / roots.size()) * RATE)
+			for i in len:
+				var t := float(i) / RATE
+				var env := sin(PI * t / (dur / roots.size())) * 0.10
+				out[s0 + i] += sin(TAU * f * t) * env
+	var rng := RandomNumberGenerator.new()
+	rng.seed = pluck_seed
+	var t := 0.4
+	while t < dur - 0.5:
+		var f: float = roots[rng.randi_range(0, roots.size() - 1)][rng.randi_range(0, 1)]
+		# 拨弦音高在其邻域五度内跳动
+		f *= [0.5, 0.75, 1.0, 1.5][rng.randi_range(0, 3)]
+		var vol := rng.randf_range(0.10, 0.18)
+		var pluck := tone(0.9, f, vol, 5.0)
+		out = mix_over(out, pluck, t)  # PackedArray 值语义, 必须接返回值
+		t += rng.randf_range(pluck_min, pluck_max)
+	return _to_wav(out)
+
+
+## 对局 BGM: A 羽调式, 舒缓
+static func bgm_koto() -> AudioStreamWAV:
+	return _bgm_base([
 		[220.0, 329.63],   # A + E
 		[261.63, 392.0],   # C + G
 		[293.66, 440.0],   # D + A
 		[220.0, 329.63],
-	]
-	for ci in chords.size():
-		var start := ci * 4.0
-		for half in 2:
-			var f: float = chords[ci][half]
-			var s0 := int(start * RATE)
-			var len := int(4.0 * RATE)
-			for i in len:
-				var t := float(i) / RATE
-				var env := sin(PI * t / 4.0) * 0.10
-				out[s0 + i] += sin(TAU * f * t) * env
-	# 五声音阶拨弦旋律 (A C D E G 各八度), 固定"随机"种子
-	var scale := [440.0, 523.25, 587.33, 659.25, 783.99, 880.0]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260911
-	var t := 0.4
-	while t < dur - 0.5:
-		var f: float = scale[rng.randi_range(0, scale.size() - 1)]
-		var vol := rng.randf_range(0.10, 0.18)
-		var pluck := tone(0.9, f, vol, 5.0)
-		out = mix_over(out, pluck, t)  # PackedArray 值语义, 必须接返回值
-		t += rng.randf_range(0.5, 1.1)
-	return _to_wav(out)
+	], 20260911, 0.5, 1.1)
+
+
+## 大厅 BGM: D 羽调式, 稍快更轻快
+static func bgm_lobby() -> AudioStreamWAV:
+	return _bgm_base([
+		[293.66, 440.0],   # D + A
+		[349.23, 523.25],  # F + C
+		[392.0, 587.33],   # G + D
+		[293.66, 440.0],
+	], 20260912, 0.35, 0.8)

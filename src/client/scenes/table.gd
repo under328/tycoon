@@ -33,7 +33,9 @@ var selected: Array = []
 var advancing := false
 var _at_game_end := false
 var _emoji_cd := 0.0
+var _chat_cd := 0.0
 var _emoji_btns: Array = []
+var _prev_tick := -1
 
 # M4 视听状态
 var _last_hand: Array = []
@@ -48,6 +50,8 @@ var info_label: Label
 var status_label: Label
 var error_label: Label
 var timer_label: Label
+var chat_log: Label
+var chat_edit: LineEdit
 var seat_labels: Array = []
 var hand_box: HFlowContainer
 var field_box: HBoxContainer
@@ -67,20 +71,26 @@ func _ready() -> void:
 		_refresh()
 	else:
 		_new_match()
-	Audio.play_bgm()
+	Audio.play_bgm("table")
 
 
 func _process(delta: float) -> void:
 	if _emoji_cd > 0.0:
 		_emoji_cd -= delta
+	if _chat_cd > 0.0:
+		_chat_cd -= delta
 	# 在线模式回合倒计时
 	if mode == "online" and _turn_remain > 0.0:
 		_turn_remain -= delta
 		if _turn_total > 0:
 			var remain := maxf(_turn_remain, 0.0)
-			timer_label.text = "⏱ %d" % int(ceil(remain))
+			var cur := int(ceil(remain))
+			timer_label.text = "⏱ %d" % cur
 			timer_label.add_theme_color_override("font_color",
 					COLOR_RED if remain <= 5.0 else COLOR_WHITE)
+			if remain <= 5.0 and cur >= 1 and cur != _prev_tick:
+				_prev_tick = cur
+				Audio.play("tick")
 
 
 # ---------------------------------------------------------------- 驱动（本地）
@@ -224,6 +234,31 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 	if event == "emoji":
 		_show_emoji(int(data.get("seat", 0)), int(data.get("id", 0)))
 		Audio.play("pop")
+	elif event == "chat":
+		_append_chat(int(data.get("seat", 0)), str(data.get("text", "")))
+
+
+func _append_chat(seat: int, text: String) -> void:
+	var view: Dictionary = net.latest_view if mode == "online" and net != null else {}
+	var lines := chat_log.text.split("\n")
+	var keep := lines.slice(maxi(lines.size() - 4, 0))
+	keep.append("%s: %s" % [_seat_name(view, seat), text])
+	chat_log.text = "\n".join(keep)
+
+
+func _on_chat_send() -> void:
+	var text := chat_edit.text.strip_edges()
+	if text == "":
+		return
+	if _chat_cd > 0.0:
+		_flash_error("说太快了")
+		return
+	_chat_cd = 1.0
+	chat_edit.clear()
+	if mode == "online" and net != null:
+		net.send_chat(text)
+		var view: Dictionary = net.latest_view
+		_append_chat(int(view.get("my_seat", 0)), text)
 
 
 # ---------------------------------------------------------------- UI 构建
@@ -340,6 +375,31 @@ func _build_ui() -> void:
 	if mode == "local":
 		for eb: Button in _emoji_btns:
 			eb.visible = false
+
+	# 文本聊天（仅联机模式）
+	chat_log = _make_label(14, COLOR_WHITE)
+	chat_log.position = Vector2(16, 462)
+	chat_log.custom_minimum_size = Vector2(296, 84)
+	chat_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	add_child(chat_log)
+	chat_edit = LineEdit.new()
+	chat_edit.position = Vector2(440, 666)
+	chat_edit.custom_minimum_size = Vector2(340, 36)
+	chat_edit.placeholder_text = "说点什么…"
+	chat_edit.max_length = 80
+	chat_edit.add_theme_font_size_override("font_size", 15)
+	chat_edit.text_submitted.connect(func(_t: String) -> void: _on_chat_send())
+	add_child(chat_edit)
+	var chat_btn := _button("发送")
+	chat_btn.position = Vector2(792, 666)
+	chat_btn.custom_minimum_size = Vector2(60, 36)
+	chat_btn.add_theme_font_size_override("font_size", 15)
+	chat_btn.pressed.connect(_on_chat_send)
+	add_child(chat_btn)
+	if mode == "local":
+		chat_log.visible = false
+		chat_edit.visible = false
+		chat_btn.visible = false
 
 	# 特效层（全屏最上层）
 	fx_layer = Control.new()

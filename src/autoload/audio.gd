@@ -5,6 +5,8 @@ extends Node
 const Synth := preload("res://src/client/audio/synth.gd")
 
 var bgm_player: AudioStreamPlayer
+var _bgm_tracks := {}
+var _bgm_current := ""
 var _sfx_players: Array = []
 var _sfx_next := 0
 var library := {}
@@ -13,9 +15,10 @@ var library := {}
 func _ready() -> void:
 	_setup_buses()
 	_build_library()
-	_make_bgm()
+	_bgm_tracks["table"] = Synth.bgm_koto()
+	_bgm_tracks["lobby"] = Synth.bgm_lobby()
 	apply_volumes()
-	play_bgm()
+	play_bgm("lobby")
 
 
 func _setup_buses() -> void:
@@ -63,8 +66,6 @@ func _build_library() -> void:
 	library["turn"] = Synth.wav(Synth.tone(0.08, 987.77, 0.20, 16.0))
 
 
-func _make_bgm() -> void:
-	bgm_player.stream = Synth.bgm_koto()
 
 
 # ---------------------------------------------------------------- API
@@ -78,9 +79,15 @@ func play(sfx_name: String) -> void:
 	p.play()
 
 
-func play_bgm() -> void:
-	if not bgm_player.playing:
-		bgm_player.play()
+## 切换 BGM 轨道（"lobby"/"table"）；同轨不重启。
+func play_bgm(track: String = "lobby") -> void:
+	if not _bgm_tracks.has(track):
+		return
+	if _bgm_current == track and bgm_player.playing:
+		return
+	_bgm_current = track
+	bgm_player.stream = _bgm_tracks[track]
+	bgm_player.play()
 
 
 func apply_volumes() -> void:

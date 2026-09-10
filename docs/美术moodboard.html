@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大富豪 · 美术风格 Moodboard（风格 A：和风 × 现代霓虹）</title>
+<style>
+  :root {
+    --bg: #14142b; --panel: #1e1e40; --gold: #e0a83c; --red: #e0503c;
+    --white: #f0f0f0; --dim: #9a9ac2; --indigo: #2c2c5e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--white); font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; padding: 40px 24px; }
+  h1 { color: var(--gold); letter-spacing: 4px; font-size: 30px; margin-bottom: 6px; }
+  .note { color: var(--dim); margin-bottom: 32px; line-height: 1.8; max-width: 860px; }
+  h2 { color: var(--gold); font-size: 20px; letter-spacing: 3px; margin: 34px 0 14px; }
+  /* 色板 */
+  .swatches { display: flex; flex-wrap: wrap; gap: 14px; }
+  .sw { width: 150px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+  .sw .c { height: 76px; }
+  .sw .t { padding: 8px 10px; font-size: 12px; color: var(--dim); background: var(--panel); }
+  .sw .t b { display: block; color: var(--white); font-size: 13px; }
+  /* 提示词卡 */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 18px; }
+  .pcard { background: var(--panel); border-radius: 12px; border: 1px solid rgba(224,168,60,0.3); padding: 18px 20px; }
+  .pcard h3 { color: var(--gold); font-size: 16px; margin-bottom: 8px; }
+  .pcard .zh { color: #cfcfe8; font-size: 13px; line-height: 1.8; margin-bottom: 10px; }
+  .pcard .prompt {
+    background: #101024; border-radius: 8px; padding: 10px 12px; font-size: 12.5px;
+    color: #a8d0ff; font-family: Consolas, monospace; line-height: 1.7; user-select: all;
+  }
+  .pcard .use { color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .warn { background: rgba(224,80,60,0.12); border-left: 3px solid var(--red); padding: 10px 14px; border-radius: 6px; color: #ffd2c9; font-size: 13px; margin-top: 8px; line-height: 1.7;}
+</style>
+</head>
+<body>
+  <h1>大富豪 · 美术 Moodboard</h1>
+  <p class="note">
+    风格 A：<b>和风 × 现代霓虹</b> —— 浮世绘纹样与和纸质感做底，描边扁平角色，霓虹金/朱红点缀。<br>
+    本页是素材管线的第一步：确认色调 → 复制提示词卡到 MJ / SD 生成概念图 → 挑 3 张定稿（牌桌 / 牌面 / 结算页）→ 批量出资产。
+    提示词卡内的英文 Prompt 可直接使用，建议 Midjourney 加 <code>--ar 16:9</code>（界面类）或 <code>--ar 5:7</code>（卡面类）。
+  </p>
+
+  <h2>一、核心色板（已用于当前占位 UI）</h2>
+  <div class="swatches">
+    <div class="sw"><div class="c" style="background:#14142b"></div><div class="t"><b>深靛底 #14142b</b>背景主色（OLED 省电）</div></div>
+    <div class="sw"><div class="c" style="background:#22224a"></div><div class="t"><b>面板靛 #22224a</b>面板/卡背</div></div>
+    <div class="sw"><div class="c" style="background:#e0a83c"></div><div class="t"><b>霓虹金 #e0a83c</b>主强调/边框/革命</div></div>
+    <div class="sw"><div class="c" style="background:#e0503c"></div><div class="t"><b>朱红 #e0503c</b>警示/红花色/按钮</div></div>
+    <div class="sw"><div class="c" style="background:#f9f4e6"></div><div class="t"><b>和纸米白 #f9f4e6</b>牌面底色</div></div>
+    <div class="sw"><div class="c" style="background:#7dd87d"></div><div class="t"><b>若竹绿 #7dd87d</b>成功/轮到你</div></div>
+  </div>
+
+  <h2>二、关键元素清单（所有资产统一使用）</h2>
+  <div class="cards">
+    <div class="pcard"><h3>纹样</h3><div class="zh">青海波（重叠半圆波纹）、麻叶纹（_asanoha_ 星形几何）、云纹（层叠金弧）、霞带（横向雾带）。</div></div>
+    <div class="pcard"><h3>质感</h3><div class="zh">和纸颗粒（低透明度噪点覆层）、描金细线（1–2px）、深色底上的微光晕。</div></div>
+    <div class="pcard"><h3>字体气质</h3><div class="zh">标题：粗黑体+局部衬线点缀；数字/点数：几何无衬线。避免手写体。</div></div>
+    <div class="pcard"><h3>角色</h3><div class="zh">粗描边扁平、几何化；头像 8–12 个（武士/艺伎/商人/忍者/法师…），统一 3/4 侧视角。</div></div>
+  </div>
+
+  <h2>三、AI 生图提示词卡（复制即用）</h2>
+  <div class="cards">
+    <div class="pcard">
+      <h3>① 牌桌全景（关键参考图 1）</h3>
+      <div class="zh">用于定整体氛围与布局。重点看：桌面材质、四座信息排布、留白。</div>
+      <div class="prompt">top-down card table for a japanese card game, dark indigo felt with subtle asanoha pattern, gold rim lighting, four player seats, ukiyo-e wave motif border, red and gold accents, flat vector style, washi paper texture overlay, clean UI space, game art, 16:9 --ar 16:9</div>
+    </div>
+    <div class="pcard">
+      <h3>② 牌面设计（关键参考图 2）</h3>
+      <div class="zh">用于定牌面版式。已有的程序化牌面（米白底描金）与之对齐即可，不需要重画 54 张。</div>
+      <div class="prompt">playing card design, washi paper cream background, gold border frame, minimalist red and ink-black suit symbols, ukiyo-e style king card with circular gold ornament, flat design, elegant, card game asset --ar 5:7</div>
+    </div>
+    <div class="pcard">
+      <h3>③ 结算页 / 大厅背景（关键参考图 3）</h3>
+      <div class="zh">用于定胜利/失败演出与大厅氛围。注意保持深底、金字、朱红点缀的三色结构。</div>
+      <div class="prompt">victory screen background for japanese themed card game, dark indigo night, golden clouds and ukiyo-e wave, red sun motif, neon glow accents, flat illustration, generous empty space in center for UI text --ar 16:9</div>
+    </div>
+    <div class="pcard">
+      <h3>④ 头像（8–12 个，批量）</h3>
+      <div class="zh">换基础描述词批量生成：武士 samurai / 艺伎 geisha / 商人 merchant / 忍者 ninja / 天狗 tengu / 法师 monk / 花魁 oiran / 稻荷神 Inari。</div>
+      <div class="prompt">flat portrait avatar, [samurai] character, bold outline, geometric shapes, dark indigo background, gold rim light, red accents, japanese ukiyo-e inspired minimal style, game avatar, centered --ar 1:1</div>
+    </div>
+    <div class="pcard">
+      <h3>⑤ 革命转场插画（可选）</h3>
+      <div class="zh">革命瞬间全屏演出用背景；当前用红闪+大字已可用，插画可后补。</div>
+      <div class="prompt">dramatic ukiyo-e style red sun and crashing waves, inverted colors, revolution concept, gold outline, dark background, dynamic diagonal composition, japanese woodblock print modern remake --ar 16:9</div>
+    </div>
+    <div class="pcard">
+      <h3>⑥ 音乐提示词（Suno / Udio）</h3>
+      <div class="zh">BGM ×4：大厅 / 对局 / 革命变奏 / 终局结算。建议每首生成 2–3 个候选。</div>
+      <div class="prompt">[对局] japanese lo-fi jazz, koto plucks, soft jazz brushes, pentatonic A minor, subtle tension, 92 bpm, seamless loop, no vocals<br>[大厅] relaxed japanese city pop lo-fi, warm rhodes, koto accents, 80 bpm, loopable<br>[革命变奏] same motif as battle but inverted & intense, taiko hits, 104 bpm<br>[结算] short triumphant japanese jingle, koto + shamisen, 8 bars</div>
+    </div>
+  </div>
+
+  <h2>四、定稿流程</h2>
+  <div class="cards">
+    <div class="pcard">
+      <div class="zh">
+        1. 用 ①②③ 的提示词各出 4–6 张，挑出 3 张关键参考图。<br>
+        2. 把选中的图片文件发我（或放到 <code>assets/concept/</code> 目录），我做与现有程序化 UI 的对齐改造。<br>
+        3. 音乐：Suno 生成候选 → 挑 4 首 → 交给我接替换 <code>synth.gd</code> 的占位音频（钩子已就绪）。<br>
+        4. 换皮全程不改代码结构：颜色/贴图集中在 Theme 与 audio 库两处。
+      </div>
+      <div class="warn">注意：AI 生成的参考图仅作内部风格定位。正式商用素材需确认所用生成服务的商用授权条款。</div>
+    </div>
+  </div>
+</body>
+</html>

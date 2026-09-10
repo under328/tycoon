@@ -167,6 +167,13 @@ func c_emoji(data: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func c_chat(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.chat(_sender(), str(data.get("text", ""))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
 func c_stats(_data: Dictionary) -> void:
 	if not is_server:
 		return
@@ -315,6 +322,13 @@ func s_emoji(data: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+func s_chat(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("chat", data)
+
+
+@rpc("authority", "call_remote", "reliable")
 func s_stats(data: Dictionary) -> void:
 	if is_server:
 		return
@@ -406,6 +420,11 @@ func set_settings(rules: Dictionary) -> void:
 ## 快捷表情（房间内）
 func send_emoji(id: int) -> void:
 	_c_send("c_emoji", {"id": id})
+
+
+## 房内文本聊天
+func send_chat(text: String) -> void:
+	_c_send("c_chat", {"text": text})
 
 
 ## 请求自己的战绩

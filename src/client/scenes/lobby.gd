@@ -51,6 +51,7 @@ func _ready() -> void:
 		add_child(net)
 	_build_ui()
 	_bind_net()
+	Audio.play_bgm("lobby")
 
 
 func _build_ui() -> void:
@@ -261,7 +262,10 @@ func _bind_net() -> void:
 	net.game_event.connect(func(event: String, data: Dictionary) -> void:
 		if event == "emoji":
 			_set_status("座位 %d: %s" % [int(data.get("seat", 0)) + 1,
-					EMOJIS[clampi(int(data.get("id", 0)), 0, EMOJIS.size() - 1)]], COLOR_GOLD))
+					EMOJIS[clampi(int(data.get("id", 0)), 0, EMOJIS.size() - 1)]], COLOR_GOLD)
+		elif event == "chat":
+			_set_status("座位 %d 说: %s" % [int(data.get("seat", 0)) + 1,
+					str(data.get("text", ""))], COLOR_WHITE))
 	net.room_state.connect(_on_room_state)
 	net.view_changed.connect(func(_view: Dictionary) -> void:
 		start_game.emit())
