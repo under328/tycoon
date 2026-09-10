@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  GODOT_VERSION: 4.4.1-stable
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot (headless)
+        run: |
+          curl -L -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip godot.zip
+          chmod +x "Godot_v${GODOT_VERSION}_linux.x86_64"
+
+      - name: Run test suite
+        run: |
+          "./Godot_v${GODOT_VERSION}_linux.x86_64" --headless --path . --script tests/run_tests.gd

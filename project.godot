@@ -1,0 +1,29 @@
+; Engine configuration file.
+; Godot 4.x — Tycoon 大富豪
+
+config_version=5
+
+[application]
+
+config/name="Tycoon 大富豪"
+run/main_scene="res://src/client/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+AppMode="*res://src/autoload/app_mode.gd"
+GameSettings="*res://src/autoload/settings.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
