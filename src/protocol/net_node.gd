@@ -24,6 +24,9 @@ var is_server := false
 
 # --- 服务器侧 ---
 var manager = null
+var _health := TCPServer.new()
+var _health_peers: Array = []
+var _log_accum := 0.0
 
 # --- 客户端侧 ---
 var latest_view: Dictionary = {}
@@ -68,6 +71,9 @@ func _ready() -> void:
 		manager = ManagerGd.new()
 		manager.ai_delay_ms = ai_ms
 		manager.phase_delay_ms = phase_ms
+		# 健康检查: HTTP GET http://<host>:%d/ → JSON 状态（运维探活用）
+		if _health.listen(port_v + 1) == OK:
+			print("[server] 健康检查端口 http=%d" % (port_v + 1))
 		print("[server] Tycoon 服务器已启动 端口=%d ai_delay=%dms phase_delay=%dms" % [
 			port_v, ai_ms, phase_ms])
 
@@ -76,8 +82,36 @@ func _process(delta: float) -> void:
 	if is_server:
 		if manager != null:
 			_flush(manager.tick(Time.get_ticks_msec()))
+		_poll_health(delta)
 	else:
 		_client_process(delta)
+
+
+func _poll_health(delta: float) -> void:
+	_log_accum += delta
+	if _log_accum >= 60.0:
+		_log_accum = 0.0
+		print("[server] rooms=%d players=%d uptime=%ds" % [
+			manager.rooms.size(), manager.peer_room.size(),
+			int(Time.get_ticks_msec() / 1000.0)])
+	if _health.is_listening():
+		while _health.is_connection_available():
+			var s: StreamPeerTCP = _health.take_connection()
+			var body := "{\"status\":\"ok\",\"rooms\":%d,\"players\":%d,\"uptime\":%d}" % [
+				manager.rooms.size(), manager.peer_room.size(),
+				int(Time.get_ticks_msec() / 1000.0)]
+			var resp := "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
+				body.to_utf8_buffer().size(), body]
+			s.put_data(resp.to_utf8_buffer())
+			_health_peers.append({"s": s, "t": 0.3})
+	var keep: Array = []
+	for e in _health_peers:
+		e["t"] -= delta
+		if e["t"] > 0.0:
+			keep.append(e)
+		else:
+			(e["s"] as StreamPeerTCP).disconnect_from_host()
+	_health_peers = keep
 
 
 func _on_peer_disconnected(peer: int) -> void:

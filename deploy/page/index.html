@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大富豪 · Tycoon — 四人联机纸牌</title>
+<style>
+  :root {
+    --bg: #14142b; --panel: #22224a; --gold: #e0a83c;
+    --red: #e0503c; --white: #f0f0f0; --dim: #8a8ab0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--white);
+    font-family: "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 48px 20px;
+    background-image:
+      radial-gradient(ellipse 600px 300px at 50% -50px, rgba(224,168,60,0.10), transparent),
+      radial-gradient(ellipse 500px 260px at 85% 100%, rgba(224,80,60,0.07), transparent);
+  }
+  .card-logo {
+    width: 96px; height: 132px; border-radius: 10px;
+    background: linear-gradient(160deg, #22224a, #191932);
+    border: 3px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 56px; color: var(--red); font-weight: 900;
+    box-shadow: 0 8px 40px rgba(224,168,60,0.25);
+    transform: rotate(-4deg); margin-bottom: 24px;
+  }
+  h1 { font-size: 40px; letter-spacing: 6px; color: var(--gold); }
+  .sub { color: var(--dim); margin: 10px 0 36px; letter-spacing: 2px; }
+  .downloads { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-bottom: 40px; }
+  a.dl {
+    display: block; padding: 18px 36px; border-radius: 12px; text-decoration: none;
+    font-size: 19px; font-weight: bold; transition: transform .15s, box-shadow .15s;
+  }
+  a.dl:hover { transform: translateY(-3px); }
+  a.dl.win { background: linear-gradient(140deg, #2c4a7a, #1c2c4a); color: #cfe2ff;
+    box-shadow: 0 6px 24px rgba(60,120,220,0.25); }
+  a.dl.android { background: linear-gradient(140deg, #2c7a4a, #1c4a2c); color: #d2ffdc;
+    box-shadow: 0 6px 24px rgba(60,220,120,0.20); }
+  a.dl small { display: block; font-weight: normal; font-size: 13px; opacity: .75; margin-top: 4px; }
+  .section {
+    background: var(--panel); border: 1px solid rgba(224,168,60,0.35); border-radius: 14px;
+    max-width: 720px; width: 100%; padding: 26px 30px; margin-bottom: 22px;
+  }
+  .section h2 { color: var(--gold); font-size: 20px; margin-bottom: 14px; letter-spacing: 3px; }
+  .section p, .section li { line-height: 1.9; color: #cfcfe8; font-size: 15px; }
+  .section ol { padding-left: 22px; }
+  .tag { display: inline-block; background: rgba(224,168,60,0.15); color: var(--gold);
+    border-radius: 6px; padding: 1px 10px; font-size: 13px; margin-right: 6px; }
+  footer { color: var(--dim); font-size: 13px; margin-top: 28px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+  <div class="card-logo">富</div>
+  <h1>大富豪 · Tycoon</h1>
+  <div class="sub">四人联机纸牌 · 革命与階段 · Windows / Android</div>
+
+  <div class="downloads">
+    <a class="dl win" href="Tycoon.exe" download>
+      ⬇ Windows 版<small>Tycoon.exe · 双击即玩 · 免安装</small>
+    </a>
+    <a class="dl android" href="Tycoon-release.apk" download>
+      ⬇ Android 版<small>Tycoon-release.apk · arm64 · 直接安装</small>
+    </a>
+  </div>
+
+  <div class="section">
+    <h2>怎么开一局</h2>
+    <ol>
+      <li>房主打开游戏 → 大厅连接服务器 → <b>创建房间</b>，把 6 位房间码发给朋友。</li>
+      <li>朋友在各自设备的大厅输入房间码加入；人不满时房主可"空位加AI"。</li>
+      <li>房主点<b>开始游戏</b>，连打 3 局，总分定胜负；打完可一键再来。</li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>玩法速览</h2>
+    <p>
+      <span class="tag">点序</span>3 最小、2 次之、王最大；
+      <span class="tag">跟牌</span>同牌型同张数、点更大，或不要；
+      <span class="tag">革命</span>四条一出、大小颠倒；
+      <span class="tag">階段</span>同花色连牌自成牌型；
+      <span class="tag">换牌</span>乞丐把最好的牌孝敬大富豪——弱者也能翻盘。
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>自建服务器（可选）</h2>
+    <p>
+      Windows 版自带服务器模式：<code>Tycoon.exe --headless --server --port 24565</code>。
+      大厅里把地址填成你的 IP 即可。详细部署见项目 <code>deploy/README.md</code>。
+    </p>
+  </div>
+
+  <footer>v1.0.0 · Godot 4 · 大富豪 Tycoon</footer>
+</body>
+</html>

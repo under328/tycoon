@@ -16,20 +16,40 @@ docker compose up -d --build
 docker logs -f tycoon-server        # 查看日志
 ```
 
-- 只开放 UDP 端口 `24565`（防火墙/安全组放行）。
+- 开放端口：UDP `24565`（对局）+ TCP `24566`（健康检查）。
 - 更新版本：重新导出产物 → `docker compose up -d --build`。
 - 客户端版本握手不匹配会被拒绝（`s_kicked/version`），客户端提示更新。
 
-## 3. 运维
+## 3. 安卓正式包（release 签名）
+
+一次性准备：生成 release keystore（**已生成在 `D:\AndroidDev\keystore\`，
+密码在同名 `RELEASE_PASSWORD.txt`，务必异地备份——丢了就无法更新应用**）。
+
+日常构建（密码经环境变量注入，不落 git）：
+
+```bash
+bash tools/build_android_release.sh     # 产物 builds/Tycoon-release.apk
+```
+
+校验签名：`apksigner verify --print-certs builds/Tycoon-release.apk`
+（build-tools 目录内有 apksigner）。
+
+## 4. 下载页
+
+`deploy/page/index.html` 单文件静态页（含玩法说明）。
+上线：把该文件与 `Tycoon.exe`、`Tycoon-release.apk` 放到任意静态托管同目录即可。
+
+## 5. 运维
 
 | 事项 | 做法 |
 |---|---|
-| 健康检查 | `show udp` 无 HTTP 端点；用日志 + `docker ps` / UptimeRobot ping 主域兜底 |
+| 健康检查 | `curl http://<ip>:24566/` → `{"status":"ok",...}`（UptimeRobot HTTP 探活可用） |
+| 状态日志 | 服务器每 60s 打印 `rooms/players/uptime` |
 | 对局状态 | 全内存态，重启即清空（房间作废，客户端提示重连） |
-| 战绩持久化 | M3 接入（JSON 落盘 `user://`） |
-| 压测 | M5：机器人脚本挂 20 房 80 人 |
+| 战绩持久化 | ✅ 已实现（`user://stats.json`，按客户端 ID 记录场数/胜场/积分） |
+| 压测 | `tests/stress_bot.gd`（已验证 6 并发 150s 65 场零错误） |
 
-## 4. 客户端连接
+## 6. 客户端连接
 
 - 大厅地址填 `服务器IP`，端口 `24565`。
 - 公网部署建议后续加域名 + DTLS（ENet 支持 DTLS peer，v1 暂用明文 UDP）。
