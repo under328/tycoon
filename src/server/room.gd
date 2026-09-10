@@ -16,7 +16,6 @@ var seats: Array = []          # 长度4, 空位为 null
 var match_ctl = null           # MatchController 或 null
 var token_rng: RandomNumberGenerator
 
-
 func _init(p_code: String, p_settings: Dictionary, rng: RandomNumberGenerator) -> void:
 	code = p_code
 	settings = p_settings
@@ -48,13 +47,13 @@ func first_free_seat() -> int:
 
 
 ## 返回加入者的座位；满员返回 -1。
-func sit(peer: int, name: String) -> int:
+func sit(peer: int, name: String, client_id: String = "") -> int:
 	var s := first_free_seat()
 	if s < 0:
 		return -1
 	seats[s] = {
 		"peer": peer, "name": name, "token": _gen_token(),
-		"bot": false, "online": true,
+		"bot": false, "online": true, "client_id": client_id,
 	}
 	return s
 

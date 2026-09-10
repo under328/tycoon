@@ -12,12 +12,14 @@ func run(t) -> void:
 	_match_flow_with_bots(t)
 	_disconnect_and_rejoin(t)
 	_turn_timeout(t)
+	_m3_features(t)
 
 
 func _mgr():
 	var m = RoomManagerGd.new()
 	m.ai_delay_ms = 1
 	m.phase_delay_ms = 1
+	m.stats.save_path = "user://test_stats.json"
 	return m
 
 
@@ -204,3 +206,81 @@ func _turn_timeout(t) -> void:
 		var v2: Dictionary = _views(out2)[0]["data"]["view"]
 		t.expect(acted > 0 or int(v2["turn"]) != 0 or str(v2["phase"]) != "play",
 				"人类超时被托管接管")
+
+
+## M3：规则设置 / 表情 / 战绩记录与查询 / 再来一局。
+func _m3_features(t) -> void:
+	var m = _mgr()
+	var out: Array = m.create_room(100, "甲", {"rounds": 1}, "cid-A")
+	var rs: Dictionary = _room_state_to(out, 100)
+	var code := str(rs["room_code"])
+	m.join_room(101, "乙", code, "cid-B")
+
+	# --- 规则设置：非房主拒绝，房主生效 ---
+	out = m.set_settings(101, {"eight_cut": true})
+	t.expect_eq(_count(out, "s_room_state"), 0, "非房主改设置被拒")
+	out = m.set_settings(100, {"eight_cut": true, "rounds": 2})
+	rs = _room_state_to(out, 101)
+	t.expect(bool(rs["settings"]["eight_cut"]), "房主改设置生效")
+	t.expect_eq(int(rs["settings"]["rounds"]), 2, "局数设置生效")
+
+	# --- 表情广播（对局前）---
+	out = m.emoji(101, 3)
+	t.expect_eq(_count(out, "s_emoji"), 2, "表情广播给房内两人")
+	t.expect_eq(int(_find(out, 100, "s_emoji")["seat"]), 1, "表情带发送者座位")
+
+	# --- 第一场：打完 → 战绩记录 + game_end 附带统计 ---
+	m.fill_bots(100)
+	out = m.start(100, 0)
+	var now := 0
+	var guard := 0
+	var room = null
+	for c in m.rooms:
+		room = m.rooms[c]
+	var end_data: Dictionary = {}
+	while guard < 30000 and room.match_ctl != null:
+		guard += 1
+		now += 250  # 大步长：人类在线时超时托管需等 turn_seconds
+		out = m.tick(now)
+		for msg in out:
+			if str(msg["event"]) == "s_game_end":
+				end_data = msg["data"]
+	t.expect(room.match_ctl == null, "带人类对局完整结束")
+	t.expect(end_data.has("stats"), "game_end 附带战绩统计")
+	t.expect_eq((end_data["stats"] as Dictionary).size(), 2, "两个人类有战绩条目")
+	# cid-A 要么胜（总分最高）要么不胜，但一定有 1 场记录
+	var my_stats: Dictionary = m.stats.get_entry("cid-A")
+	t.expect_eq(int(my_stats["matches"]), 1, "cid-A 记 1 场")
+	t.expect(int(my_stats["total_points"]) != 0 or int(my_stats["wins"]) > 0,
+			"cid-A 积分入账")
+	t.expect_eq(int(m.stats.get_entry("cid-B")["matches"]), 1, "cid-B 记 1 场")
+	var wins_a := int(my_stats["wins"])
+	var wins_b := int(m.stats.get_entry("cid-B")["wins"])
+	t.expect(wins_a == 0 or wins_a == 1, "cid-A 胜场标记有效")
+	t.expect(wins_b == 0 or wins_b == 1, "cid-B 胜场标记有效")
+
+	# --- 战绩查询 ---
+	out = m.stats_get(100)
+	var st: Dictionary = _find(out, 100, "s_stats")["your"]
+	t.expect_eq(int(st["matches"]), 1, "s_stats 查询返回本人战绩")
+
+	# --- 再来一局（同一房间直接再开）---
+	out = m.start(100, now)
+	t.expect(_views(out).size() >= 1, "再来一局重新发私有 view")
+	now += 5
+	guard = 0
+	var second_end := 0
+	while guard < 30000 and room.match_ctl != null:
+		guard += 1
+		now += 250  # 与第一场相同：大步长等超时托管
+		out = m.tick(now)
+		second_end += _count(out, "s_game_end")
+	t.expect(second_end >= 1, "第二场完整打完（按人广播计 ≥1）")
+	t.expect(room.match_ctl == null, "第二场结束房间空闲")
+	t.expect_eq(int(m.stats.get_entry("cid-A")["matches"]), 2, "战绩累计到 2 场")
+	# 对局中也能发表情
+	out = m.create_room(200, "丙", {}, "cid-C")
+	m.fill_bots(200)
+	m.start(200, now)
+	out = m.emoji(200, 0)
+	t.expect_eq(_count(out, "s_emoji"), 1, "对局中表情可发")

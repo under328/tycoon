@@ -1,9 +1,11 @@
-## 联机大厅（占位美术，M4 换皮）：连接 → 建房/加入/快速匹配 → 开局。
+## 联机大厅（占位美术，M4 换皮）：连接 → 建房/加入/快速匹配 → 规则设置 → 开局。
 extends Control
 
 signal start_game
 
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
+
+const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 
 const COLOR_BG := Color("14142b")
 const COLOR_GOLD := Color("e0a83c")
@@ -25,8 +27,15 @@ var join_btn: Button
 var fill_btn: Button
 var start_btn: Button
 var leave_btn: Button
+var save_settings_btn: Button
 var status_label: Label
 var room_label: Label
+var stats_label: Label
+var chk_joker: CheckButton
+var chk_revolution: CheckButton
+var chk_stairs: CheckButton
+var chk_eight: CheckButton
+var rounds_option: OptionButton
 
 
 func setup(p_net: Node) -> void:
@@ -65,7 +74,7 @@ func _build_ui() -> void:
 	add_child(title)
 
 	var sub := _label(15, COLOR_DIM)
-	sub.text = "本地调试大厅（M2 占位界面）"
+	sub.text = "本地调试大厅（M3 占位界面）"
 	sub.position = Vector2(40, 62)
 	add_child(sub)
 
@@ -96,44 +105,93 @@ func _build_ui() -> void:
 
 	status_label = _label(15, COLOR_DIM)
 	status_label.position = Vector2(40, 370)
-	status_label.custom_minimum_size = Vector2(340, 60)
+	status_label.custom_minimum_size = Vector2(340, 80)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(status_label)
 
+	stats_label = _label(15, COLOR_DIM)
+	stats_label.position = Vector2(40, 470)
+	stats_label.custom_minimum_size = Vector2(340, 60)
+	add_child(stats_label)
+
 	var c3 := _label(18, COLOR_GOLD)
 	c3.text = "房间"
-	c3.position = Vector2(430, 130)
+	c3.position = Vector2(430, 120)
 	add_child(c3)
 
-	quick_btn = _button("快速匹配", Vector2(430, 170))
-	quick_btn.pressed.connect(func() -> void: net.quick_match())
+	quick_btn = _button("快速匹配", Vector2(430, 158))
+	quick_btn.pressed.connect(func() -> void: net.quick_match(_gather_rules()))
 	add_child(quick_btn)
-	create_btn = _button("创建房间", Vector2(548, 170))
-	create_btn.pressed.connect(func() -> void: net.create_room())
+	create_btn = _button("创建房间", Vector2(548, 158))
+	create_btn.pressed.connect(func() -> void: net.create_room(_gather_rules()))
 	add_child(create_btn)
-	code_edit = _edit(Vector2(666, 174), Vector2(140, 38))
+	code_edit = _edit(Vector2(666, 162), Vector2(140, 38))
 	code_edit.placeholder_text = "房间码"
 	add_child(code_edit)
-	join_btn = _button("加入", Vector2(820, 170))
+	join_btn = _button("加入", Vector2(820, 158))
 	join_btn.pressed.connect(func() -> void: net.join_room(code_edit.text.strip_edges()))
 	add_child(join_btn)
 
 	room_label = _label(17, COLOR_WHITE)
-	room_label.position = Vector2(430, 250)
-	room_label.custom_minimum_size = Vector2(700, 160)
+	room_label.position = Vector2(430, 226)
+	room_label.custom_minimum_size = Vector2(700, 150)
 	add_child(room_label)
 
-	fill_btn = _button("空位加AI", Vector2(430, 420))
+	fill_btn = _button("空位加AI", Vector2(430, 386))
 	fill_btn.pressed.connect(func() -> void: net.fill_bots())
 	add_child(fill_btn)
-	start_btn = _button("开始游戏", Vector2(548, 420))
+	start_btn = _button("开始游戏", Vector2(548, 386))
 	start_btn.pressed.connect(func() -> void: net.start_game())
 	add_child(start_btn)
-	leave_btn = _button("离开房间", Vector2(666, 420))
+	leave_btn = _button("离开房间", Vector2(666, 386))
 	leave_btn.pressed.connect(func() -> void: net.leave_room())
 	add_child(leave_btn)
 
-	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn]:
+	# ---- 规则设置（房主可改，开局前生效）----
+	var c4 := _label(16, COLOR_GOLD)
+	c4.text = "规则设置"
+	c4.position = Vector2(430, 446)
+	add_child(c4)
+	chk_joker = _check("带王", Vector2(430, 478))
+	add_child(chk_joker)
+	chk_revolution = _check("革命", Vector2(530, 478))
+	add_child(chk_revolution)
+	chk_stairs = _check("階段", Vector2(630, 478))
+	add_child(chk_stairs)
+	chk_eight = _check("8切", Vector2(730, 478))
+	add_child(chk_eight)
+	var rounds_lbl := _label(15, COLOR_WHITE)
+	rounds_lbl.text = "局数"
+	rounds_lbl.position = Vector2(830, 484)
+	add_child(rounds_lbl)
+	rounds_option = OptionButton.new()
+	for r: int in [1, 3, 5]:
+		rounds_option.add_item(str(r) + " 局", r)
+	rounds_option.select(1)
+	rounds_option.position = Vector2(872, 478)
+	rounds_option.custom_minimum_size = Vector2(90, 34)
+	add_child(rounds_option)
+	save_settings_btn = _button("保存设置", Vector2(430, 530))
+	save_settings_btn.pressed.connect(func() -> void:
+		net.set_settings(_gather_rules())
+		_set_status("已提交设置（房主）", COLOR_DIM))
+	add_child(save_settings_btn)
+
+	# ---- 快捷表情（房间内）----
+	var c5 := _label(16, COLOR_GOLD)
+	c5.text = "表情"
+	c5.position = Vector2(430, 600)
+	add_child(c5)
+	for i in EMOJIS.size():
+		var id := i
+		var eb := _button(EMOJIS[i], Vector2(430 + i * 58, 632))
+		eb.custom_minimum_size = Vector2(48, 44)
+		eb.pressed.connect(func() -> void:
+			net.send_emoji(id)
+			_set_status("你: " + EMOJIS[id], COLOR_DIM))
+		add_child(eb)
+
+	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, save_settings_btn]:
 		b.disabled = true
 
 
@@ -141,7 +199,8 @@ func _bind_net() -> void:
 	net.connected_ok.connect(func() -> void:
 		_set_status("已连接，可以创建或加入房间", COLOR_GREEN)
 		for b: Button in [quick_btn, create_btn, join_btn]:
-			b.disabled = false)
+			b.disabled = false
+		net.request_stats())
 	net.connection_failed.connect(func() -> void:
 		_set_status("连接失败，请检查地址端口", COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
@@ -153,6 +212,17 @@ func _bind_net() -> void:
 			_set_status("版本不符，请更新客户端", COLOR_RED)
 		else:
 			_set_status("已被移出房间（%s）" % reason, COLOR_RED))
+	net.stats_updated.connect(func(entry: Dictionary) -> void:
+		if entry.is_empty():
+			stats_label.text = "战绩：暂无（打完一场后生成）"
+		else:
+			stats_label.text = "战绩：%d 场 / 胜 %d / 累计 %+d 分" % [
+				int(entry.get("matches", 0)), int(entry.get("wins", 0)),
+				int(entry.get("total_points", 0))])
+	net.game_event.connect(func(event: String, data: Dictionary) -> void:
+		if event == "emoji":
+			_set_status("座位 %d: %s" % [int(data.get("seat", 0)) + 1,
+					EMOJIS[clampi(int(data.get("id", 0)), 0, EMOJIS.size() - 1)]], COLOR_GOLD))
 	net.room_state.connect(_on_room_state)
 	net.view_changed.connect(func(_view: Dictionary) -> void:
 		start_game.emit())
@@ -172,6 +242,27 @@ func _on_connect() -> void:
 	net.connect_to(address_edit.text.strip_edges(), port)
 
 
+func _gather_rules() -> Dictionary:
+	return {
+		"with_joker": chk_joker.button_pressed,
+		"revolution": chk_revolution.button_pressed,
+		"stairs": chk_stairs.button_pressed,
+		"eight_cut": chk_eight.button_pressed,
+		"rounds": rounds_option.get_selected_metadata(),
+	}
+
+
+func _apply_settings(settings: Dictionary) -> void:
+	chk_joker.set_pressed_no_signal(bool(settings.get("with_joker", true)))
+	chk_revolution.set_pressed_no_signal(bool(settings.get("revolution", true)))
+	chk_stairs.set_pressed_no_signal(bool(settings.get("stairs", true)))
+	chk_eight.set_pressed_no_signal(bool(settings.get("eight_cut", false)))
+	var rounds := int(settings.get("rounds", 3))
+	for i in rounds_option.item_count:
+		if int(rounds_option.get_item_metadata(i)) == rounds:
+			rounds_option.select(i)
+
+
 func _on_room_state(state: Dictionary) -> void:
 	var lines: Array = []
 	lines.append("房间码：%s    （把码发给朋友加入）" % str(state.get("room_code", "------")))
@@ -188,9 +279,11 @@ func _on_room_state(state: Dictionary) -> void:
 	var host: bool = int(state.get("host_seat", -1)) == int(net.my_seat)
 	fill_btn.disabled = not host
 	start_btn.disabled = not host
+	save_settings_btn.disabled = not host
 	leave_btn.disabled = false
 	for b: Button in [quick_btn, create_btn, join_btn]:
 		b.disabled = false
+	_apply_settings(state.get("settings", {}))
 
 
 func _set_status(text: String, color: Color) -> void:
@@ -221,3 +314,10 @@ func _button(text: String, pos: Vector2) -> Button:
 	b.custom_minimum_size = Vector2(96, 38)
 	b.add_theme_font_size_override("font_size", 16)
 	return b
+
+
+func _check(text: String, pos: Vector2) -> CheckButton:
+	var c := CheckButton.new()
+	c.text = text
+	c.position = pos
+	return c

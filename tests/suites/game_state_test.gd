@@ -13,9 +13,26 @@ func run(t) -> void:
 	_new_match_basics(t)
 	_pass_and_clear(t)
 	_revolution(t)
+	_eight_cut_last_card(t)
 	_full_match_flow(t)
 	_exchange_details(t)
 	_view_privacy(t)
+
+
+## 回归：8切开启时，最后一张牌恰好是 8 也必须正常登记出完（曾死循环）。
+func _eight_cut_last_card(t) -> void:
+	var st := GameStateGd.new_match({"eight_cut": true, "rounds": 1}, 7)
+	st["phase"] = "play"
+	st["must_include"] = -1
+	st["finish_order"] = []
+	st["turn"] = 1
+	st["lead"] = {}
+	# 1 号手牌只剩一张 8（id 20 = 8♠）
+	st["hands"][1] = [20]
+	var r := GameStateGd.apply(st, {"t": "play", "seat": 1, "cards": [20]})
+	t.expect(bool(r["ok"]), "打出单 8")
+	t.expect((r["state"]["finish_order"] as Array).has(1), "8切最后一张仍登记出完")
+	t.expect_eq((r["state"]["hands"][1] as Array).size(), 0, "手牌已空")
 
 
 func _new_match_basics(t) -> void:

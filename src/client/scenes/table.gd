@@ -11,6 +11,7 @@ const ScoringGd = preload("res://src/rules/scoring.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
 
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
+const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 const AI_THINK_SEC := 0.7
 const EXCHANGE_SHOW_SEC := 1.4
 
@@ -27,6 +28,9 @@ var net: Node = null
 var state: Dictionary = {}
 var selected: Array = []
 var advancing := false
+var _at_game_end := false
+var _emoji_cd := 0.0
+var _emoji_btns: Array = []
 
 var info_label: Label
 var field_label: Label
@@ -51,11 +55,10 @@ func _ready() -> void:
 
 
 func _bind_net() -> void:
-	net.view_changed.connect(func(_view: Dictionary) -> void: _refresh())
-	net.game_event.connect(func(event: String, _data: Dictionary) -> void:
-		if event == "played" or event == "cleared":
-			pass  # view 随后到达，无需单独处理
+	net.view_changed.connect(func(view: Dictionary) -> void:
+		_at_game_end = str(view["phase"]) == "game_end"
 		_refresh())
+	net.game_event.connect(_on_game_event)
 	net.errored.connect(func(code: String, _msg: String) -> void:
 		_flash_error(code))
 	net.server_disconnected.connect(func() -> void:
@@ -63,6 +66,43 @@ func _bind_net() -> void:
 		status_label.add_theme_color_override("font_color", COLOR_RED))
 	net.rejoined.connect(func() -> void:
 		_flash_error("已重新连上，座位已恢复"))
+	# 对局结束后服务器广播 room_state → 自动回到房间（再来一局流转）
+	net.room_state.connect(func(_state: Dictionary) -> void:
+		if _at_game_end:
+			_at_game_end = false
+			finished.emit())
+
+
+func _on_game_event(event: String, data: Dictionary) -> void:
+	if event == "emoji":
+		_show_emoji(int(data.get("seat", 0)), int(data.get("id", 0)))
+	_refresh()
+
+
+func _process(delta: float) -> void:
+	if _emoji_cd > 0.0:
+		_emoji_cd -= delta
+
+
+func _show_emoji(seat: int, id: int) -> void:
+	var view: Dictionary = {}
+	if mode == "online" and net != null:
+		view = net.latest_view
+	var pos := Vector2(560, 470)  # 自己的表情出现在手牌上方
+	if seat != int(view.get("my_seat", 0)):
+		var idx := seat
+		if idx >= 1 and idx <= 3:
+			var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
+			pos = positions[idx]
+	var lb := Label.new()
+	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
+	lb.add_theme_font_size_override("font_size", 42)
+	lb.position = pos
+	add_child(lb)
+	var tw := create_tween()
+	tw.tween_parallel().tween_property(lb, "position:y", pos.y - 50.0, 1.6)
+	tw.parallel().tween_property(lb, "modulate:a", 0.0, 1.6).set_delay(0.4)
+	tw.tween_callback(lb.queue_free)
 
 
 # ---------------------------------------------------------------- 驱动
@@ -225,6 +265,27 @@ func _build_ui() -> void:
 	btn_leave.pressed.connect(_on_leave_pressed)
 	for b: Button in [btn_play, btn_pass, btn_next, btn_rematch, btn_leave]:
 		row.add_child(b)
+
+	# 快捷表情（仅联机模式）
+	for i in EMOJIS.size():
+		var id := i
+		var eb := Button.new()
+		eb.text = EMOJIS[i]
+		eb.position = Vector2(16 + i * 52, 664)
+		eb.custom_minimum_size = Vector2(44, 40)
+		eb.add_theme_font_size_override("font_size", 20)
+		eb.pressed.connect(func() -> void:
+			if _emoji_cd > 0.0:
+				_flash_error("表情发太快了")
+				return
+			_emoji_cd = 1.0
+			if mode == "online" and net != null:
+				net.send_emoji(id))
+		add_child(eb)
+		_emoji_btns.append(eb)
+	if mode == "local":
+		for eb: Button in _emoji_btns:
+			eb.visible = false
 
 
 func _make_seat_label(pos: Vector2) -> Label:

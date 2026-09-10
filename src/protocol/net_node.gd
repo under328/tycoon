@@ -14,6 +14,7 @@ signal view_changed(view: Dictionary)
 signal game_event(event: String, data: Dictionary)
 signal errored(code: String, msg: String)
 signal kicked_off(reason: String)
+signal stats_updated(entry: Dictionary)
 
 const MsgC = preload("res://src/protocol/msg.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
@@ -87,31 +88,55 @@ func _on_peer_disconnected(peer: int) -> void:
 # ================================================================ C → S
 
 @rpc("any_peer", "call_remote", "reliable")
-func c_hello(ver: int, token: String) -> void:
+func c_hello(ver: int, token: String, client_id: String) -> void:
 	if not is_server:
 		return
-	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token)))
+	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token), str(client_id)))
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func c_room_quick(data: Dictionary) -> void:
 	if not is_server:
 		return
-	_flush(manager.quick_match(_sender(), str(data.get("name", "玩家")), data.get("rules", {})))
+	_flush(manager.quick_match(_sender(), str(data.get("name", "玩家")),
+			data.get("rules", {}), str(data.get("client_id", ""))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func c_room_create(data: Dictionary) -> void:
 	if not is_server:
 		return
-	_flush(manager.create_room(_sender(), str(data.get("name", "玩家")), data.get("rules", {})))
+	_flush(manager.create_room(_sender(), str(data.get("name", "玩家")),
+			data.get("rules", {}), str(data.get("client_id", ""))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func c_room_join(data: Dictionary) -> void:
 	if not is_server:
 		return
-	_flush(manager.join_room(_sender(), str(data.get("name", "玩家")), str(data.get("code", ""))))
+	_flush(manager.join_room(_sender(), str(data.get("name", "玩家")),
+			str(data.get("code", "")), str(data.get("client_id", ""))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_settings(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.set_settings(_sender(), data.get("rules", {})))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_emoji(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.emoji(_sender(), int(data.get("id", 0))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_stats(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.stats_get(_sender()))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -248,6 +273,20 @@ func s_kicked(data: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+func s_emoji(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("emoji", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_stats(data: Dictionary) -> void:
+	if is_server:
+		return
+	stats_updated.emit(data.get("your", {}))
+
+
+@rpc("authority", "call_remote", "reliable")
 func s_error(data: Dictionary) -> void:
 	if is_server:
 		return
@@ -324,6 +363,21 @@ func pass_turn() -> void:
 	_c_send("c_game_pass", {})
 
 
+## 房主：修改房间规则（对局未开始时）
+func set_settings(rules: Dictionary) -> void:
+	_c_send("c_room_settings", {"rules": rules})
+
+
+## 快捷表情（房间内）
+func send_emoji(id: int) -> void:
+	_c_send("c_emoji", {"id": id})
+
+
+## 请求自己的战绩
+func request_stats() -> void:
+	_c_send("c_stats", {})
+
+
 # ================================================================ 内部
 
 func _client_process(delta: float) -> void:
@@ -364,9 +418,16 @@ func _c_send(event: String, data: Dictionary) -> void:
 		errored.emit("not_connected", "未连接服务器")
 		return
 	if event == "c_hello":
-		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token)
+		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id())
 	else:
 		rpc_id(1, event, data)
+
+
+func _client_id() -> String:
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null:
+		return str(gs.client_id)
+	return "e2e-client"
 
 
 func _name() -> String:

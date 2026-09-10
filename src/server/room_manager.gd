@@ -7,6 +7,8 @@ extends RefCounted
 const MsgC = preload("res://src/protocol/msg.gd")
 const RoomGd = preload("res://src/server/room.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
+const StatsGd = preload("res://src/server/stats.gd")
+const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 
 const DEFAULT_SETTINGS := {
 	"with_joker": true, "revolution": true, "stairs": true,
@@ -15,6 +17,8 @@ const DEFAULT_SETTINGS := {
 
 var rooms: Dictionary = {}       # code -> Room
 var peer_room: Dictionary = {}   # peer -> code
+var peer_client: Dictionary = {} # peer -> client_id（游客身份）
+var stats = null                 # StatsLib
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
 var _rng := RandomNumberGenerator.new()
@@ -22,16 +26,19 @@ var _rng := RandomNumberGenerator.new()
 
 func _init() -> void:
 	_rng.randomize()
+	stats = StatsGd.new()
 
 
 # ---------------------------------------------------------------- 连接与会话
 
-func hello(peer: int, ver: int, token: String) -> Array:
+func hello(peer: int, ver: int, token: String, client_id: String = "") -> Array:
 	var out := []
 	if ver != MsgC.PROTOCOL_VERSION:
 		out.append({"peer": peer, "event": "s_kicked",
 				"data": {"reason": "version"}})
 		return out
+	if client_id != "":
+		peer_client[peer] = client_id
 	if token != "":
 		var found: Dictionary = _room_by_token(token)
 		if not found.is_empty():
@@ -42,6 +49,8 @@ func hello(peer: int, ver: int, token: String) -> Array:
 			peer_room.erase(int(seat_data["peer"]))
 			seat_data["peer"] = peer
 			seat_data["online"] = true
+			if client_id != "":
+				seat_data["client_id"] = client_id
 			if room.match_ctl != null:
 				room.match_ctl.seat_peer[seat] = peer
 				room.match_ctl.seat_online[seat] = true
@@ -61,6 +70,7 @@ func hello(peer: int, ver: int, token: String) -> Array:
 func peer_gone(peer: int) -> Array:
 	var out := []
 	var code = peer_room.get(peer, "")
+	peer_client.erase(peer)
 	if code == "":
 		return out
 	peer_room.erase(peer)
@@ -85,17 +95,21 @@ func peer_gone(peer: int) -> Array:
 
 # ---------------------------------------------------------------- 房间操作
 
-func quick_match(peer: int, name: String, rules: Dictionary) -> Array:
+func quick_match(peer: int, name: String, rules: Dictionary, client_id: String = "") -> Array:
 	var out := []
+	if client_id != "":
+		peer_client[peer] = client_id
 	for code in rooms:
 		var room = rooms[code]
 		if room.match_ctl == null and room.first_free_seat() >= 0:
-			return join_room(peer, name, code)
-	return create_room(peer, name, rules)
+			return join_room(peer, name, code, client_id)
+	return create_room(peer, name, rules, client_id)
 
 
-func create_room(peer: int, name: String, rules: Dictionary) -> Array:
+func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "") -> Array:
 	var out := []
+	if client_id != "":
+		peer_client[peer] = client_id
 	_leave_room(peer, out)
 	var cfg := DEFAULT_SETTINGS.duplicate()
 	for k in cfg.keys():
@@ -103,15 +117,17 @@ func create_room(peer: int, name: String, rules: Dictionary) -> Array:
 			cfg[k] = rules[k]
 	var room = RoomGd.new(_gen_code(), cfg, _rng)
 	rooms[room.code] = room
-	room.sit(peer, name)
+	room.sit(peer, name, client_id)
 	peer_room[peer] = room.code
 	out.append({"peer": peer, "event": "s_room_state",
 			"data": room.state_for(room.seat_of_peer(peer))})
 	return out
 
 
-func join_room(peer: int, name: String, code: String) -> Array:
+func join_room(peer: int, name: String, code: String, client_id: String = "") -> Array:
 	var out := []
+	if client_id != "":
+		peer_client[peer] = client_id
 	var room = rooms.get(code)
 	if room == null:
 		out.append({"peer": peer, "event": "s_error",
@@ -122,7 +138,7 @@ func join_room(peer: int, name: String, code: String) -> Array:
 				"data": {"code": "in_game", "msg": "对局进行中"}})
 		return out
 	_leave_room(peer, out)
-	var seat: int = room.sit(peer, name)
+	var seat: int = room.sit(peer, name, client_id)
 	if seat < 0:
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": "full", "msg": "房间已满"}})
@@ -138,6 +154,42 @@ func leave(peer: int) -> Array:
 	var out := []
 	_leave_room(peer, out)
 	return out
+
+
+## 快捷表情：广播给房内所有在线人类（大厅和对局中都可发）。
+func emoji(peer: int, id: int) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null:
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	if seat < 0:
+		return out
+	_bcast_event(out, room, "s_emoji", {"seat": seat, "id": clampi(id, 0, 7)})
+	return out
+
+
+## 房主修改规则设置（仅对局未开始时）。
+func set_settings(peer: int, rules: Dictionary) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl != null:
+		return out
+	if int(room.host_seat) != _seat_of(room, peer):
+		return out
+	var cfg := DEFAULT_SETTINGS.duplicate()
+	for k in cfg.keys():
+		if rules.has(k):
+			cfg[k] = rules[k]
+	room.settings = RulesConfigGd.normalize(cfg)
+	_bcast_room_state(out, room)
+	return out
+
+
+## 查询自己的战绩。
+func stats_get(peer: int) -> Array:
+	var cid: String = str(peer_client.get(peer, ""))
+	return [{"peer": peer, "event": "s_stats", "data": {"your": stats.get_entry(cid)}}]
 
 
 func kick(host_peer: int, target_seat: int) -> Array:
@@ -237,8 +289,39 @@ func tick(now_ms: int) -> Array:
 ## 状态变化后：广播事件 + 给每个在线人类发私有 view（含 game_turn）。
 func _after_state_change(out: Array, room, r: Dictionary) -> void:
 	for e in r.get("events", []):
+		if str(e["event"]) == "s_game_end":
+			_record_stats(room, e["data"])
 		_bcast_event(out, room, e["event"], e["data"])
 	_bcast_views(out, room)
+
+
+## 终局：写入战绩并在事件里附带各人类玩家的最新统计。
+func _record_stats(room, data: Dictionary) -> void:
+	var scores: Array = data.get("scores", [])
+	var best := -999999
+	for s in 4:
+		best = maxi(best, int(scores[s]))
+	var entries := []
+	for s in 4:
+		var seat_data = room.seats[s]
+		if seat_data == null or bool(seat_data["bot"]):
+			continue
+		var cid := str(seat_data.get("client_id", ""))
+		entries.append({
+			"client_id": cid, "name": str(seat_data["name"]),
+			"total": int(scores[s]), "win": int(scores[s]) == best,
+		})
+	stats.record(entries)
+	# 记录后再截图，game_end payload 反映本场结果
+	var stats_map := {}
+	for s in 4:
+		var seat_data2 = room.seats[s]
+		if seat_data2 == null or bool(seat_data2["bot"]):
+			continue
+		var cid2 := str(seat_data2.get("client_id", ""))
+		if cid2 != "":
+			stats_map[s] = stats.get_entry(cid2)
+	data["stats"] = stats_map
 
 
 func _bcast_views(out: Array, room) -> void:

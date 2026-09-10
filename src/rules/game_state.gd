@@ -85,6 +85,9 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 	if bool(st["cfg"]["revolution"]) and int(combo["type"]) == ComboGd.Type.QUAD:
 		st["quads"] = int(st["quads"]) + 1
 		st["revolution"] = int(st["quads"]) % 2 == 1
+	# 出完牌结算必须先于 8 切（最后一张恰好是 8 时同样算出完）
+	if hand.is_empty():
+		return _finish_player(st, seat)
 	# 8 切
 	if bool(st["cfg"]["eight_cut"]) \
 			and int(combo["type"]) == ComboGd.Type.SINGLE and int(combo["key"]) == 8:
@@ -92,8 +95,6 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 		st["lead"] = {}
 		st["turn"] = seat
 		return _ok(st)
-	if hand.is_empty():
-		return _finish_player(st, seat)
 	st["lead"] = combo
 	st["turn"] = _next_active(st, seat)
 	return _ok(st)
