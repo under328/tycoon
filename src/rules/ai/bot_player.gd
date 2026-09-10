@@ -70,6 +70,21 @@ static func _joker_count(combo: Dictionary) -> int:
 	return n
 
 
+## 从"可见视图"决策（客户端提示 / E2E 自动打牌用）：只需本人手牌。
+static func decide_from_view(view: Dictionary) -> Dictionary:
+	var seat := int(view["my_seat"])
+	var st := {
+		"phase": view["phase"],
+		"cfg": view["rules"],
+		"lead": view["lead"],
+		"revolution": view["revolution"],
+		"must_include": view["must_include"],
+		"hands": [[], [], [], []],
+	}
+	st["hands"][seat] = view["hand"]
+	return decide(st, seat)
+
+
 ## 枚举手牌全部合法组合（含王补位；顺子窗口锚定最小自然牌向上延伸，与规则一致）。
 static func all_combos(hand: Array, cfg: Dictionary) -> Array:
 	var out := []

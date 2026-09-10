@@ -1,6 +1,8 @@
-## 本地调试牌桌：你（座位 0）+ 3 AI。占位美术，M4 换正式皮肤。
-## 复用与联机服务器完全相同的规则引擎（src/rules/）。
+## 牌桌。mode="local"：本地人+3AI（本机驱动规则引擎）；mode="online"：
+## 渲染来自服务器的 game_view，动作经 net 发送（M2）。
 extends Control
+
+signal finished  # online：玩家点"返回大厅"
 
 const CardsGd = preload("res://src/rules/cards.gd")
 const GameStateGd = preload("res://src/rules/game_state.gd")
@@ -19,6 +21,9 @@ const COLOR_WHITE := Color("f0f0f0")
 const COLOR_GREEN := Color("7dd87d")
 const COLOR_DIM := Color("8a8ab0")
 
+var mode := "local"
+var net: Node = null
+
 var state: Dictionary = {}
 var selected: Array = []
 var advancing := false
@@ -33,11 +38,31 @@ var btn_play: Button
 var btn_pass: Button
 var btn_next: Button
 var btn_rematch: Button
+var btn_leave: Button
 
 
 func _ready() -> void:
 	_build_ui()
-	_new_match()
+	if mode == "online":
+		_bind_net()
+		_refresh()
+	else:
+		_new_match()
+
+
+func _bind_net() -> void:
+	net.view_changed.connect(func(_view: Dictionary) -> void: _refresh())
+	net.game_event.connect(func(event: String, _data: Dictionary) -> void:
+		if event == "played" or event == "cleared":
+			pass  # view 随后到达，无需单独处理
+		_refresh())
+	net.errored.connect(func(code: String, _msg: String) -> void:
+		_flash_error(code))
+	net.server_disconnected.connect(func() -> void:
+		status_label.text = "连接断开，自动重连中…"
+		status_label.add_theme_color_override("font_color", COLOR_RED))
+	net.rejoined.connect(func() -> void:
+		_flash_error("已重新连上，座位已恢复"))
 
 
 # ---------------------------------------------------------------- 驱动
@@ -50,6 +75,8 @@ func _new_match() -> void:
 
 ## 驱动循环：AI 依次行动 / 阶段过渡，停在人需要操作处。
 func _advance() -> void:
+	if mode == "online":
+		return
 	if advancing:
 		return
 	advancing = true
@@ -96,6 +123,13 @@ func _human_apply(action: Dictionary) -> void:
 
 
 func _on_play_pressed() -> void:
+	if mode == "online":
+		if selected.is_empty():
+			_flash_error("先选牌")
+			return
+		net.play(selected.duplicate())
+		selected.clear()
+		return
 	if selected.is_empty():
 		_flash_error("先选牌")
 		return
@@ -103,6 +137,9 @@ func _on_play_pressed() -> void:
 
 
 func _on_pass_pressed() -> void:
+	if mode == "online":
+		net.pass_turn()
+		return
 	_human_apply({"t": "pass", "seat": 0})
 
 
@@ -112,6 +149,12 @@ func _on_next_pressed() -> void:
 
 func _on_rematch_pressed() -> void:
 	_new_match()
+
+
+func _on_leave_pressed() -> void:
+	if net != null:
+		net.leave_room()
+	finished.emit()
 
 
 # ---------------------------------------------------------------- UI 构建
@@ -178,7 +221,9 @@ func _build_ui() -> void:
 	btn_next.pressed.connect(_on_next_pressed)
 	btn_rematch = _button("再来一场")
 	btn_rematch.pressed.connect(_on_rematch_pressed)
-	for b: Button in [btn_play, btn_pass, btn_next, btn_rematch]:
+	btn_leave = _button("返回大厅")
+	btn_leave.pressed.connect(_on_leave_pressed)
+	for b: Button in [btn_play, btn_pass, btn_next, btn_rematch, btn_leave]:
 		row.add_child(b)
 
 
@@ -233,9 +278,24 @@ func _error_text(code: String) -> String:
 # ---------------------------------------------------------------- 刷新
 
 func _refresh() -> void:
-	if state.is_empty():
-		return
-	var view := ViewGd.build(state, 0)
+	if mode == "online":
+		if net == null or (net.latest_view as Dictionary).is_empty():
+			return
+		_refresh_view(net.latest_view)
+	elif not state.is_empty():
+		_refresh_view(ViewGd.build(state, 0))
+
+
+func _seat_name(view: Dictionary, seat: int) -> String:
+	var my := int(view.get("my_seat", 0))
+	if seat == my:
+		return "你"
+	var rel := (seat - my + 4) % 4
+	var names := ["", "下家", "对家", "上家"]
+	return names[rel]
+
+
+func _refresh_view(view: Dictionary) -> void:
 	var phase: String = view["phase"]
 
 	info_label.text = "第 %d/%d 局    %s    积分 %s" % [
@@ -253,7 +313,7 @@ func _refresh() -> void:
 				and (view["finished"] as Array).has(seat):
 			ident = "\n[%s]" % ScoringGd.IDENTITY_NAMES[int(view["identities"][seat])]
 		lb.text = "%s%s\n剩 %d 张%s" % [
-			turn_mark, SEAT_NAMES[seat], int(view["counts"][seat]), ident,
+			turn_mark, _seat_name(view, seat), int(view["counts"][seat]), ident,
 		]
 
 	var lines: Array = []
@@ -264,7 +324,7 @@ func _refresh() -> void:
 			lines.append("(首手必须包含 ♦3)")
 	for entry: Dictionary in view["field"]:
 		lines.append("%s：%s" % [
-			SEAT_NAMES[int(entry["seat"])], CardsGd.labels(entry["combo"]["cards"]),
+			_seat_name(view, int(entry["seat"])), CardsGd.labels(entry["combo"]["cards"]),
 		])
 	field_label.text = "\n".join(lines)
 
@@ -276,7 +336,7 @@ func _refresh() -> void:
 			status_label.text = "轮到你出牌" + ("（需同牌型更大）" if not lead.is_empty() else "")
 			status_label.add_theme_color_override("font_color", COLOR_GREEN)
 		else:
-			status_label.text = "等待 %s 出牌…" % SEAT_NAMES[int(view["turn"])]
+			status_label.text = "等待 %s 出牌…" % _seat_name(view, int(view["turn"]))
 			status_label.add_theme_color_override("font_color", COLOR_DIM)
 	elif phase == "exchange":
 		status_label.text = "局间交换：乞丐→大富豪 2 张，平民→富豪 1 张"
@@ -290,8 +350,9 @@ func _refresh() -> void:
 
 	btn_play.visible = my_turn
 	btn_pass.visible = my_turn and not lead.is_empty()
-	btn_next.visible = phase == "round_end"
-	btn_rematch.visible = phase == "game_end"
+	btn_next.visible = mode == "local" and phase == "round_end"
+	btn_rematch.visible = mode == "local" and phase == "game_end"
+	btn_leave.visible = mode == "online"
 
 
 func _round_end_text(view: Dictionary) -> String:
@@ -300,7 +361,7 @@ func _round_end_text(view: Dictionary) -> String:
 	var parts: Array = []
 	for s in 4:
 		parts.append("%s=%s(%+d)" % [
-			SEAT_NAMES[s], ScoringGd.IDENTITY_NAMES[int(ids[s])], int(pts[s]),
+			_seat_name(view, s), ScoringGd.IDENTITY_NAMES[int(ids[s])], int(pts[s]),
 		])
 	return "  ".join(parts)
 

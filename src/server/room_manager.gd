@@ -1,6 +1,326 @@
-## 房间管理 v0 占位：M2 里程碑实现房间/匹配/对局驱动（见 docs/协议.md）。
-extends Node
+## 服务器核心逻辑（纯逻辑，无网络）。net_node.gd（服务器模式）把 RPC 翻译为这里的方法调用，
+## 并把每个方法返回的 out 队列（{peer, event, data}）发给对应客户端。
+## 单测直接驱动本类即可覆盖房间/对局/托管/重连全部行为。
+class_name RoomManager
+extends RefCounted
+
+const MsgC = preload("res://src/protocol/msg.gd")
+const RoomGd = preload("res://src/server/room.gd")
+const ViewGd = preload("res://src/protocol/view.gd")
+
+const DEFAULT_SETTINGS := {
+	"with_joker": true, "revolution": true, "stairs": true,
+	"eight_cut": false, "rounds": 3, "turn_seconds": 20,
+}
+
+var rooms: Dictionary = {}       # code -> Room
+var peer_room: Dictionary = {}   # peer -> code
+var ai_delay_ms := 600
+var phase_delay_ms := 2200
+var _rng := RandomNumberGenerator.new()
 
 
-func _ready() -> void:
-	print("[server] Tycoon 服务器模式 v0 — 房间系统将在 M2 实现（协议见 docs/协议.md）")
+func _init() -> void:
+	_rng.randomize()
+
+
+# ---------------------------------------------------------------- 连接与会话
+
+func hello(peer: int, ver: int, token: String) -> Array:
+	var out := []
+	if ver != MsgC.PROTOCOL_VERSION:
+		out.append({"peer": peer, "event": "s_kicked",
+				"data": {"reason": "version"}})
+		return out
+	if token != "":
+		var found: Dictionary = _room_by_token(token)
+		if not found.is_empty():
+			var room = found["room"]
+			var seat: int = found["seat"]
+			var seat_data: Dictionary = room.seats[seat]
+			# 旧 peer 仍占用则顶替
+			peer_room.erase(int(seat_data["peer"]))
+			seat_data["peer"] = peer
+			seat_data["online"] = true
+			if room.match_ctl != null:
+				room.match_ctl.seat_peer[seat] = peer
+				room.match_ctl.seat_online[seat] = true
+			peer_room[peer] = room.code
+			out.append({"peer": peer, "event": "s_welcome",
+					"data": {"seat": seat, "protocol_ok": true}})
+			out.append({"peer": peer, "event": "s_room_state",
+					"data": room.state_for(seat)})
+			if room.match_ctl != null:
+				out.append(_view_msg(room, seat))
+			return out
+	out.append({"peer": peer, "event": "s_welcome",
+			"data": {"seat": -1, "protocol_ok": true}})
+	return out
+
+
+func peer_gone(peer: int) -> Array:
+	var out := []
+	var code = peer_room.get(peer, "")
+	if code == "":
+		return out
+	peer_room.erase(peer)
+	var room = rooms.get(code)
+	if room == null:
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	if seat < 0:
+		return out
+	if room.match_ctl != null:
+		# 对局中：座位保留 30s 宽限（v1: 到对局结束），AI 立即接管
+		room.seats[seat]["online"] = false
+		room.match_ctl.seat_online[seat] = false
+	else:
+		room.remove_seat(seat)
+		if room.is_empty():
+			rooms.erase(code)
+		else:
+			_bcast_room_state(out, room)
+	return out
+
+
+# ---------------------------------------------------------------- 房间操作
+
+func quick_match(peer: int, name: String, rules: Dictionary) -> Array:
+	var out := []
+	for code in rooms:
+		var room = rooms[code]
+		if room.match_ctl == null and room.first_free_seat() >= 0:
+			return join_room(peer, name, code)
+	return create_room(peer, name, rules)
+
+
+func create_room(peer: int, name: String, rules: Dictionary) -> Array:
+	var out := []
+	_leave_room(peer, out)
+	var cfg := DEFAULT_SETTINGS.duplicate()
+	for k in cfg.keys():
+		if rules.has(k):
+			cfg[k] = rules[k]
+	var room = RoomGd.new(_gen_code(), cfg, _rng)
+	rooms[room.code] = room
+	room.sit(peer, name)
+	peer_room[peer] = room.code
+	out.append({"peer": peer, "event": "s_room_state",
+			"data": room.state_for(room.seat_of_peer(peer))})
+	return out
+
+
+func join_room(peer: int, name: String, code: String) -> Array:
+	var out := []
+	var room = rooms.get(code)
+	if room == null:
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "no_room", "msg": "房间不存在"}})
+		return out
+	if room.match_ctl != null:
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "in_game", "msg": "对局进行中"}})
+		return out
+	_leave_room(peer, out)
+	var seat: int = room.sit(peer, name)
+	if seat < 0:
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "full", "msg": "房间已满"}})
+		return out
+	peer_room[peer] = room.code
+	out.append({"peer": peer, "event": "s_room_state",
+			"data": room.state_for(seat)})
+	_bcast_room_state(out, room)
+	return out
+
+
+func leave(peer: int) -> Array:
+	var out := []
+	_leave_room(peer, out)
+	return out
+
+
+func kick(host_peer: int, target_seat: int) -> Array:
+	var out := []
+	var room = _room_of(host_peer)
+	if room == null or int(room.host_seat) != _seat_of(room, host_peer):
+		return out
+	var seat_data = room.seats[target_seat]
+	if seat_data == null or bool(seat_data["bot"]):
+		return out
+	var target_peer := int(seat_data["peer"])
+	peer_room.erase(target_peer)
+	room.remove_seat(target_seat)
+	out.append({"peer": target_peer, "event": "s_kicked", "data": {"reason": "host"}})
+	_bcast_room_state(out, room)
+	return out
+
+
+func fill_bots(peer: int) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl != null:
+		return out
+	if int(room.host_seat) != _seat_of(room, peer):
+		return out
+	while room.first_free_seat() >= 0:
+		room.sit_bot()
+	_bcast_room_state(out, room)
+	return out
+
+
+func start(peer: int, now_ms: int = -1) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl != null:
+		return out
+	if int(room.host_seat) != _seat_of(room, peer):
+		return out
+	if now_ms < 0:
+		now_ms = Time.get_ticks_msec()
+	var r: Dictionary = room.start(now_ms, ai_delay_ms, phase_delay_ms)
+	if not bool(r["ok"]):
+		return out
+	_bcast_views(out, room)
+	return out
+
+
+# ---------------------------------------------------------------- 对局动作
+
+func play(peer: int, cards: Array, now_ms: int = -1) -> Array:
+	return _game_action(peer, {"t": "play", "seat": -1, "cards": cards}, now_ms)
+
+
+func pass_turn(peer: int, now_ms: int = -1) -> Array:
+	return _game_action(peer, {"t": "pass", "seat": -1}, now_ms)
+
+
+func _game_action(peer: int, action: Dictionary, now_ms: int) -> Array:
+	if now_ms < 0:
+		now_ms = Time.get_ticks_msec()
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl == null:
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "no_match", "msg": "没有进行中的对局"}})
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	var ctl = room.match_ctl
+	action["seat"] = seat
+	var r: Dictionary = ctl.human_apply(action, now_ms)
+	if not bool(r["changed"]):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": str(r.get("error", "invalid")), "msg": "非法操作"}})
+		return out
+	_after_state_change(out, room, r)
+	return out
+
+
+# ---------------------------------------------------------------- 时钟驱动
+
+func tick(now_ms: int) -> Array:
+	var out := []
+	for code in rooms.keys():
+		var room = rooms[code]
+		if room.match_ctl == null:
+			continue
+		var ctl = room.match_ctl
+		var r: Dictionary = ctl.tick(now_ms)
+		if bool(r["changed"]):
+			_after_state_change(out, room, r)
+		if ctl.game_finished(now_ms):
+			room.end_match()
+			_bcast_room_state(out, room)
+	return out
+
+
+## 状态变化后：广播事件 + 给每个在线人类发私有 view（含 game_turn）。
+func _after_state_change(out: Array, room, r: Dictionary) -> void:
+	for e in r.get("events", []):
+		_bcast_event(out, room, e["event"], e["data"])
+	_bcast_views(out, room)
+
+
+func _bcast_views(out: Array, room) -> void:
+	if room.match_ctl == null:
+		return
+	var ctl = room.match_ctl
+	for s in 4:
+		if _human_online(room, s):
+			out.append(_view_msg(room, s))
+
+
+func _view_msg(room, seat: int) -> Dictionary:
+	var ctl = room.match_ctl
+	var view := ViewGd.build(ctl.state, seat)
+	var data := {"view": view}
+	if str(ctl.state["phase"]) == "play":
+		data["turn_seat"] = int(ctl.state["turn"])
+	return {"peer": int(room.seats[seat]["peer"]), "event": "s_game_view", "data": data}
+
+
+func _bcast_event(out: Array, room, event: String, data: Dictionary) -> void:
+	for s in 4:
+		if _human_online(room, s):
+			out.append({"peer": int(room.seats[s]["peer"]), "event": event, "data": data})
+
+
+func _bcast_room_state(out: Array, room) -> void:
+	for s in 4:
+		var seat_data = room.seats[s]
+		if seat_data != null and not bool(seat_data["bot"]) and bool(seat_data["online"]):
+			out.append({"peer": int(seat_data["peer"]), "event": "s_room_state",
+					"data": room.state_for(s)})
+
+
+# ---------------------------------------------------------------- 内部工具
+
+func _leave_room(peer: int, out: Array) -> void:
+	var code = peer_room.get(peer, "")
+	if code == "":
+		return
+	peer_room.erase(peer)
+	var room = rooms.get(code)
+	if room == null:
+		return
+	room.remove_seat(room.seat_of_peer(peer))
+	if room.is_empty():
+		rooms.erase(code)
+	else:
+		_bcast_room_state(out, room)
+
+
+func _room_of(peer: int):
+	var code = peer_room.get(peer, "")
+	if code == "":
+		return null
+	return rooms.get(code)
+
+
+func _seat_of(room, peer: int) -> int:
+	return room.seat_of_peer(peer)
+
+
+func _human_online(room, seat: int) -> bool:
+	var seat_data = room.seats[seat]
+	return seat_data != null and not bool(seat_data["bot"]) \
+			and bool(seat_data["online"]) and int(seat_data["peer"]) >= 0
+
+
+func _room_by_token(token: String) -> Dictionary:
+	for code in rooms:
+		var room = rooms[code]
+		for s in 4:
+			var seat_data = room.seats[s]
+			if seat_data != null and str(seat_data["token"]) == token \
+					and not bool(seat_data["bot"]):
+				return {"room": room, "seat": s}
+	return {}
+
+
+func _gen_code() -> String:
+	while true:
+		var code := "%06d" % _rng.randi_range(0, 999999)
+		if not rooms.has(code):
+			return code
+	return ""

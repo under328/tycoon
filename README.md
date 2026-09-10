@@ -1,45 +1,55 @@
 # Tycoon 大富豪
 
 四人联机大富豪（Daifugō / President）纸牌游戏。Godot 4 原生应用：Windows + 安卓，
-同一份工程导出无头专用服务器。当前处于 **M1（可玩核心）** 阶段：本地人机对战已可玩，
-联机（M2）开发中。
+同一份工程导出无头专用服务器。当前处于 **M2（联机对战）** 阶段：联机核心已通
+（ENet 权威服务器 / 房间码 / 快速匹配 / 私发手牌 / 断线重连 / AI 托管），
+本机双进程 E2E 实测通过；待办：VPS 部署、安卓导出链与真机测试。
 
-## 现在就能玩（本地模式）
+## 现在就能玩
 
-用 Godot 4.x 打开本工程直接 F5 运行；或命令行：
+**本地模式**（人 + 3AI）：Godot 4 打开工程 F5，或 `godot --path .`
 
+**联机模式**（M2）：
+
+```bash
+# 终端 1：启动无头服务器（默认端口 24565）
+godot --headless --path . --server --port 24565
+
+# 终端 2：客户端进大厅（可开多个实例互相对战）
+godot --path . --client
 ```
-godot --path . 
-```
 
-你执座位 0，其余三家为 AI。规则含革命/階段/Joker 变体，3 局制计分，
-规则细节见 [docs/规则规格.md](docs/规则规格.md)。
+大厅里：连接 127.0.0.1 → 创建房间（得到 6 位房间码）→ 空位加AI → 开始游戏；
+朋友在大厅输入房间码加入。掉线 2 秒内自动凭 session_token 重连回座，
+离线期间由 AI 托管。规则细节见 [docs/规则规格.md](docs/规则规格.md)。
 
 ## 运行测试
 
-零依赖，任何 Godot 4 binary 均可：
-
-```
+```bash
+# 单元测试（零依赖，107,968 断言）
 godot --headless --path . --script tests/run_tests.gd
-```
 
-覆盖：牌编码 / 牌型识别（革命·階段·王补位）/ 对局状态机 / AI 自打 200 场 fuzz。
+# 双进程 E2E（连上→同步→中途断网→重连→打完）
+godot --headless --path . --server --port 24575 --ai-delay 60 --phase-delay 250 &
+sleep 3
+godot --headless --path . --script tests/e2e_client.gd
+```
 
 ## 目录
 
 ```
 src/rules/     规则引擎（纯逻辑，客户端/服务器共用）
 src/rules/ai/  AI 托管（本地模式与服务器托管同一实现）
-src/protocol/  消息常量与按座位裁剪的可见信息
-src/server/    房间/对局控制（M2 实现）
-src/client/    牌桌 UI、入口
-tests/         零依赖测试框架 + 套件
-docs/          规则规格 / 网络协议 / 开发计划 / 美术风格指南
-deploy/        服务器部署（M2）
+src/protocol/  消息常量 / 按座位裁剪的可见信息 / 统一网络节点（两端共用）
+src/server/    房间/对局控制（纯逻辑，可无网络单测）
+src/client/    大厅、牌桌、入口
+tests/         零依赖测试框架 + 套件 + E2E 客户端
+deploy/        VPS 部署（Docker）
+docs/          规则规格 / 网络协议 / 开发计划
 ```
 
 ## 里程碑
 
-M0 地基 ✅ · M1 可玩核心 ✅ · M2 联机对战 · M3 完整体验 · M4 视听整合 · M5 发布
+M0 地基 ✅ · M1 可玩核心 ✅ · M2 联机核心 ✅（VPS 部署/安卓真机待外部资源）· M3 完整体验 · M4 视听整合 · M5 发布
 
 路线图与验收标准见 [docs/开发计划.md](docs/开发计划.md)。

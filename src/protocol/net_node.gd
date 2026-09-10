@@ -1,0 +1,411 @@
+## 统一网络节点：服务器与客户端共用同一份脚本，保证 RPC 配置两端对称。
+## 挂载路径必须两端一致：/root/Main/Net。
+## 服务器模式：把 RPC 翻译为 RoomManager 纯逻辑调用并回发 out 队列。
+## 客户端模式：连接/版本握手/session_token 自动重连/信号分发（UI 无关）。
+extends Node
+
+signal connected_ok
+signal connection_failed
+signal server_disconnected
+signal welcomed(seat: int)
+signal rejoined
+signal room_state(state: Dictionary)
+signal view_changed(view: Dictionary)
+signal game_event(event: String, data: Dictionary)
+signal errored(code: String, msg: String)
+signal kicked_off(reason: String)
+
+const MsgC = preload("res://src/protocol/msg.gd")
+const ManagerGd = preload("res://src/server/room_manager.gd")
+const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
+
+var is_server := false
+
+# --- 服务器侧 ---
+var manager = null
+
+# --- 客户端侧 ---
+var latest_view: Dictionary = {}
+var my_seat := -1
+var in_room := false
+var autoplay := false          # E2E：轮到自己自动出牌
+var address := "127.0.0.1"
+var port := 24565
+var auto_reconnect := true     # 掉线后凭 token 自动重连
+var _session_token := ""
+var _want_connection := false
+var _retry_timer := 0.0
+var _last_turn_key := ""
+var _had_view := false
+
+
+func setup(p_is_server: bool) -> void:
+	is_server = p_is_server
+
+
+func _ready() -> void:
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.connected_to_server.connect(_on_connected)
+	multiplayer.connection_failed.connect(_on_conn_failed)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	if is_server:
+		# AppMode autoload 在 E2E SceneTree 环境不存在 → 兼容取默认值
+		var am := get_node_or_null("/root/AppMode")
+		var port_v := 24565
+		var ai_ms := 600
+		var phase_ms := 2200
+		if am != null:
+			port_v = int(am.port)
+			ai_ms = int(am.ai_delay_ms)
+			phase_ms = int(am.phase_delay_ms)
+		var peer := ENetMultiplayerPeer.new()
+		var err := peer.create_server(port_v, 64)
+		if err != OK:
+			push_error("服务器启动失败 port=%d err=%d" % [port_v, err])
+			return
+		multiplayer.multiplayer_peer = peer
+		manager = ManagerGd.new()
+		manager.ai_delay_ms = ai_ms
+		manager.phase_delay_ms = phase_ms
+		print("[server] Tycoon 服务器已启动 端口=%d ai_delay=%dms phase_delay=%dms" % [
+			port_v, ai_ms, phase_ms])
+
+
+func _process(delta: float) -> void:
+	if is_server:
+		if manager != null:
+			_flush(manager.tick(Time.get_ticks_msec()))
+	else:
+		_client_process(delta)
+
+
+func _on_peer_disconnected(peer: int) -> void:
+	if is_server and manager != null:
+		_flush(manager.peer_gone(peer))
+
+
+# ================================================================ C → S
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_hello(ver: int, token: String) -> void:
+	if not is_server:
+		return
+	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token)))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_quick(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.quick_match(_sender(), str(data.get("name", "玩家")), data.get("rules", {})))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_create(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.create_room(_sender(), str(data.get("name", "玩家")), data.get("rules", {})))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_join(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.join_room(_sender(), str(data.get("name", "玩家")), str(data.get("code", ""))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_leave(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.leave(_sender()))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_kick(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.kick(_sender(), int(data.get("seat", -1))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_bot_fill(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.fill_bots(_sender()))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_room_start(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.start(_sender()))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_game_play(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.play(_sender(), data.get("cards", [])))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_game_pass(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.pass_turn(_sender()))
+
+
+# ================================================================ S → C
+
+@rpc("authority", "call_remote", "reliable")
+func s_welcome(data: Dictionary) -> void:
+	if is_server:
+		return
+	my_seat = int(data.get("seat", -1))
+	if my_seat >= 0:
+		in_room = true
+		if _had_view:
+			rejoined.emit()
+	welcomed.emit(my_seat)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_room_state(data: Dictionary) -> void:
+	if is_server:
+		return
+	in_room = true
+	if data.has("session_token"):
+		_session_token = str(data["session_token"])
+	room_state.emit(data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_game_view(data: Dictionary) -> void:
+	if is_server:
+		return
+	var view: Dictionary = data.get("view", {})
+	latest_view = view
+	my_seat = int(view.get("my_seat", my_seat))
+	_had_view = true
+	if data.has("turn_seat"):
+		game_event.emit("turn", {"seat": int(data["turn_seat"])})
+	view_changed.emit(view)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_game_played(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("played", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_game_cleared(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("cleared", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_revolution(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("revolution", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_round_end(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("round_end", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_exchange(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("exchange", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_game_end(data: Dictionary) -> void:
+	if is_server:
+		return
+	game_event.emit("game_end", data)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_kicked(data: Dictionary) -> void:
+	if is_server:
+		return
+	var reason: String = str(data.get("reason", ""))
+	if reason == "version":
+		auto_reconnect = false
+		_want_connection = false
+	in_room = false
+	kicked_off.emit(reason)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_error(data: Dictionary) -> void:
+	if is_server:
+		return
+	errored.emit(str(data.get("code", "")), str(data.get("msg", "")))
+
+
+# ================================================================ 客户端 API
+
+func connect_to(p_address: String, p_port: int) -> bool:
+	if is_server:
+		return false
+	address = p_address
+	port = p_port
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_client(address, port)
+	if err != OK:
+		errored.emit("connect_fail", "无法创建连接")
+		return false
+	multiplayer.multiplayer_peer = peer
+	_want_connection = true
+	return true
+
+
+## E2E 用：模拟断网（保留 token，自动重连）
+func drop_connection() -> void:
+	if is_server:
+		return
+	var peer = multiplayer.multiplayer_peer
+	if peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		peer.close()
+
+
+func leave_room() -> void:
+	_c_send("c_room_leave", {})
+	_session_token = ""
+	in_room = false
+	my_seat = -1
+	latest_view = {}
+
+
+func disconnect_all() -> void:
+	_want_connection = false
+	auto_reconnect = false
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+	multiplayer.multiplayer_peer = null
+
+
+func quick_match(rules: Dictionary = {}) -> void:
+	_c_send("c_room_quick", {"name": _name(), "rules": rules})
+
+
+func create_room(rules: Dictionary = {}) -> void:
+	_c_send("c_room_create", {"name": _name(), "rules": rules})
+
+
+func join_room(code: String) -> void:
+	_c_send("c_room_join", {"name": _name(), "code": code})
+
+
+func fill_bots() -> void:
+	_c_send("c_bot_fill", {})
+
+
+func start_game() -> void:
+	_c_send("c_room_start", {})
+
+
+func play(cards: Array) -> void:
+	_c_send("c_game_play", {"cards": cards})
+
+
+func pass_turn() -> void:
+	_c_send("c_game_pass", {})
+
+
+# ================================================================ 内部
+
+func _client_process(delta: float) -> void:
+	if _want_connection and not _is_connected():
+		_retry_timer -= delta
+		if _retry_timer <= 0.0:
+			_retry_timer = 2.0
+			connect_to(address, port)
+	if autoplay:
+		_autoplay_tick()
+
+
+func _is_connected() -> bool:
+	var peer = multiplayer.multiplayer_peer
+	return peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+
+func _on_connected() -> void:
+	connected_ok.emit()
+	_retry_timer = 0.0
+	_c_send("c_hello", {})
+
+
+func _on_conn_failed() -> void:
+	if not auto_reconnect:
+		connection_failed.emit()
+
+
+func _on_server_disconnected() -> void:
+	latest_view = {}
+	if auto_reconnect and _want_connection:
+		_retry_timer = 2.0
+	server_disconnected.emit()
+
+
+func _c_send(event: String, data: Dictionary) -> void:
+	if not _is_connected():
+		errored.emit("not_connected", "未连接服务器")
+		return
+	if event == "c_hello":
+		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token)
+	else:
+		rpc_id(1, event, data)
+
+
+func _name() -> String:
+	# 兼容无 autoload 的 E2E 环境
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null:
+		return str(gs.nickname)
+	return "玩家"
+
+
+func _flush(out: Array) -> void:
+	if manager == null:
+		return
+	for m in out:
+		var peer: int = m["peer"]
+		if multiplayer.get_peers().has(peer):
+			rpc_id(peer, m["event"], m["data"])
+
+
+func _sender() -> int:
+	return multiplayer.get_remote_sender_id()
+
+
+func _autoplay_tick() -> void:
+	if latest_view.is_empty() or my_seat < 0:
+		return
+	if str(latest_view["phase"]) != "play":
+		return
+	if int(latest_view["turn"]) != my_seat:
+		return
+	var key := "%s|%d|%d|%d" % [
+		str(latest_view["phase"]), int(latest_view["turn"]),
+		(latest_view["field"] as Array).size(), (latest_view["hand"] as Array).size(),
+	]
+	if key == _last_turn_key:
+		return
+	_last_turn_key = key
+	var action := BotPlayerGd.decide_from_view(latest_view)
+	if str(action.get("t")) == "play":
+		play(action.get("cards", []))
+	else:
+		pass_turn()

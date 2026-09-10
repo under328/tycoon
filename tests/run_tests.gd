@@ -13,7 +13,12 @@ func _initialize() -> void:
 	for path in suite_paths:
 		var before_checks: int = t.checks
 		var before_fails: int = t.failures.size()
-		var suite = load(path).new()
+		var script = load(path)
+		if script == null or not script.can_instantiate():
+			t.failures.append("套件加载失败(解析错误?): " + path)
+			print("%-46s LOAD FAILED" % path.get_file())
+			continue
+		var suite = script.new()
 		suite.run(t)
 		print("%-46s %3d checks, %d failed" % [
 			path.get_file(), t.checks - before_checks, t.failures.size() - before_fails,
