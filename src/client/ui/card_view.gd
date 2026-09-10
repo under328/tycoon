@@ -137,7 +137,10 @@ func _heart_points(scale: float, flip := false) -> PackedVector2Array:
 
 
 func _draw_heart(pos: Vector2, r: float, ink: Color) -> void:
-	draw_colored_polygon(_heart_points(r), ink)
+	var moved := PackedVector2Array()
+	for p in _heart_points(r):
+		moved.append(pos + p)  # 心形多边形围绕原点生成, 必须平移到目标位置
+	draw_colored_polygon(moved, ink)
 
 
 func _draw_spade(pos: Vector2, r: float, ink: Color) -> void:
