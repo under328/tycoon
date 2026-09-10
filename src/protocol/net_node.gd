@@ -36,7 +36,7 @@ var auto_reconnect := true     # 掉线后凭 token 自动重连
 var _session_token := ""
 var _want_connection := false
 var _retry_timer := 0.0
-var _last_turn_key := ""
+var _autoplay_armed := false
 var _had_view := false
 
 
@@ -213,6 +213,7 @@ func s_game_view(data: Dictionary) -> void:
 	latest_view = view
 	my_seat = int(view.get("my_seat", my_seat))
 	_had_view = true
+	_autoplay_armed = true  # 每个新 view 重新武装一次自动出牌
 	if data.has("turn_seat"):
 		game_event.emit("turn", {"seat": int(data["turn_seat"])})
 	view_changed.emit(view)
@@ -452,19 +453,13 @@ func _sender() -> int:
 
 
 func _autoplay_tick() -> void:
-	if latest_view.is_empty() or my_seat < 0:
+	if not _autoplay_armed or latest_view.is_empty() or my_seat < 0:
 		return
 	if str(latest_view["phase"]) != "play":
 		return
 	if int(latest_view["turn"]) != my_seat:
 		return
-	var key := "%s|%d|%d|%d" % [
-		str(latest_view["phase"]), int(latest_view["turn"]),
-		(latest_view["field"] as Array).size(), (latest_view["hand"] as Array).size(),
-	]
-	if key == _last_turn_key:
-		return
-	_last_turn_key = key
+	_autoplay_armed = false
 	var action := BotPlayerGd.decide_from_view(latest_view)
 	if str(action.get("t")) == "play":
 		play(action.get("cards", []))

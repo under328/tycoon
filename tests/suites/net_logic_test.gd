@@ -116,7 +116,7 @@ func _match_flow_with_bots(t) -> void:
 	var guard := 0
 	while guard < 30000 and room.match_ctl != null:
 		guard += 1
-		now += 5
+		now += 250
 		out = m.tick(now)
 		seen_round_end += _count(out, "s_round_end")
 		seen_exchange += _count(out, "s_exchange")
@@ -151,7 +151,7 @@ func _disconnect_and_rejoin(t) -> void:
 	var plays := 0
 	while guard < 30000:
 		guard += 1
-		now += 5
+		now += 250
 		plays += _count(m.tick(now), "s_game_played")
 		if plays >= 6:
 			break
@@ -169,7 +169,7 @@ func _disconnect_and_rejoin(t) -> void:
 	var idle := false
 	while guard < 30000:
 		guard += 1
-		now += 5
+		now += 250
 		m.tick(now)
 		if room.match_ctl == null:
 			idle = true
@@ -251,8 +251,12 @@ func _m3_features(t) -> void:
 	# cid-A 要么胜（总分最高）要么不胜，但一定有 1 场记录
 	var my_stats: Dictionary = m.stats.get_entry("cid-A")
 	t.expect_eq(int(my_stats["matches"]), 1, "cid-A 记 1 场")
-	t.expect(int(my_stats["total_points"]) != 0 or int(my_stats["wins"]) > 0,
-			"cid-A 积分入账")
+	# 确定性校验: 战绩快照积分必须与终局比分一致
+	var stats_map: Dictionary = end_data["stats"]
+	for seat_key in stats_map:
+		var entry: Dictionary = stats_map[seat_key]
+		t.expect_eq(int(entry["total_points"]), int(end_data["scores"][int(seat_key)]),
+				"战绩积分与终局比分一致 seat=%s" % str(seat_key))
 	t.expect_eq(int(m.stats.get_entry("cid-B")["matches"]), 1, "cid-B 记 1 场")
 	var wins_a := int(my_stats["wins"])
 	var wins_b := int(m.stats.get_entry("cid-B")["wins"])

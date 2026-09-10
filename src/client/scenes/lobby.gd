@@ -111,8 +111,47 @@ func _build_ui() -> void:
 
 	stats_label = _label(15, COLOR_DIM)
 	stats_label.position = Vector2(40, 470)
-	stats_label.custom_minimum_size = Vector2(340, 60)
+	stats_label.custom_minimum_size = Vector2(340, 40)
 	add_child(stats_label)
+
+	# ---- 音量设置 ----
+	var vc := _label(15, COLOR_WHITE)
+	vc.text = "音乐"
+	vc.position = Vector2(40, 528)
+	add_child(vc)
+	var bgm_slider := HSlider.new()
+	bgm_slider.position = Vector2(90, 532)
+	bgm_slider.custom_minimum_size = Vector2(260, 20)
+	bgm_slider.max_value = 1.0
+	bgm_slider.step = 0.05
+	add_child(bgm_slider)
+	var vc2 := _label(15, COLOR_WHITE)
+	vc2.text = "音效"
+	vc2.position = Vector2(40, 566)
+	add_child(vc2)
+	var sfx_slider := HSlider.new()
+	sfx_slider.position = Vector2(90, 570)
+	sfx_slider.custom_minimum_size = Vector2(260, 20)
+	sfx_slider.max_value = 1.0
+	sfx_slider.step = 0.05
+	add_child(sfx_slider)
+	var gs2 := get_node_or_null("/root/GameSettings")
+	if gs2 != null:
+		bgm_slider.value = float(gs2.bgm_volume)
+		sfx_slider.value = float(gs2.sfx_volume)
+	bgm_slider.value_changed.connect(func(v: float) -> void:
+		var g := get_node_or_null("/root/GameSettings")
+		if g != null:
+			g.bgm_volume = v
+			g.save_settings()
+		Audio.apply_volumes())
+	sfx_slider.value_changed.connect(func(v: float) -> void:
+		var g := get_node_or_null("/root/GameSettings")
+		if g != null:
+			g.sfx_volume = v
+			g.save_settings()
+		Audio.apply_volumes()
+		Audio.play("click"))
 
 	var c3 := _label(18, COLOR_GOLD)
 	c3.text = "房间"
@@ -229,6 +268,7 @@ func _bind_net() -> void:
 
 
 func _on_connect() -> void:
+	Audio.play("click")
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
 		gs.nickname = nickname_edit.text.strip_edges()

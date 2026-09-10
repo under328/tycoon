@@ -1,5 +1,6 @@
 ## 牌桌。mode="local"：本地人+3AI（本机驱动规则引擎）；mode="online"：
-## 渲染来自服务器的 game_view，动作经 net 发送（M2）。
+## 渲染来自服务器的 game_view，动作经 net 发送。
+## M4 视听：程序化卡牌控件、出牌/清桌/革命/终局动画、回合计时、程序化音效。
 extends Control
 
 signal finished  # online：玩家点"返回大厅"
@@ -9,6 +10,7 @@ const GameStateGd = preload("res://src/rules/game_state.gd")
 const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 const ScoringGd = preload("res://src/rules/scoring.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
+const CardViewScript = preload("res://src/client/ui/card_view.gd")
 
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
@@ -21,6 +23,7 @@ const COLOR_RED := Color("ff6b6b")
 const COLOR_WHITE := Color("f0f0f0")
 const COLOR_GREEN := Color("7dd87d")
 const COLOR_DIM := Color("8a8ab0")
+const COLOR_PANEL := Color(0.13, 0.13, 0.29, 0.55)
 
 var mode := "local"
 var net: Node = null
@@ -32,12 +35,24 @@ var _at_game_end := false
 var _emoji_cd := 0.0
 var _emoji_btns: Array = []
 
+# M4 视听状态
+var _last_hand: Array = []
+var _prev_revolution := false
+var _end_shown := false
+var _field_count := -1
+var _turn_total := -1.0
+var _turn_remain := -1.0
+var _last_turn_seat := -99
+
 var info_label: Label
-var field_label: Label
 var status_label: Label
 var error_label: Label
+var timer_label: Label
 var seat_labels: Array = []
 var hand_box: HFlowContainer
+var field_box: HBoxContainer
+var field_hint: Label
+var fx_layer: Control
 var btn_play: Button
 var btn_pass: Button
 var btn_next: Button
@@ -52,64 +67,31 @@ func _ready() -> void:
 		_refresh()
 	else:
 		_new_match()
-
-
-func _bind_net() -> void:
-	net.view_changed.connect(func(view: Dictionary) -> void:
-		_at_game_end = str(view["phase"]) == "game_end"
-		_refresh())
-	net.game_event.connect(_on_game_event)
-	net.errored.connect(func(code: String, _msg: String) -> void:
-		_flash_error(code))
-	net.server_disconnected.connect(func() -> void:
-		status_label.text = "连接断开，自动重连中…"
-		status_label.add_theme_color_override("font_color", COLOR_RED))
-	net.rejoined.connect(func() -> void:
-		_flash_error("已重新连上，座位已恢复"))
-	# 对局结束后服务器广播 room_state → 自动回到房间（再来一局流转）
-	net.room_state.connect(func(_state: Dictionary) -> void:
-		if _at_game_end:
-			_at_game_end = false
-			finished.emit())
-
-
-func _on_game_event(event: String, data: Dictionary) -> void:
-	if event == "emoji":
-		_show_emoji(int(data.get("seat", 0)), int(data.get("id", 0)))
-	_refresh()
+	Audio.play_bgm()
 
 
 func _process(delta: float) -> void:
 	if _emoji_cd > 0.0:
 		_emoji_cd -= delta
+	# 在线模式回合倒计时
+	if mode == "online" and _turn_remain > 0.0:
+		_turn_remain -= delta
+		if _turn_total > 0:
+			var remain := maxf(_turn_remain, 0.0)
+			timer_label.text = "⏱ %d" % int(ceil(remain))
+			timer_label.add_theme_color_override("font_color",
+					COLOR_RED if remain <= 5.0 else COLOR_WHITE)
 
 
-func _show_emoji(seat: int, id: int) -> void:
-	var view: Dictionary = {}
-	if mode == "online" and net != null:
-		view = net.latest_view
-	var pos := Vector2(560, 470)  # 自己的表情出现在手牌上方
-	if seat != int(view.get("my_seat", 0)):
-		var idx := seat
-		if idx >= 1 and idx <= 3:
-			var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
-			pos = positions[idx]
-	var lb := Label.new()
-	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
-	lb.add_theme_font_size_override("font_size", 42)
-	lb.position = pos
-	add_child(lb)
-	var tw := create_tween()
-	tw.tween_parallel().tween_property(lb, "position:y", pos.y - 50.0, 1.6)
-	tw.parallel().tween_property(lb, "modulate:a", 0.0, 1.6).set_delay(0.4)
-	tw.tween_callback(lb.queue_free)
-
-
-# ---------------------------------------------------------------- 驱动
+# ---------------------------------------------------------------- 驱动（本地）
 
 func _new_match() -> void:
 	state = GameStateGd.new_match({}, -1)
 	selected.clear()
+	_end_shown = false
+	_prev_revolution = false
+	_field_count = -1
+	_last_hand = []
 	_advance()
 
 
@@ -133,7 +115,7 @@ func _advance() -> void:
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
-			var r := GameStateGd.apply(state, action)
+			var r := _local_apply(action)
 			if not bool(r["ok"]):
 				push_error("local table: AI 非法动作 %s" % str(r["error"]))
 				break
@@ -149,9 +131,15 @@ func _advance() -> void:
 	advancing = false
 
 
+func _local_apply(action: Dictionary) -> Dictionary:
+	return GameStateGd.apply(state, action)
+
+
 func _human_apply(action: Dictionary) -> void:
 	if advancing or state.is_empty():
 		return
+	if str(action["t"]) == "pass":
+		Audio.play("pass")
 	var r := GameStateGd.apply(state, action)
 	if not bool(r["ok"]):
 		_flash_error(str(r["error"]))
@@ -163,6 +151,7 @@ func _human_apply(action: Dictionary) -> void:
 
 
 func _on_play_pressed() -> void:
+	Audio.play("click")
 	if mode == "online":
 		if selected.is_empty():
 			_flash_error("先选牌")
@@ -177,6 +166,7 @@ func _on_play_pressed() -> void:
 
 
 func _on_pass_pressed() -> void:
+	Audio.play("click")
 	if mode == "online":
 		net.pass_turn()
 		return
@@ -184,17 +174,56 @@ func _on_pass_pressed() -> void:
 
 
 func _on_next_pressed() -> void:
+	Audio.play("click")
 	_human_apply({"t": "next_round"})
 
 
 func _on_rematch_pressed() -> void:
+	Audio.play("click")
 	_new_match()
 
 
 func _on_leave_pressed() -> void:
+	Audio.play("click")
 	if net != null:
 		net.leave_room()
 	finished.emit()
+
+
+# ---------------------------------------------------------------- 网络
+
+func _bind_net() -> void:
+	net.view_changed.connect(func(view: Dictionary) -> void:
+		_at_game_end = str(view["phase"]) == "game_end"
+		# 回合变化 → 重置倒计时
+		var new_turn := int(view["turn"])
+		if new_turn != _last_turn_seat:
+			_last_turn_seat = new_turn
+			if str(view["phase"]) == "play" and new_turn >= 0:
+				_turn_total = float(int(view["rules"]["turn_seconds"]))
+				_turn_remain = _turn_total
+				if new_turn == int(view["my_seat"]):
+					Audio.play("turn")
+		_refresh())
+	net.game_event.connect(_on_game_event)
+	net.errored.connect(func(code: String, _msg: String) -> void:
+		_flash_error(code))
+	net.server_disconnected.connect(func() -> void:
+		status_label.text = "连接断开，自动重连中…"
+		status_label.add_theme_color_override("font_color", COLOR_RED))
+	net.rejoined.connect(func() -> void:
+		_flash_error("已重新连上，座位已恢复"))
+	# 对局结束后服务器广播 room_state → 自动回到房间（再来一局流转）
+	net.room_state.connect(func(_state: Dictionary) -> void:
+		if _at_game_end:
+			_at_game_end = false
+			finished.emit())
+
+
+func _on_game_event(event: String, data: Dictionary) -> void:
+	if event == "emoji":
+		_show_emoji(int(data.get("seat", 0)), int(data.get("id", 0)))
+		Audio.play("pop")
 
 
 # ---------------------------------------------------------------- UI 构建
@@ -218,16 +247,40 @@ func _build_ui() -> void:
 	info_label.position = Vector2(20, 12)
 	add_child(info_label)
 
+	timer_label = _make_label(22, COLOR_WHITE)
+	timer_label.position = Vector2(1180, 12)
+	timer_label.visible = mode == "online"
+	add_child(timer_label)
+
 	seat_labels.append(null)  # 座位0=自己，信息在底部手牌区
 	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
 	seat_labels.append(_make_seat_label(Vector2(500, 14)))
 	seat_labels.append(_make_seat_label(Vector2(20, 300)))
 
-	field_label = _make_label(26, COLOR_WHITE)
-	field_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	field_label.position = Vector2(320, 280)
-	field_label.custom_minimum_size = Vector2(640, 140)
-	add_child(field_label)
+	# 牌桌中央: 桌面区
+	var field_panel := Panel.new()
+	var field_sb := StyleBoxFlat.new()
+	field_sb.bg_color = COLOR_PANEL
+	field_sb.set_corner_radius_all(12)
+	field_sb.set_border_width_all(1)
+	field_sb.border_color = Color(0.79, 0.66, 0.24, 0.45)
+	field_panel.add_theme_stylebox_override("panel", field_sb)
+	field_panel.position = Vector2(320, 216)
+	field_panel.custom_minimum_size = Vector2(640, 214)
+	add_child(field_panel)
+
+	field_hint = _make_label(16, COLOR_DIM)
+	field_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	field_hint.position = Vector2(20, 6)
+	field_hint.custom_minimum_size = Vector2(600, 24)
+	field_panel.add_child(field_hint)
+
+	field_box = HBoxContainer.new()
+	field_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	field_box.position = Vector2(20, 36)
+	field_box.custom_minimum_size = Vector2(600, 130)
+	field_box.add_theme_constant_override("separation", 8)
+	field_panel.add_child(field_box)
 
 	status_label = _make_label(18, COLOR_DIM)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -279,6 +332,7 @@ func _build_ui() -> void:
 				_flash_error("表情发太快了")
 				return
 			_emoji_cd = 1.0
+			Audio.play("pop")
 			if mode == "online" and net != null:
 				net.send_emoji(id))
 		add_child(eb)
@@ -286,6 +340,12 @@ func _build_ui() -> void:
 	if mode == "local":
 		for eb: Button in _emoji_btns:
 			eb.visible = false
+
+	# 特效层（全屏最上层）
+	fx_layer = Control.new()
+	fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(fx_layer)
 
 
 func _make_seat_label(pos: Vector2) -> Label:
@@ -336,6 +396,29 @@ func _error_text(code: String) -> String:
 			return "操作无效 (%s)" % code
 
 
+# ---------------------------------------------------------------- 表情
+
+func _show_emoji(seat: int, id: int) -> void:
+	var view: Dictionary = {}
+	if mode == "online" and net != null:
+		view = net.latest_view
+	var pos := Vector2(560, 470)  # 自己的表情出现在手牌上方
+	if seat != int(view.get("my_seat", 0)):
+		var idx := seat
+		if idx >= 1 and idx <= 3:
+			var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
+			pos = positions[idx]
+	var lb := Label.new()
+	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
+	lb.add_theme_font_size_override("font_size", 42)
+	lb.position = pos
+	fx_layer.add_child(lb)
+	var tw := create_tween()
+	tw.tween_parallel().tween_property(lb, "position:y", pos.y - 50.0, 1.6)
+	tw.parallel().tween_property(lb, "modulate:a", 0.0, 1.6).set_delay(0.4)
+	tw.tween_callback(lb.queue_free)
+
+
 # ---------------------------------------------------------------- 刷新
 
 func _refresh() -> void:
@@ -345,15 +428,6 @@ func _refresh() -> void:
 		_refresh_view(net.latest_view)
 	elif not state.is_empty():
 		_refresh_view(ViewGd.build(state, 0))
-
-
-func _seat_name(view: Dictionary, seat: int) -> String:
-	var my := int(view.get("my_seat", 0))
-	if seat == my:
-		return "你"
-	var rel := (seat - my + 4) % 4
-	var names := ["", "下家", "对家", "上家"]
-	return names[rel]
 
 
 func _refresh_view(view: Dictionary) -> void:
@@ -377,21 +451,21 @@ func _refresh_view(view: Dictionary) -> void:
 			turn_mark, _seat_name(view, seat), int(view["counts"][seat]), ident,
 		]
 
-	var lines: Array = []
-	var lead: Dictionary = view["lead"]
-	if phase == "play" and lead.is_empty():
-		lines.append("—— 自由出牌 ——")
-		if int(view["must_include"]) >= 0:
-			lines.append("(首手必须包含 ♦3)")
-	for entry: Dictionary in view["field"]:
-		lines.append("%s：%s" % [
-			_seat_name(view, int(entry["seat"])), CardsGd.labels(entry["combo"]["cards"]),
-		])
-	field_label.text = "\n".join(lines)
-
+	_refresh_field(view)
 	_refresh_hand(view)
 
-	var my_turn: bool = phase == "play" and int(view["turn"]) == 0
+	# 革命检测（两种模式统一）
+	var rev: bool = bool(view["revolution"])
+	if rev != _prev_revolution:
+		_prev_revolution = rev
+		if rev:
+			_revolution_fx()
+
+	var lead: Dictionary = view["lead"]
+	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
+	if phase != "play":
+		_turn_remain = -1.0
+		timer_label.text = ""
 	if phase == "play":
 		if my_turn:
 			status_label.text = "轮到你出牌" + ("（需同牌型更大）" if not lead.is_empty() else "")
@@ -415,6 +489,22 @@ func _refresh_view(view: Dictionary) -> void:
 	btn_rematch.visible = mode == "local" and phase == "game_end"
 	btn_leave.visible = mode == "online"
 
+	# 终局演出（一次性）
+	if phase == "game_end" and not _end_shown \
+			and (view["identities"] as Array).size() == 4:
+		_end_shown = true
+		var my_rank := int(view["identities"][int(view["my_seat"])])
+		_end_overlay(view, my_rank)
+
+
+func _seat_name(view: Dictionary, seat: int) -> String:
+	var my := int(view.get("my_seat", 0))
+	if seat == my:
+		return "你"
+	var rel := (seat - my + 4) % 4
+	var names := ["", "下家", "对家", "上家"]
+	return names[rel]
+
 
 func _round_end_text(view: Dictionary) -> String:
 	var ids: Array = view["identities"]
@@ -427,25 +517,181 @@ func _round_end_text(view: Dictionary) -> String:
 	return "  ".join(parts)
 
 
+## 桌面区：实体卡牌 + 出牌动画。
+func _refresh_field(view: Dictionary) -> void:
+	var field: Array = view["field"]
+	field_hint.text = ""
+	if str(view["phase"]) == "play" and (view["lead"] as Dictionary).is_empty():
+		field_hint.text = "—— 自由出牌 ——"
+		if int(view["must_include"]) >= 0:
+			field_hint.text = "首手必须包含 ♦3"
+	if field.size() == _field_count:
+		return
+	var grew := field.size() > _field_count
+	var emptied := field.is_empty() and _field_count > 0
+	_field_count = field.size()
+	for child in field_box.get_children():
+		child.queue_free()
+	if emptied:
+		Audio.play("clear")
+		return
+	for i in field.size():
+		var entry: Dictionary = field[i]
+		var holder := VBoxContainer.new()
+		holder.add_theme_constant_override("separation", 2)
+		var name_lb := _make_label(14, COLOR_DIM)
+		name_lb.text = _seat_name(view, int(entry["seat"]))
+		name_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		holder.add_child(name_lb)
+		var hz := HBoxContainer.new()
+		hz.add_theme_constant_override("separation", 4)
+		for c in entry["combo"]["cards"]:
+			hz.add_child(_make_card(int(c), 48, 66, false, false))
+		holder.add_child(hz)
+		field_box.add_child(holder)
+		if i == field.size() - 1 and grew:
+			# 最新一手: 淡入 + 弹性缩放（容器托管布局，位置不可直接动画）
+			holder.pivot_offset = Vector2(120, 60)
+			holder.modulate.a = 0.0
+			holder.scale = Vector2(0.75, 0.75)
+			var tw := holder.create_tween()
+			tw.set_parallel(true)
+			tw.tween_property(holder, "modulate:a", 1.0, 0.22)
+			tw.tween_property(holder, "scale", Vector2.ONE, 0.22)\
+					.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			Audio.play("play_card")
+
+
+func _seat_dir(view: Dictionary, seat: int) -> Vector2:
+	# 相对方位: 下家→右侧飞入, 对家→上方, 上家→左侧
+	match (seat - int(view["my_seat"]) + 4) % 4:
+		1:
+			return Vector2(180, 0)
+		2:
+			return Vector2(0, -140)
+		_:
+			return Vector2(-180, 0)
+
+
+func _make_card(card_id: int, w: float, h: float, is_selected: bool, clickable := true) -> Control:
+	var cv := CardViewScript.new(card_id)
+	cv.custom_minimum_size = Vector2(w, h)
+	cv.size = Vector2(w, h)
+	cv.selected = is_selected
+	if not clickable:
+		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.picked.connect(_on_hand_card_picked)
+	return cv
+
+
+func _on_hand_card_picked(card: int) -> void:
+	if selected.has(card):
+		selected.erase(card)
+	else:
+		selected.append(card)
+	Audio.play("click")
+	# 更新所有手牌卡的选中态
+	for child in hand_box.get_children():
+		if "selected" in child:
+			child.selected = selected.has(child.card)
+
+
+## 手牌：卡牌控件化；仅在手牌实际变化时重建并播放发牌动画。
 func _refresh_hand(view: Dictionary) -> void:
+	var hand: Array = view["hand"]
+	if hand == _last_hand:
+		# 只同步选中态
+		var idx := 0
+		for child in hand_box.get_children():
+			if idx < hand.size():
+				child.selected = selected.has(int(hand[idx]))
+			idx += 1
+		return
+	_last_hand = hand.duplicate()
 	for child in hand_box.get_children():
 		child.queue_free()
-	for c in view["hand"]:
-		var card: int = c
-		var b := Button.new()
-		b.toggle_mode = true
-		b.text = CardsGd.label(card)
-		b.custom_minimum_size = Vector2(62, 88)
-		b.add_theme_font_size_override("font_size", 22)
-		if CardsGd.is_red(card):
-			b.add_theme_color_override("font_color", COLOR_RED)
-		elif CardsGd.is_joker(card):
-			b.add_theme_color_override("font_color", COLOR_GOLD)
-		b.button_pressed = selected.has(card)
-		b.toggled.connect(func(on: bool) -> void:
-			if on:
-				if not selected.has(card):
-					selected.append(card)
-			else:
-				selected.erase(card))
-		hand_box.add_child(b)
+	var i := 0
+	for c in hand:
+		var card_id: int = c
+		var cv := _make_card(card_id, 72, 100, selected.has(card_id))
+		hand_box.add_child(cv)
+		cv.modulate.a = 0.0
+		var tw := cv.create_tween()  # 绑定卡牌节点: 重建释放时自动终止
+		tw.tween_interval(0.02 * i)
+		tw.tween_property(cv, "modulate:a", 1.0, 0.12)
+		i += 1
+	if i > 0:
+		Audio.play("deal")
+
+
+# ---------------------------------------------------------------- 特效
+
+func _revolution_fx() -> void:
+	Audio.play("revolution")
+	var flash := ColorRect.new()
+	flash.color = Color(0.85, 0.15, 0.12, 0.0)
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_layer.add_child(flash)
+	var big := _make_label(120, COLOR_GOLD)
+	big.text = "革 命"
+	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	big.set_anchors_preset(Control.PRESET_CENTER)
+	big.position = Vector2(-200, -80)
+	big.custom_minimum_size = Vector2(400, 160)
+	big.pivot_offset = Vector2(200, 80)
+	big.scale = Vector2(0.4, 0.4)
+	big.modulate.a = 0.0
+	fx_layer.add_child(big)
+	var tw := create_tween()
+	tw.tween_parallel().tween_property(flash, "color:a", 0.32, 0.16)
+	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.3)\
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(big, "modulate:a", 1.0, 0.2)
+	tw.tween_interval(0.9)
+	tw.tween_parallel().tween_property(flash, "color:a", 0.0, 0.5)
+	tw.parallel().tween_property(big, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func() -> void:
+		flash.queue_free()
+		big.queue_free())
+
+
+func _end_overlay(view: Dictionary, my_rank: int) -> void:
+	Audio.play("win" if my_rank <= 1 else "lose")
+	var dark := ColorRect.new()
+	dark.color = Color(0, 0, 0, 0.0)
+	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_layer.add_child(dark)
+
+	var ids: Array = view["identities"]
+	var scores: Array = view["scores"]
+	var lines: Array = []
+	for s in 4:
+		lines.append("%s  %s  %+d 分（总 %d）" % [
+			_seat_name(view, s), ScoringGd.IDENTITY_NAMES[int(ids[s])],
+			int((view["last_points"] as Array)[s]), int(scores[s]),
+		])
+
+	var big := _make_label(96, COLOR_GOLD if my_rank <= 1 else COLOR_DIM)
+	big.text = "勝利" if my_rank <= 1 else "敗北"
+	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	big.set_anchors_preset(Control.PRESET_CENTER)
+	big.position = Vector2(-200, -150)
+	big.custom_minimum_size = Vector2(400, 130)
+	big.pivot_offset = Vector2(200, 65)
+	big.scale = Vector2(0.5, 0.5)
+	fx_layer.add_child(big)
+
+	var detail := _make_label(19, COLOR_WHITE)
+	detail.text = "\n".join(lines)
+	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	detail.set_anchors_preset(Control.PRESET_CENTER)
+	detail.position = Vector2(-260, -10)
+	detail.custom_minimum_size = Vector2(520, 140)
+	fx_layer.add_child(detail)
+
+	var tw := create_tween()
+	tw.tween_parallel().tween_property(dark, "color:a", 0.55, 0.4)
+	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.45)\
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
