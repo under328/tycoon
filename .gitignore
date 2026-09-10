@@ -1,0 +1,12 @@
+# Godot
+.godot/
+*.translation
+export/
+build/
+export_presets.cfg.bak
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 导入产物随 .godot 目录忽略；音频/图片源文件正常入库
