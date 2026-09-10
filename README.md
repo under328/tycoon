@@ -25,16 +25,33 @@ session_token 重连回座（离线期间 AI 托管）；打完自动回房间�
 服务器按游客 ID 记录场数/胜场/累计积分（`user://stats.json`）。
 规则细节见 [docs/规则规格.md](docs/规则规格.md)。
 
-## 构建发布（Windows）
+## 构建发布
+
+### Windows
 
 ```bash
-# 需要 Godot 导出模板（Steam 版通常已随 Steam DLC 安装）
 godot --headless --path . --export-release "Windows Desktop" builds/Tycoon.exe
 ```
 
 产物 `builds/Tycoon.exe`（内嵌全部资源）可直接双击进本地模式；也可当无头服务器：
 `Tycoon.exe --headless --server --port 24565`。
 发布产物已验证：用导出的 exe 当服务器完整跑通 E2E（含断线重连）。
+
+### Android（debug APK，arm64）
+
+本机工具链已装在 `D:\AndroidDev`（JDK 17 + Android SDK 34，绿色解压），
+Godot 编辑器设置已指向上述路径，一键导出：
+
+```bash
+godot --headless --path . --export-debug "Android" builds/Tycoon.apk
+```
+
+真机安装（任选其一）：
+- 手机传 `Tycoon.apk` 直接安装（需允许"安装未知应用"）；
+- 或 USB 连接后 `D:\AndroidDev\sdk\platform-tools\adb.exe install -r builds/Tycoon.apk`。
+
+要求：arm64 安卓（2016 年后几乎所有机型）。正式发布需换 release keystore
+（`deploy/README.md` 待补章节）。
 
 ## 压测
 
