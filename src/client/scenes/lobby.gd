@@ -1,6 +1,8 @@
 ## 联机大厅（占位美术，M4 换皮）：连接 → 建房/加入/快速匹配 → 规则设置 → 开局。
 extends Control
 
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
+
 signal start_game
 signal back_to_menu
 
@@ -8,12 +10,6 @@ const NetNodeGd = preload("res://src/protocol/net_node.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 
-const COLOR_BG := Color("14142b")
-const COLOR_GOLD := Color("e0a83c")
-const COLOR_WHITE := Color("f0f0f0")
-const COLOR_DIM := Color("8a8ab0")
-const COLOR_GREEN := Color("7dd87d")
-const COLOR_RED := Color("ff6b6b")
 
 var net: Node = null
 
@@ -56,31 +52,24 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	var theme_res := Theme.new()
-	var sys_font := SystemFont.new()
-	sys_font.font_names = PackedStringArray([
-		"Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "SimHei", "Arial",
-	])
-	theme_res.default_font = sys_font
-	theme_res.default_font_size = 18
-	theme = theme_res
+	theme = AppTheme.build_theme()
 
 	var bg := ColorRect.new()
-	bg.color = COLOR_BG
+	bg.color = AppTheme.BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var title := _label(28, COLOR_GOLD)
+	var title := _label(28, AppTheme.GOLD)
 	title.text = "大富豪 · Tycoon"
 	title.position = Vector2(40, 24)
 	add_child(title)
 
-	var sub := _label(15, COLOR_DIM)
+	var sub := _label(15, AppTheme.DIM)
 	sub.text = "本地调试大厅（M3 占位界面）"
 	sub.position = Vector2(40, 62)
 	add_child(sub)
 
-	var c1 := _label(16, COLOR_WHITE)
+	var c1 := _label(16, AppTheme.WHITE)
 	c1.text = "昵称"
 	c1.position = Vector2(40, 130)
 	add_child(c1)
@@ -90,7 +79,7 @@ func _build_ui() -> void:
 		nickname_edit.text = str(gs.nickname)
 	add_child(nickname_edit)
 
-	var c2 := _label(16, COLOR_WHITE)
+	var c2 := _label(16, AppTheme.WHITE)
 	c2.text = "服务器"
 	c2.position = Vector2(40, 220)
 	add_child(c2)
@@ -105,13 +94,13 @@ func _build_ui() -> void:
 	connect_btn.pressed.connect(_on_connect)
 	add_child(connect_btn)
 
-	status_label = _label(15, COLOR_DIM)
+	status_label = _label(15, AppTheme.DIM)
 	status_label.position = Vector2(40, 370)
 	status_label.custom_minimum_size = Vector2(340, 80)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(status_label)
 
-	stats_label = _label(15, COLOR_DIM)
+	stats_label = _label(15, AppTheme.DIM)
 	stats_label.position = Vector2(40, 470)
 	stats_label.custom_minimum_size = Vector2(340, 40)
 	add_child(stats_label)
@@ -127,7 +116,7 @@ func _build_ui() -> void:
 		back_to_menu.emit())
 	add_child(menu_btn)
 
-	var c3 := _label(18, COLOR_GOLD)
+	var c3 := _label(18, AppTheme.GOLD)
 	c3.text = "房间"
 	c3.position = Vector2(430, 120)
 	add_child(c3)
@@ -145,7 +134,7 @@ func _build_ui() -> void:
 	join_btn.pressed.connect(func() -> void: net.join_room(code_edit.text.strip_edges()))
 	add_child(join_btn)
 
-	room_label = _label(17, COLOR_WHITE)
+	room_label = _label(17, AppTheme.WHITE)
 	room_label.position = Vector2(430, 226)
 	room_label.custom_minimum_size = Vector2(700, 150)
 	add_child(room_label)
@@ -161,7 +150,7 @@ func _build_ui() -> void:
 	add_child(leave_btn)
 
 	# ---- 规则设置（房主可改，开局前生效）----
-	var c4 := _label(16, COLOR_GOLD)
+	var c4 := _label(16, AppTheme.GOLD)
 	c4.text = "规则设置"
 	c4.position = Vector2(430, 446)
 	add_child(c4)
@@ -173,7 +162,7 @@ func _build_ui() -> void:
 	add_child(chk_stairs)
 	chk_eight = _check("8切", Vector2(730, 478))
 	add_child(chk_eight)
-	var rounds_lbl := _label(15, COLOR_WHITE)
+	var rounds_lbl := _label(15, AppTheme.WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 484)
 	add_child(rounds_lbl)
@@ -187,11 +176,11 @@ func _build_ui() -> void:
 	save_settings_btn = _button("保存设置", Vector2(430, 530))
 	save_settings_btn.pressed.connect(func() -> void:
 		net.set_settings(_gather_rules())
-		_set_status("已提交设置（房主）", COLOR_DIM))
+		_set_status("已提交设置（房主）", AppTheme.DIM))
 	add_child(save_settings_btn)
 
 	# ---- 快捷表情（房间内）----
-	var c5 := _label(16, COLOR_GOLD)
+	var c5 := _label(16, AppTheme.GOLD)
 	c5.text = "表情"
 	c5.position = Vector2(430, 600)
 	add_child(c5)
@@ -201,7 +190,7 @@ func _build_ui() -> void:
 		eb.custom_minimum_size = Vector2(48, 44)
 		eb.pressed.connect(func() -> void:
 			net.send_emoji(id)
-			_set_status("你: " + EMOJIS[id], COLOR_DIM))
+			_set_status("你: " + EMOJIS[id], AppTheme.DIM))
 		add_child(eb)
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, save_settings_btn]:
@@ -210,21 +199,21 @@ func _build_ui() -> void:
 
 func _bind_net() -> void:
 	net.connected_ok.connect(func() -> void:
-		_set_status("已连接，可以创建或加入房间", COLOR_GREEN)
+		_set_status("已连接，可以创建或加入房间", AppTheme.GREEN)
 		for b: Button in [quick_btn, create_btn, join_btn]:
 			b.disabled = false
 		net.request_stats())
 	net.connection_failed.connect(func() -> void:
-		_set_status("连接失败，请检查地址端口", COLOR_RED))
+		_set_status("连接失败，请检查地址端口", AppTheme.RED))
 	net.server_disconnected.connect(func() -> void:
-		_set_status("与服务器断开，自动重连中…", COLOR_RED))
+		_set_status("与服务器断开，自动重连中…", AppTheme.RED))
 	net.errored.connect(func(code: String, msg: String) -> void:
-		_set_status("错误 %s: %s" % [code, msg], COLOR_RED))
+		_set_status("错误 %s: %s" % [code, msg], AppTheme.RED))
 	net.kicked_off.connect(func(reason: String) -> void:
 		if reason == "version":
-			_set_status("版本不符，请到 %s 下载新版本" % GameSettings.DOWNLOAD_URL, COLOR_RED)
+			_set_status("版本不符，请到 %s 下载新版本" % GameSettings.DOWNLOAD_URL, AppTheme.RED)
 		else:
-			_set_status("已被移出房间（%s）" % reason, COLOR_RED))
+			_set_status("已被移出房间（%s）" % reason, AppTheme.RED))
 	net.stats_updated.connect(func(entry: Dictionary) -> void:
 		if entry.is_empty():
 			stats_label.text = "战绩：暂无（打完一场后生成）"
@@ -235,10 +224,10 @@ func _bind_net() -> void:
 	net.game_event.connect(func(event: String, data: Dictionary) -> void:
 		if event == "emoji":
 			_set_status("座位 %d: %s" % [int(data.get("seat", 0)) + 1,
-					EMOJIS[clampi(int(data.get("id", 0)), 0, EMOJIS.size() - 1)]], COLOR_GOLD)
+					EMOJIS[clampi(int(data.get("id", 0)), 0, EMOJIS.size() - 1)]], AppTheme.GOLD)
 		elif event == "chat":
 			_set_status("座位 %d 说: %s" % [int(data.get("seat", 0)) + 1,
-					str(data.get("text", ""))], COLOR_WHITE))
+					str(data.get("text", ""))], AppTheme.WHITE))
 	net.room_state.connect(_on_room_state)
 	net.view_changed.connect(func(_view: Dictionary) -> void:
 		start_game.emit())
@@ -255,7 +244,7 @@ func _on_connect() -> void:
 	var port := int(port_edit.text.strip_edges())
 	if port <= 0:
 		port = 24565
-	_set_status("连接中 %s:%d …" % [address_edit.text.strip_edges(), port], COLOR_DIM)
+	_set_status("连接中 %s:%d …" % [address_edit.text.strip_edges(), port], AppTheme.DIM)
 	net.connect_to(address_edit.text.strip_edges(), port)
 
 

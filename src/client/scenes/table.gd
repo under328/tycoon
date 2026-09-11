@@ -3,6 +3,8 @@
 ## M4 视听：程序化卡牌控件、出牌/清桌/革命/终局动画、回合计时、程序化音效。
 extends Control
 
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
+
 signal finished  # online：玩家点"返回大厅"
 
 const CardsGd = preload("res://src/rules/cards.gd")
@@ -18,13 +20,6 @@ const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 const AI_THINK_SEC := 0.7
 const EXCHANGE_SHOW_SEC := 1.4
 
-const COLOR_BG := Color("14142b")
-const COLOR_GOLD := Color("e0a83c")
-const COLOR_RED := Color("ff6b6b")
-const COLOR_WHITE := Color("f0f0f0")
-const COLOR_GREEN := Color("7dd87d")
-const COLOR_DIM := Color("8a8ab0")
-const COLOR_PANEL := Color(0.13, 0.13, 0.29, 0.55)
 
 var mode := "local"
 var net: Node = null
@@ -89,7 +84,7 @@ func _process(delta: float) -> void:
 			var cur := int(ceil(remain))
 			timer_label.text = "⏱ %d" % cur
 			timer_label.add_theme_color_override("font_color",
-					COLOR_RED if remain <= 5.0 else COLOR_WHITE)
+					AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
 			if remain <= 5.0 and cur >= 1 and cur != _prev_tick:
 				_prev_tick = cur
 				Audio.play("tick")
@@ -232,7 +227,7 @@ func _bind_net() -> void:
 		_flash_error(code))
 	net.server_disconnected.connect(func() -> void:
 		status_label.text = "连接断开，自动重连中…"
-		status_label.add_theme_color_override("font_color", COLOR_RED))
+		status_label.add_theme_color_override("font_color", AppTheme.RED))
 	net.rejoined.connect(func() -> void:
 		_flash_error("已重新连上，座位已恢复"))
 	# 对局结束后服务器广播 room_state → 自动回到房间（再来一局流转）
@@ -276,25 +271,18 @@ func _on_chat_send() -> void:
 # ---------------------------------------------------------------- UI 构建
 
 func _build_ui() -> void:
-	var theme_res := Theme.new()
-	var sys_font := SystemFont.new()
-	sys_font.font_names = PackedStringArray([
-		"Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "SimHei", "Arial",
-	])
-	theme_res.default_font = sys_font
-	theme_res.default_font_size = 18
-	theme = theme_res
+	theme = AppTheme.build_theme()
 
 	var bg := ColorRect.new()
-	bg.color = COLOR_BG
+	bg.color = AppTheme.BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	info_label = _make_label(20, COLOR_GOLD)
+	info_label = _make_label(20, AppTheme.GOLD)
 	info_label.position = Vector2(20, 12)
 	add_child(info_label)
 
-	timer_label = _make_label(22, COLOR_WHITE)
+	timer_label = _make_label(22, AppTheme.WHITE)
 	timer_label.position = Vector2(1180, 12)
 	timer_label.visible = mode == "online"
 	add_child(timer_label)
@@ -317,7 +305,7 @@ func _build_ui() -> void:
 	# 牌桌中央: 桌面区
 	var field_panel := Panel.new()
 	var field_sb := StyleBoxFlat.new()
-	field_sb.bg_color = COLOR_PANEL
+	field_sb.bg_color = AppTheme.PANEL
 	field_sb.set_corner_radius_all(12)
 	field_sb.set_border_width_all(1)
 	field_sb.border_color = Color(0.79, 0.66, 0.24, 0.45)
@@ -326,7 +314,7 @@ func _build_ui() -> void:
 	field_panel.custom_minimum_size = Vector2(640, 214)
 	add_child(field_panel)
 
-	field_hint = _make_label(16, COLOR_DIM)
+	field_hint = _make_label(16, AppTheme.DIM)
 	field_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_hint.position = Vector2(20, 6)
 	field_hint.custom_minimum_size = Vector2(600, 24)
@@ -339,13 +327,13 @@ func _build_ui() -> void:
 	field_box.add_theme_constant_override("separation", 8)
 	field_panel.add_child(field_box)
 
-	status_label = _make_label(18, COLOR_DIM)
+	status_label = _make_label(18, AppTheme.DIM)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.position = Vector2(320, 496)
 	status_label.custom_minimum_size = Vector2(640, 56)
 	add_child(status_label)
 
-	error_label = _make_label(16, COLOR_RED)
+	error_label = _make_label(16, AppTheme.RED)
 	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	error_label.position = Vector2(320, 470)
 	error_label.custom_minimum_size = Vector2(640, 26)
@@ -399,7 +387,7 @@ func _build_ui() -> void:
 			eb.visible = false
 
 	# 文本聊天（仅联机模式）
-	chat_log = _make_label(14, COLOR_WHITE)
+	chat_log = _make_label(14, AppTheme.WHITE)
 	chat_log.position = Vector2(16, 462)
 	chat_log.custom_minimum_size = Vector2(296, 84)
 	chat_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -431,7 +419,7 @@ func _build_ui() -> void:
 
 
 func _make_seat_label(pos: Vector2) -> Label:
-	var lb := _make_label(17, COLOR_WHITE)
+	var lb := _make_label(17, AppTheme.WHITE)
 	lb.position = pos
 	lb.custom_minimum_size = Vector2(180, 110)
 	add_child(lb)
@@ -551,19 +539,19 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase == "play":
 		if my_turn:
 			status_label.text = "轮到你出牌" + ("（需同牌型更大）" if not lead.is_empty() else "")
-			status_label.add_theme_color_override("font_color", COLOR_GREEN)
+			status_label.add_theme_color_override("font_color", AppTheme.GREEN)
 		else:
 			status_label.text = "等待 %s 出牌…" % _seat_name(view, int(view["turn"]))
-			status_label.add_theme_color_override("font_color", COLOR_DIM)
+			status_label.add_theme_color_override("font_color", AppTheme.DIM)
 	elif phase == "exchange":
 		status_label.text = "局间交换：乞丐→大富豪 2 张，平民→富豪 1 张"
-		status_label.add_theme_color_override("font_color", COLOR_GOLD)
+		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 	elif phase == "round_end":
 		status_label.text = "本局结束   " + _round_end_text(view)
-		status_label.add_theme_color_override("font_color", COLOR_GOLD)
+		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 	elif phase == "game_end":
 		status_label.text = "全场结束！  " + _round_end_text(view)
-		status_label.add_theme_color_override("font_color", COLOR_GOLD)
+		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 
 	btn_play.visible = my_turn
 	btn_pass.visible = my_turn and not lead.is_empty()
@@ -622,7 +610,7 @@ func _refresh_field(view: Dictionary) -> void:
 		var entry: Dictionary = field[i]
 		var holder := VBoxContainer.new()
 		holder.add_theme_constant_override("separation", 2)
-		var name_lb := _make_label(14, COLOR_DIM)
+		var name_lb := _make_label(14, AppTheme.DIM)
 		name_lb.text = _seat_name(view, int(entry["seat"]))
 		name_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		holder.add_child(name_lb)
@@ -716,7 +704,7 @@ func _revolution_fx() -> void:
 	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fx_layer.add_child(flash)
-	var big := _make_label(120, COLOR_GOLD)
+	var big := _make_label(120, AppTheme.GOLD)
 	big.text = "革 命"
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	big.set_anchors_preset(Control.PRESET_CENTER)
@@ -756,7 +744,7 @@ func _end_overlay(view: Dictionary, my_rank: int) -> void:
 			int((view["last_points"] as Array)[s]), int(scores[s]),
 		])
 
-	var big := _make_label(96, COLOR_GOLD if my_rank <= 1 else COLOR_DIM)
+	var big := _make_label(96, AppTheme.GOLD if my_rank <= 1 else AppTheme.DIM)
 	big.text = "勝利" if my_rank <= 1 else "敗北"
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	big.set_anchors_preset(Control.PRESET_CENTER)
@@ -766,7 +754,7 @@ func _end_overlay(view: Dictionary, my_rank: int) -> void:
 	big.scale = Vector2(0.5, 0.5)
 	fx_layer.add_child(big)
 
-	var detail := _make_label(19, COLOR_WHITE)
+	var detail := _make_label(19, AppTheme.WHITE)
 	detail.text = "\n".join(lines)
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.set_anchors_preset(Control.PRESET_CENTER)

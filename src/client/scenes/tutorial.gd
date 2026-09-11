@@ -2,17 +2,13 @@
 ## 用法: var t = TutorialScript.new(); add_child(t); t.closed.connect(...)
 extends Control
 
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
+
 signal closed
 
 const CardsGd = preload("res://src/rules/cards.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 
-const COLOR_BG := Color(0.08, 0.08, 0.17, 0.97)
-const COLOR_GOLD := Color("e0a83c")
-const COLOR_RED := Color("e0503c")
-const COLOR_WHITE := Color("f0f0f0")
-const COLOR_DIM := Color("8a8ab0")
-const COLOR_GREEN := Color("7dd87d")
 
 # 每页: [标题, 正文(多行), 图示编号]
 const PAGES := [
@@ -40,19 +36,19 @@ func _ready() -> void:
 	size = get_viewport().get_visible_rect().size
 
 	var bg := ColorRect.new()
-	bg.color = COLOR_BG
+	bg.color = AppTheme.OVERLAY_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
 	# 和风边框
 	var frame := ReferenceRect.new()
-	frame.border_color = Color(COLOR_GOLD, 0.55)
+	frame.border_color = Color(AppTheme.GOLD, 0.55)
 	frame.border_width = 2.0
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	frame.editor_only = false
 	add_child(frame)
 
-	_title = _label(34, COLOR_GOLD)
+	_title = _label(34, AppTheme.GOLD)
 	_title.position = Vector2(0, 52)
 	_title.custom_minimum_size = Vector2(size.x, 50)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -63,7 +59,7 @@ func _ready() -> void:
 	_fig.custom_minimum_size = Vector2(800, 300)
 	add_child(_fig)
 
-	_body = _label(19, COLOR_WHITE)
+	_body = _label(19, AppTheme.WHITE)
 	_body.position = Vector2(240, 470)
 	_body.custom_minimum_size = Vector2(800, 130)
 	_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -92,7 +88,7 @@ func _ready() -> void:
 			_close())
 	add_child(next)
 
-	var close := _label(16, COLOR_DIM)
+	var close := _label(16, AppTheme.DIM)
 	close.text = "关闭 ✕"
 	close.position = Vector2(size.x - 110, 24)
 	close.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -118,7 +114,7 @@ func _show(p: int) -> void:
 	_title.text = PAGES[p][0]
 	_body.text = PAGES[p][1]
 	for i in _dots.size():
-		_dots[i].color = COLOR_GOLD if i == p else COLOR_DIM
+		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_dots[p].size = Vector2(12, 12)
 	_page_lbl = null
 	_build_fig(int(PAGES[p][2]))
@@ -140,14 +136,14 @@ func _mini(card: int, pos: Vector2, s := 0.8) -> void:
 	_fig.add_child(cv)
 
 
-func _fig_label(text: String, pos: Vector2, color := COLOR_DIM, fsize := 15) -> void:
+func _fig_label(text: String, pos: Vector2, color := AppTheme.DIM, fsize := 15) -> void:
 	var lb := _label(fsize, color)
 	lb.text = text
 	lb.position = pos
 	_fig.add_child(lb)
 
 
-func _arrow(x0: float, y: float, x1: float, color := COLOR_GOLD) -> void:
+func _arrow(x0: float, y: float, x1: float, color := AppTheme.GOLD) -> void:
 	var ln := Line2D.new()
 	ln.points = PackedVector2Array([Vector2(x0, y), Vector2(x1 - 12, y)])
 	ln.width = 2.5
@@ -167,7 +163,7 @@ func _build_fig(kind: int) -> void:
 			_mini(53, Vector2(240, 60), 1.15)
 			_mini(51, Vector2(340, 90), 1.15)
 			_mini(48, Vector2(440, 60), 1.15)
-			_fig_label("出完手牌 → 大富豪!", Vector2(240, 230), COLOR_GREEN, 20)
+			_fig_label("出完手牌 → 大富豪!", Vector2(240, 230), AppTheme.GREEN, 20)
 		1:
 			var order := [0, 20, 32, 44, 48, 53]
 			var names := ["3", "…", "J", "A", "2", "王"]
@@ -177,11 +173,11 @@ func _build_fig(kind: int) -> void:
 					_mini(order[i], Vector2(x, 40), 0.9)
 				else:
 					_mini(53, Vector2(x, 34), 1.05)
-				_fig_label(names[i], Vector2(x + 14, 152), COLOR_GOLD, 18)
+				_fig_label(names[i], Vector2(x + 14, 152), AppTheme.GOLD, 18)
 				if i < order.size() - 1:
 					_arrow(x + 62, 100, x + 126)
-			_fig_label("小", Vector2(30, 190), COLOR_DIM, 16)
-			_fig_label("大", Vector2(736, 190), COLOR_DIM, 16)
+			_fig_label("小", Vector2(30, 190), AppTheme.DIM, 16)
+			_fig_label("大", Vector2(736, 190), AppTheme.DIM, 16)
 		2:
 			var groups := [
 				{"cards": [8], "label": "单张"},
@@ -199,29 +195,29 @@ func _build_fig(kind: int) -> void:
 				var cards: Array = groups[gi]["cards"]
 				for ci in cards.size():
 					_mini(cards[ci], Vector2(bx + ci * 34.0, by), 0.62)
-				var col2 := COLOR_RED if gi == 3 else COLOR_DIM
+				var col2 := AppTheme.RED if gi == 3 else AppTheme.DIM
 				_fig_label(str(groups[gi]["label"]), Vector2(bx + 4, by + 78), col2, 15)
 		3:
 			_mini(52, Vector2(300, 40), 1.3)
 			_mini(1, Vector2(420, 70), 0.9)
-			_fig_label("+", Vector2(392, 96), COLOR_GOLD, 26)
-			_fig_label("=", Vector2(500, 96), COLOR_GOLD, 26)
+			_fig_label("+", Vector2(392, 96), AppTheme.GOLD, 26)
+			_fig_label("=", Vector2(500, 96), AppTheme.GOLD, 26)
 			_mini(1, Vector2(530, 70), 0.9)
-			_fig_label("对 3", Vector2(556, 96), COLOR_GREEN, 18)
-			_fig_label("王自动补位, 缺什么补什么", Vector2(240, 210), COLOR_DIM, 16)
+			_fig_label("对 3", Vector2(556, 96), AppTheme.GREEN, 18)
+			_fig_label("王自动补位, 缺什么补什么", Vector2(240, 210), AppTheme.DIM, 16)
 		4:
 			_mini(0, Vector2(200, 40), 0.95)
 			_arrow(258, 96, 380)
-			_fig_label("3 最强", Vector2(200, 150), COLOR_RED, 17)
+			_fig_label("3 最强", Vector2(200, 150), AppTheme.RED, 17)
 			_mini(48, Vector2(420, 40), 0.95)
-			_fig_label("王最弱", Vector2(416, 150), COLOR_DIM, 17)
+			_fig_label("王最弱", Vector2(416, 150), AppTheme.DIM, 17)
 			_mini(48, Vector2(540, 40), 0.95)
 			_mini(49, Vector2(568, 40), 0.95)
 			_mini(50, Vector2(596, 40), 0.95)
 			_mini(51, Vector2(624, 40), 0.95)
-			_fig_label("打出四条 = 革命!", Vector2(520, 150), COLOR_RED, 17)
+			_fig_label("打出四条 = 革命!", Vector2(520, 150), AppTheme.RED, 17)
 		5:
-			var steps := [["大富豪", COLOR_GOLD], ["富豪", COLOR_WHITE], ["平民", COLOR_DIM], ["乞丐", COLOR_RED]]
+			var steps := [["大富豪", AppTheme.GOLD], ["富豪", AppTheme.WHITE], ["平民", AppTheme.DIM], ["乞丐", AppTheme.RED]]
 			for i in steps.size():
 				var bx := 60.0 + i * 185.0
 				var by := 30.0 + i * 42.0
@@ -235,9 +231,9 @@ func _build_fig(kind: int) -> void:
 				lb.text = str(steps[i][0])
 				lb.position = Vector2(35, 6)
 				panel.add_child(lb)
-			_fig_label("乞丐 —2张→ 大富豪      平民 —1张→ 富豪", Vector2(70, 230), COLOR_GOLD, 17)
+			_fig_label("乞丐 —2张→ 大富豪      平民 —1张→ 富豪", Vector2(70, 230), AppTheme.GOLD, 17)
 		6:
-			var rows := [["大富豪", "+2", COLOR_GOLD], ["富豪", "+1", COLOR_GREEN], ["平民", "-1", COLOR_DIM], ["乞丐", "-2", COLOR_RED]]
+			var rows := [["大富豪", "+2", AppTheme.GOLD], ["富豪", "+1", AppTheme.GREEN], ["平民", "-1", AppTheme.DIM], ["乞丐", "-2", AppTheme.RED]]
 			for i in rows.size():
 				var y := 18.0 + i * 58.0
 				var panel := ColorRect.new()
@@ -246,7 +242,7 @@ func _build_fig(kind: int) -> void:
 				panel.custom_minimum_size = Vector2(360, 48)
 				panel.size = Vector2(360, 48)
 				_fig.add_child(panel)
-				var lb := _label(18, COLOR_WHITE)
+				var lb := _label(18, AppTheme.WHITE)
 				lb.text = str(rows[i][0])
 				lb.position = Vector2(40, 10)
 				panel.add_child(lb)
@@ -254,13 +250,13 @@ func _build_fig(kind: int) -> void:
 				pts.text = str(rows[i][1])
 				pts.position = Vector2(280, 8)
 				panel.add_child(pts)
-			_fig_label("3 局总分定胜负", Vector2(310, 260), COLOR_GOLD, 17)
+			_fig_label("3 局总分定胜负", Vector2(310, 260), AppTheme.GOLD, 17)
 		7:
-			_fig_label("① 点选手牌(亮起金框)", Vector2(150, 30), COLOR_WHITE, 17)
-			_fig_label("② 点【出牌】打出, 或【不要】跳过", Vector2(150, 80), COLOR_WHITE, 17)
-			_fig_label("③ 联机时: 底部表情栏 / 聊天框随时可用", Vector2(150, 130), COLOR_WHITE, 17)
-			_fig_label("④ 倒计时归零自动托管, 不会卡死牌局", Vector2(150, 180), COLOR_WHITE, 17)
-			_fig_label("中途退出: 点【返回大厅】需二次确认", Vector2(150, 240), COLOR_DIM, 15)
+			_fig_label("① 点选手牌(亮起金框)", Vector2(150, 30), AppTheme.WHITE, 17)
+			_fig_label("② 点【出牌】打出, 或【不要】跳过", Vector2(150, 80), AppTheme.WHITE, 17)
+			_fig_label("③ 联机时: 底部表情栏 / 聊天框随时可用", Vector2(150, 130), AppTheme.WHITE, 17)
+			_fig_label("④ 倒计时归零自动托管, 不会卡死牌局", Vector2(150, 180), AppTheme.WHITE, 17)
+			_fig_label("中途退出: 点【返回大厅】需二次确认", Vector2(150, 240), AppTheme.DIM, 15)
 
 
 func _nav_button(text: String, pos: Vector2) -> Button:
@@ -273,10 +269,10 @@ func _nav_button(text: String, pos: Vector2) -> Button:
 	sb.bg_color = Color(0.10, 0.10, 0.22, 0.9)
 	sb.set_corner_radius_all(8)
 	sb.set_border_width_all(1)
-	sb.border_color = Color(COLOR_GOLD, 0.5)
+	sb.border_color = Color(AppTheme.GOLD, 0.5)
 	b.add_theme_stylebox_override("normal", sb)
 	var hv := sb.duplicate()
-	hv.border_color = COLOR_GOLD
+	hv.border_color = AppTheme.GOLD
 	b.add_theme_stylebox_override("hover", hv)
 	return b
 
