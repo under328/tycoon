@@ -13,13 +13,55 @@ func run(t) -> void:
 	_new_match_basics(t)
 	_pass_and_clear(t)
 	_revolution(t)
-	_eight_cut_last_card(t)
+	_joker_last_ban(t)
 	_fall_from_grace(t)
 	_full_match_flow(t)
 	_exchange_details(t)
 	_view_privacy(t)
 
 
+## 禁止最后单张出王: 手中只剩一张王时不能单出获胜。
+func _joker_last_ban(t) -> void:
+	# 手中只剩一张王 → 不能单出(禁止最后单张出王)
+	var st := GameStateGd.new_match({}, 7)
+	st["phase"] = "play"
+	st["turn"] = 0
+	st["lead"] = {}
+	st["must_include"] = -1
+	st["finish_order"] = []
+	st["hands"][0] = [52]
+	st["hands"][1] = [20, 21]
+	st["hands"][2] = [40, 41]
+	st["hands"][3] = [44, 45]
+	var r := GameStateGd.apply(st, {"t": "play", "seat": 0, "cards": [52]})
+	t.expect(not bool(r["ok"]), "最后一张王被禁止单出")
+	t.expect_eq(str(r["error"]), "joker_last_ban", "错误码 joker_last_ban")
+	# 对照: 最后一张普通牌可以出完
+	var st2 := GameStateGd.new_match({}, 7)
+	st2["phase"] = "play"
+	st2["turn"] = 0
+	st2["lead"] = {}
+	st2["must_include"] = -1
+	st2["finish_order"] = []
+	st2["hands"][0] = [20]
+	st2["hands"][1] = [21, 22]
+	st2["hands"][2] = [40, 41]
+	st2["hands"][3] = [44, 45]
+	var r2 := GameStateGd.apply(st2, {"t": "play", "seat": 0, "cards": [20]})
+	t.expect(bool(r2["ok"]), "最后一张普通牌可正常出完")
+	# 两张牌(含王)时, 先出普通牌合法
+	var st3 := GameStateGd.new_match({}, 7)
+	st3["phase"] = "play"
+	st3["turn"] = 0
+	st3["lead"] = {}
+	st3["must_include"] = -1
+	st3["finish_order"] = []
+	st3["hands"][0] = [20, 52]
+	st3["hands"][1] = [21, 22]
+	st3["hands"][2] = [40, 41]
+	st3["hands"][3] = [44, 45]
+	var r3 := GameStateGd.apply(st3, {"t": "play", "seat": 0, "cards": [20]})
+	t.expect(bool(r3["ok"]), "两张牌先出普通牌合法")
 ## 一落千丈: 上局大富豪未保住第一 → 与本局末位互换身份。
 func _fall_from_grace(t) -> void:
 	var st := GameStateGd.new_match({}, 7)

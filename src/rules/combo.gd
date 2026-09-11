@@ -53,11 +53,17 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 
 
 ## next 能否压制 prev（revolution 时点序反转）。
+## 例外: ♠3 单张(key=16.5)不受反转影响, 永远最强。
 static func beats(next: Dictionary, prev: Dictionary, revolution: bool) -> bool:
 	if next.is_empty() or prev.is_empty():
 		return false
 	if int(next["type"]) != int(prev["type"]) or int(next["len"]) != int(prev["len"]):
 		return false
+	if int(next["type"]) == Type.SINGLE:
+		if float(next["key"]) == SPADE3_KEY:
+			return true
+		if float(prev["key"]) == SPADE3_KEY:
+			return false
 	if revolution:
 		return next["key"] < prev["key"]
 	return next["key"] > prev["key"]

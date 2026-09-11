@@ -60,6 +60,11 @@ static func _prefer_lead(a: Dictionary, b: Dictionary, revolution: bool) -> bool
 	if int(a["len"]) != int(b["len"]):
 		return int(a["len"]) > int(b["len"])
 	if revolution:
+		# ♠3 例外: 反转下仍是最强, 不视为弱牌
+		if float(a["key"]) == ComboGd.SPADE3_KEY:
+			return false
+		if float(b["key"]) == ComboGd.SPADE3_KEY:
+			return true
 		return int(a["key"]) > int(b["key"])
 	return int(a["key"]) < int(b["key"])
 
@@ -109,8 +114,11 @@ static func all_combos(hand: Array, cfg: Dictionary) -> Array:
 			if not by_val.has(v):
 				by_val[v] = []
 			by_val[v].append(c)
-	# 单张
+	# 单张(仅剩一张王时禁止打出 → 不枚举该组合)
+	var ban_last_joker := hand.size() == 1 and CardsGd.is_joker(hand[0])
 	for c in hand:
+		if ban_last_joker:
+			continue
 		var combo := ComboGd.identify([c], cfg)
 		if not combo.is_empty():
 			out.append(combo)

@@ -69,6 +69,9 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 	var combo: Dictionary = ComboGd.identify(cards, st["cfg"])
 	if combo.is_empty():
 		return _fail(st, "invalid_combo")
+	# 禁止最后单张出王: 手中仅剩一张王时, 不能将其作为最后一张单出获胜
+	if hand.size() == 1 and cards.size() == 1 and CardsGd.is_joker(cards[0]):
+		return _fail(st, "joker_last_ban")
 	if st["lead"].is_empty():
 		if int(st["must_include"]) >= 0 and not cards.has(int(st["must_include"])):
 			return _fail(st, "must_include_diamond3")

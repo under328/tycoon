@@ -61,5 +61,11 @@ func run(t) -> void:
 			"长度不同 互不压")
 	t.expect(ComboGd.beats({"type": 3, "key": 8, "len": 4}, {"type": 3, "key": 3, "len": 4}, false),
 			"四条8 压 四条3")
+	t.expect(ComboGd.beats({"type": 0, "key": 16.5, "len": 1}, {"type": 0, "key": 16, "len": 1}, true),
+			"革命: ♠3 仍压 王(例外)")
+	t.expect(ComboGd.beats({"type": 0, "key": 16.5, "len": 1}, {"type": 0, "key": 3, "len": 1}, true),
+			"革命: ♠3 仍压 3")
+	t.expect(not ComboGd.beats({"type": 0, "key": 3, "len": 1}, {"type": 0, "key": 16.5, "len": 1}, true),
+			"革命: 3 不压 ♠3")
 	t.expect(ComboGd.beats({"type": 3, "key": 3, "len": 4}, {"type": 3, "key": 8, "len": 4}, true),
 			"革命: 四条3 压 四条8")
