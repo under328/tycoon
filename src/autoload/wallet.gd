@@ -1,12 +1,14 @@
 ## 经济与装扮内核（autoload: Wallet）。
-## 金币/钻石余额、皮肤与卡面的拥有/装备状态，持久化 user://wallet.cfg。
-## 全部为装饰内容，不影响规则判定。
+## 金币/钻石余额、皮肤与卡面的拥有/装备状态、本地战绩统计。
+## 自动存档: 变更打脏标记 → 每 10s 周期保存; 退出/切后台时强制保存;
+## 原子写入(tmp→rename) + .bak 备份回退, 防止存档损坏。
 extends Node
 
 signal balance_changed
 signal equipped_changed
 
 const SAVE_PATH := "user://wallet.cfg"
+const AUTOSAVE_SEC := 10.0
 
 ## 本地对局奖励(按最终名次 1..4): [金币, 钻石]
 const MATCH_REWARDS := [
@@ -20,23 +22,84 @@ var owned_cards: Array = ["card_washi"]
 var equipped_skin := "skin_default"
 var equipped_card := "card_washi"
 
+## 本地战绩统计
+var local_matches := 0
+var local_wins := 0
+
+var save_path := SAVE_PATH   # 测试可覆盖
+var _dirty := false
+var _save_timer := 0.0
+
 
 func _ready() -> void:
 	load_wallet()
 
 
+func _process(delta: float) -> void:
+	_save_timer += delta
+	if _dirty and _save_timer >= 1.0:
+		_save_timer = 0.0
+		save_wallet()
+
+
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_WM_CLOSE_REQUEST, \
+		NOTIFICATION_APPLICATION_PAUSED, \
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			if _dirty:
+				save_wallet()
+				_dirty = false
+
+
+func _reset_defaults() -> void:
+	gold = 500
+	diamonds = 0
+	owned_skins = ["skin_default"]
+	owned_cards = ["card_washi"]
+	equipped_skin = "skin_default"
+	equipped_card = "card_washi"
+	local_matches = 0
+	local_wins = 0
+
+
 func load_wallet() -> void:
+	_reset_defaults()
+	# 主存档优先; 损坏/缺失时回退 .bak 备份
+	if _read_into(save_path):
+		return
+	_read_into(save_path + ".bak")
+
+
+func _read_into(path: String) -> bool:
+	if not FileAccess.file_exists(path):
+		return false
 	var cf := ConfigFile.new()
-	if cf.load(SAVE_PATH) == OK:
-		gold = int(cf.get_value("wallet", "gold", 500))
-		diamonds = int(cf.get_value("wallet", "diamonds", 0))
-		owned_skins = cf.get_value("wallet", "owned_skins", ["skin_default"])
-		owned_cards = cf.get_value("wallet", "owned_cards", ["card_washi"])
-		equipped_skin = str(cf.get_value("wallet", "equipped_skin", "skin_default"))
-		equipped_card = str(cf.get_value("wallet", "equipped_card", "card_washi"))
+	if cf.load(path) != OK:
+		return false
+	# 损坏/截断的文件会"成功加载"但内容为空 → 校验必需键
+	if not cf.has_section_key("wallet", "gold"):
+		return false
+	gold = int(cf.get_value("wallet", "gold", 500))
+	diamonds = int(cf.get_value("wallet", "diamonds", 0))
+	var skins: Array = cf.get_value("wallet", "owned_skins", ["skin_default"])
+	if skins.is_empty():
+		skins = ["skin_default"]
+	owned_skins = skins
+	var cards: Array = cf.get_value("wallet", "owned_cards", ["card_washi"])
+	if cards.is_empty():
+		cards = ["card_washi"]
+	owned_cards = cards
+	equipped_skin = str(cf.get_value("wallet", "equipped_skin", "skin_default"))
+	equipped_card = str(cf.get_value("wallet", "equipped_card", "card_washi"))
+	local_matches = int(cf.get_value("wallet", "local_matches", 0))
+	local_wins = int(cf.get_value("wallet", "local_wins", 0))
+	return true
 
 
+## 原子写入: 先写临时文件再改名, 避免写入中断导致存档损坏。
 func save_wallet() -> void:
+	var tmp := save_path + ".tmp"
 	var cf := ConfigFile.new()
 	cf.set_value("wallet", "gold", gold)
 	cf.set_value("wallet", "diamonds", diamonds)
@@ -44,7 +107,18 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "owned_cards", owned_cards)
 	cf.set_value("wallet", "equipped_skin", equipped_skin)
 	cf.set_value("wallet", "equipped_card", equipped_card)
-	cf.save(SAVE_PATH)
+	cf.set_value("wallet", "local_matches", local_matches)
+	cf.set_value("wallet", "local_wins", local_wins)
+	if cf.save(tmp) == OK:
+		DirAccess.rename_absolute(
+				ProjectSettings.globalize_path(tmp),
+				ProjectSettings.globalize_path(save_path))
+	# 保留一份 .bak(上一版), 供损坏回退
+	if FileAccess.file_exists(save_path):
+		DirAccess.copy_absolute(
+				ProjectSettings.globalize_path(save_path),
+				ProjectSettings.globalize_path(save_path + ".bak"))
+	_dirty = false
 
 
 ## 本地对局结算发放(名次 1..4)。返回 {gold, diamonds}。
@@ -53,7 +127,10 @@ func grant_match_reward(rank: int) -> Dictionary:
 	var reward: Array = MATCH_REWARDS[idx]
 	gold += int(reward[0])
 	diamonds += int(reward[1])
-	save_wallet()
+	local_matches += 1
+	if rank == 1:
+		local_wins += 1
+	_mark_dirty()
 	balance_changed.emit()
 	return {"gold": int(reward[0]), "diamonds": int(reward[1])}
 
@@ -69,7 +146,7 @@ func buy(kind: String, item_id: String, price: int) -> bool:
 		owned_skins.append(item_id)
 	elif kind == "card":
 		owned_cards.append(item_id)
-	save_wallet()
+	_mark_dirty()
 	balance_changed.emit()
 	return true
 
@@ -92,5 +169,10 @@ func equip(kind: String, item_id: String) -> void:
 		if not owned_cards.has(item_id):
 			return
 		equipped_card = item_id
-	save_wallet()
+	_mark_dirty()
 	equipped_changed.emit()
+
+
+func _mark_dirty() -> void:
+	_dirty = true
+	_save_timer = AUTOSAVE_SEC  # 尽快触发下一轮周期保存(≤1 帧)

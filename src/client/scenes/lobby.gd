@@ -119,6 +119,9 @@ func _build_ui() -> void:
 	add_child(create_btn)
 	code_edit = _edit(Vector2(806, 186), Vector2(170, 44))
 	code_edit.placeholder_text = "房间码"
+	var gs0 := get_node_or_null("/root/GameSettings")
+	if gs0 != null and str(gs0.last_room_code) != "":
+		code_edit.text = str(gs0.last_room_code)
 	code_edit.add_theme_font_size_override("font_size", 22)
 	add_child(code_edit)
 	join_btn = AppTheme.make_button("加入", Vector2(110, 52), 19)
@@ -329,6 +332,12 @@ func _do_connect_custom() -> void:
 
 func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null and gs.last_room_code != _last_room_code:
+		gs.last_room_code = _last_room_code
+		gs.save_settings()
+	if code_edit.text.strip_edges() == "" and _last_room_code != "":
+		code_edit.text = _last_room_code
 	var lines: Array = []
 	lines.append("房间码: %s   (把数字发给朋友)" % _last_room_code)
 	for p in state["players"]:
