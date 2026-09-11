@@ -72,13 +72,7 @@ func _build_library() -> void:
 		Synth.sweep(0.16, 1500.0, 260.0, 0.30), Synth.snap(0.12, 0.40, 30.0),
 	]))
 	library["fall"] = Synth.wav(Synth.sweep(0.55, 520.0, 70.0, 0.30))
-	library["result"] = Synth.wav(Synth.concat([
-		Synth.tone(0.12, 523.25, 0.28, 6.0), Synth.tone(0.12, 659.25, 0.28, 6.0),
-		Synth.tone(0.12, 783.99, 0.28, 5.0),
-		Synth.concat([
-			Synth.tone(0.42, 1046.5, 0.30, 4.0), Synth.tone(0.42, 1318.5, 0.18, 4.0),
-		]),
-	]))
+	library["result"] = Synth.result_fanfare()
 
 
 
