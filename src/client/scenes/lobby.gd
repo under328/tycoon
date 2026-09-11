@@ -3,6 +3,7 @@ extends Control
 
 signal start_game
 signal back_to_menu
+signal host_requested
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
@@ -35,6 +36,11 @@ var chk_revolution: CheckButton
 var chk_eight: CheckButton
 var rounds_option: OptionButton
 var _last_room_code := ""
+var host_edit: LineEdit
+var port_edit: LineEdit
+var connect_btn: Button
+var host_btn: Button
+var _conn_fails := 0
 
 
 func setup(p_net: Node) -> void:
@@ -66,11 +72,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _auto_connect() -> void:
-	var host: String = AppMode.address if AppMode.address_from_cli else GameSettings.DEFAULT_HOST
-	var port: int = AppMode.port if AppMode.port_from_cli else GameSettings.DEFAULT_PORT
-	_set_status("正在连接服务器…", COLOR_DIM)
+	var host: String = AppMode.address if AppMode.address_from_cli else GameSettings.host
+	var port: int = AppMode.port if AppMode.port_from_cli else GameSettings.host_port
+	_conn_fails = 0
+	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 	net.auto_reconnect = true
 	net.connect_to(host, port)
+
+
+## 供 main(本机开房) 推送状态/主机 IP 信息
+func show_status(text: String, color: Color = COLOR_GOLD) -> void:
+	_set_status(text, color)
+
+
+func _manual_connect() -> void:
+	var host := host_edit.text.strip_edges()
+	var port := int(port_edit.text.strip_edges()) if port_edit.text.strip_edges() != "" else GameSettings.DEFAULT_PORT
+	if host == "":
+		_set_status("请输入服务器地址", COLOR_RED)
+		return
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null:
+		gs.host = host
+		gs.host_port = port
+		gs.save_settings()
+	_conn_fails = 0
+	net.disconnect_all()
+	net.auto_reconnect = true
+	net.connect_to(host, port)
+	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 
 
 func _build_ui() -> void:
@@ -129,18 +159,57 @@ func _build_ui() -> void:
 
 	code_edit = LineEdit.new()
 	code_edit.position = Vector2(450, 240)
-	code_edit.custom_minimum_size = Vector2(220, 44)
-	code_edit.size = Vector2(220, 44)
+	code_edit.custom_minimum_size = Vector2(200, 44)
+	code_edit.size = Vector2(200, 44)
 	code_edit.placeholder_text = "输入房间码"
 	code_edit.add_theme_font_size_override("font_size", 20)
 	add_child(code_edit)
 	join_btn = AppTheme.make_button("加入", Vector2(62, 44), 18)
-	join_btn.position = Vector2(688, 240)
+	join_btn.position = Vector2(658, 240)
 	join_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
 		net.join_room(code_edit.text.strip_edges()))
 	add_child(join_btn)
+
+	# 本机开房: 同进程内嵌服务器, 手机/PC 都能当主机, 朋友填 IP 直连
+	host_btn = AppTheme.make_button("🏠 本机开房(朋友填IP直连)", Vector2(280, 44), 16)
+	host_btn.position = Vector2(736, 240)
+	host_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_save_nickname()
+		host_requested.emit())
+	add_child(host_btn)
+
+	# 服务器地址区(右上)
+	var c2 := AppTheme.make_label(15, COLOR_GOLD)
+	c2.text = "服务器"
+	c2.position = Vector2(830, 66)
+	add_child(c2)
+	host_edit = LineEdit.new()
+	host_edit.position = Vector2(830, 94)
+	host_edit.custom_minimum_size = Vector2(200, 36)
+	host_edit.size = Vector2(200, 36)
+	host_edit.placeholder_text = "IP 或域名"
+	var gs2 := get_node_or_null("/root/GameSettings")
+	if gs2 != null:
+		host_edit.text = str(gs2.host)
+	host_edit.add_theme_font_size_override("font_size", 15)
+	add_child(host_edit)
+	port_edit = LineEdit.new()
+	port_edit.position = Vector2(1040, 94)
+	port_edit.custom_minimum_size = Vector2(90, 36)
+	port_edit.size = Vector2(90, 36)
+	var gs3 := get_node_or_null("/root/GameSettings")
+	port_edit.text = str(int(gs3.host_port) if gs3 != null else 24565)
+	port_edit.add_theme_font_size_override("font_size", 15)
+	add_child(port_edit)
+	connect_btn = AppTheme.make_button("连接", Vector2(140, 36), 15)
+	connect_btn.position = Vector2(830, 138)
+	connect_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_manual_connect())
+	add_child(connect_btn)
 
 	# 房间面板
 	room_label = AppTheme.make_label(17, COLOR_WHITE)
@@ -228,6 +297,8 @@ func _build_ui() -> void:
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
+	host_btn.disabled = false
+	connect_btn.disabled = false
 
 
 func _save_nickname() -> void:
@@ -246,7 +317,9 @@ func _bind_net() -> void:
 			b.disabled = false
 		net.request_stats())
 	net.connection_failed.connect(func() -> void:
-		_set_status("连接失败, 自动重试中…", COLOR_RED))
+		_conn_fails += 1
+		_set_status("无法连接 %s:%d（第 %d 次），自动重试中…\n确认服务器已启动、地址正确、防火墙放行"
+				% [net.address, net.port, _conn_fails], COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
 		_set_status("与服务器断开, 自动重连中…", COLOR_RED))
 	net.errored.connect(func(code: String, msg: String) -> void:

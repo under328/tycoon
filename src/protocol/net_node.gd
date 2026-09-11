@@ -21,6 +21,7 @@ const ManagerGd = preload("res://src/server/room_manager.gd")
 const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 
 var is_server := false
+var server_port := 0   # >0 时 _ready 用它, 否则读 AppMode(专用服务器 CLI)
 
 # --- 服务器侧 ---
 var manager = null
@@ -40,14 +41,16 @@ var auto_reconnect := true     # 掉线后凭 token 自动重连
 var _session_token := ""
 var _want_connection := false
 var _retry_timer := 0.0
+var _fail_count := 0
 var _autoplay_armed := false
 var _had_view := false
 var _welcomed := false
 var _pending_ops: Array = []   # 握手完成前缓存的房间操作
 
 
-func setup(p_is_server: bool) -> void:
+func setup(p_is_server: bool, p_port: int = 0) -> void:
 	is_server = p_is_server
+	server_port = p_port
 
 
 func _ready() -> void:
@@ -56,15 +59,16 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_conn_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	if is_server:
-		# AppMode autoload 在 E2E SceneTree 环境不存在 → 兼容取默认值
+		# 端口/延迟优先级: setup 显式指定(本机开房) > AppMode CLI > 默认值
 		var am := get_node_or_null("/root/AppMode")
-		var port_v := 24565
+		var port_v: int = int(am.port) if am != null else 24565
 		var ai_ms := 600
 		var phase_ms := 2200
 		if am != null:
-			port_v = int(am.port)
 			ai_ms = int(am.ai_delay_ms)
 			phase_ms = int(am.phase_delay_ms)
+		if server_port > 0:
+			port_v = server_port
 		var peer := ENetMultiplayerPeer.new()
 		var err := peer.create_server(port_v, 64)
 		if err != OK:
@@ -125,10 +129,11 @@ func _on_peer_disconnected(peer: int) -> void:
 # ================================================================ C → S
 
 @rpc("any_peer", "call_remote", "reliable")
-func c_hello(ver: int, token: String, client_id: String) -> void:
+func c_hello(ver: int, token: String, client_id: String, skin_id: String = "") -> void:
 	if not is_server:
 		return
-	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token), str(client_id)))
+	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token),
+			str(client_id), str(skin_id)))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -365,6 +370,37 @@ func connect_to(p_address: String, p_port: int) -> bool:
 	return true
 
 
+## 本机开房：在 parent 下构建内嵌服务器分支（独立 MultiplayerAPI）。
+## 结构: <parent>/Embed/Main/Net, 其 RPC 相对路径 = /Main/Net，
+## 与客户端节点 /root/Main/Net(默认 API 根 /root) 完全对称 → RPC 可互通。
+## 端口被占用等失败返回 null。
+static func start_embedded(parent: Node, port: int) -> Node:
+	var embed := Node.new()
+	embed.name = "Embed"
+	parent.add_child(embed)
+	var inner := Node.new()
+	inner.name = "Main"
+	embed.add_child(inner)
+	var tree := Engine.get_main_loop() as SceneTree
+	var root_path := NodePath(str(parent.get_path()) + "/Embed")
+	tree.set_multiplayer(MultiplayerAPI.create_default_interface(), root_path)
+	var server = load("res://src/protocol/net_node.gd").new()
+	server.name = "Net"
+	server.setup(true, port)
+	inner.add_child(server)
+	if server.manager == null:
+		embed.queue_free()
+		return null
+	return server
+
+
+## 停掉本机开房的服务器分支
+static func stop_embedded(parent: Node) -> void:
+	var embed := parent.get_node_or_null("Embed")
+	if embed != null:
+		embed.queue_free()
+
+
 ## E2E 用：模拟断网（保留 token，自动重连）
 func drop_connection() -> void:
 	if is_server:
@@ -457,14 +493,16 @@ func _is_connected() -> bool:
 
 
 func _on_connected() -> void:
+	_fail_count = 0
 	connected_ok.emit()
 	_retry_timer = 0.0
 	_c_send("c_hello", {})
 
 
+## 无论是否自动重连都广播, UI 才能显示"无法连接 xxx(第N次)重试中"
 func _on_conn_failed() -> void:
-	if not auto_reconnect:
-		connection_failed.emit()
+	_fail_count += 1
+	connection_failed.emit()
 
 
 func _on_server_disconnected() -> void:

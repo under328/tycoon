@@ -13,6 +13,7 @@ var menu = null
 var lobby = null
 var table = null
 var net = null
+var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
 
 
 func _ready() -> void:
@@ -81,7 +82,52 @@ func _start_online() -> void:
 		_fit_safe_area(lobby)
 		lobby.start_game.connect(_enter_table)
 		lobby.back_to_menu.connect(_back_to_menu)
+		lobby.host_requested.connect(_start_host)
 	lobby.visible = true
+
+
+## 本机开房: 内嵌专用服务器 + 本机客户端自动连入; 朋友在大厅填本机 IP 直连。
+func _start_host() -> void:
+	_stop_host()
+	var port: int = GameSettings.host_port
+	embed_server = NetNodeGd.start_embedded(self, port)
+	if embed_server == null:
+		lobby.show_status("本机服务器启动失败（端口 %d 被占用？）" % port,
+				Color("ff6b6b"))
+		return
+	net.disconnect_all()
+	net.auto_reconnect = true
+	net.connect_to("127.0.0.1", port)
+	var ips := _lan_ips()
+	lobby.show_status("本机服务器已启动（端口 %d）\n本机 IP: %s\n朋友在右上「服务器」填上面的 IP 点「连接」，再输房间码加入"
+			% [port, " / ".join(ips)])
+
+
+func _stop_host() -> void:
+	if embed_server != null:
+		NetNodeGd.stop_embedded(self)
+		embed_server = null
+
+
+func _lan_ips() -> Array:
+	var out := []
+	for ip in IP.get_local_addresses():
+		var s := str(ip)
+		var parts := s.split(".")
+		if parts.size() != 4:
+			continue
+		var a := int(parts[0])
+		var b := int(parts[1])
+		var is_private := a == 192 and b == 168
+		if a == 10:
+			is_private = true
+		if a == 172 and b >= 16 and b <= 31:
+			is_private = true
+		if is_private:
+			out.append(s)
+	if out.is_empty():
+		out.append("127.0.0.1")
+	return out
 
 
 func _enter_table() -> void:

@@ -11,6 +11,7 @@ const NetNodeGd = preload("res://src/protocol/net_node.gd")
 var net = null
 var created := false
 var filled := false
+var restarted := false
 var played_count := 0
 var dropped := false
 var done := false
@@ -29,7 +30,8 @@ func _initialize() -> void:
 
 	net.connected_ok.connect(func() -> void:
 		print("[e2e] 已连接")
-		net.create_room())
+		if not created:
+			net.create_room())  # ★ 仅首次; 重连靠 token 回座, 再建房会把座位移出对局
 	net.connection_failed.connect(func() -> void:
 		_fail("连接失败（服务器没起来？）"))
 	net.errored.connect(func(code: String, msg: String) -> void:
@@ -54,7 +56,15 @@ func _initialize() -> void:
 		elif not filled:
 			filled = true
 			print("[e2e] AI 已补满，开局")
-			net.start_game())
+			net.start_game()
+		elif dropped and not restarted:
+			# 掉线期间其余座位是 AI, 可能已打完整场:
+			# 等一下看有没有对局视图, 没有则重新开局打完
+			restarted = true
+			await create_timer(1.2).timeout
+			if net.latest_view.is_empty():
+				print("[e2e] 对局已被 AI 打完，重连后重新开局")
+				net.start_game())
 	net.game_event.connect(func(event: String, _data: Dictionary) -> void:
 		if event == "played":
 			played_count += 1)

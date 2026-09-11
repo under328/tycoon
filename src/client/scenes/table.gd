@@ -277,7 +277,14 @@ func _bind_net() -> void:
 		status_label.text = "连接断开，自动重连中…"
 		status_label.add_theme_color_override("font_color", AppTheme.RED))
 	net.rejoined.connect(func() -> void:
-		_flash_error("已重新连上，座位已恢复"))
+		_flash_error("已重新连上，座位已恢复")
+		# 掉线期间对局可能已被 AI 打完: 重连后收不到对局视图 → 回大厅
+		await get_tree().create_timer(1.2).timeout
+		if not is_inside_tree() or mode != "online":
+			return
+		if (net.latest_view as Dictionary).is_empty():
+			_flash_error("对局已结束，返回房间")
+			finished.emit())
 	# 对局结束后服务器广播 room_state → 自动回到房间（再来一局流转）
 	net.room_state.connect(func(_state: Dictionary) -> void:
 		if _at_game_end:

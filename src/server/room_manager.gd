@@ -135,6 +135,10 @@ func quick_match(peer: int, name: String, rules: Dictionary, client_id: String =
 
 func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
+	if _in_live_match(peer):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "in_game", "msg": "对局进行中"}})
+		return out
 	if client_id != "":
 		peer_client[peer] = client_id
 	if skin_id != "":
@@ -155,6 +159,10 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 
 func join_room(peer: int, name: String, code: String, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
+	if _in_live_match(peer):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "in_game", "msg": "对局进行中"}})
+		return out
 	if client_id != "":
 		peer_client[peer] = client_id
 	if skin_id != "":
@@ -419,6 +427,12 @@ func _bcast_room_state(out: Array, room) -> void:
 
 
 # ---------------------------------------------------------------- 内部工具
+
+## 该 peer 是否正坐在有进行中对局的房间里(防误操作毁局)
+func _in_live_match(peer: int) -> bool:
+	var room = _room_of(peer)
+	return room != null and room.match_ctl != null
+
 
 func _leave_room(peer: int, out: Array) -> void:
 	var code = peer_room.get(peer, "")
