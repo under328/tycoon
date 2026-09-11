@@ -41,6 +41,11 @@ var port_edit: LineEdit
 var connect_btn: Button
 var host_btn: Button
 var update_btn: Button
+var paste_btn: Button
+var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
+var auto_create_room := false # 开房后自动创建房间
+var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
+var _invite_code := ""        # 当前房间的完整邀请码
 var kick_btn: Button
 var _conn_fails := 0
 
@@ -85,6 +90,52 @@ func _auto_connect() -> void:
 ## 供 main(本机开房) 推送状态/主机 IP 信息
 func show_status(text: String, color: Color = COLOR_GOLD) -> void:
 	_set_status(text, color)
+
+
+## 解析邀请码文本: 返回 {ip, port, code} 或 {}(无效)。
+static func parse_invite(text: String) -> Dictionary:
+	var t := text.strip_edges()
+	var parts := t.split("|")
+	if parts.size() == 4 and parts[0] == "TC" and parts[1] != "":
+		var port := int(parts[2]) if parts[2] != "" else 24565
+		if port <= 0:
+			return {}
+		return {"ip": parts[1], "port": port, "code": parts[3]}
+	return {}
+
+
+## 粘贴邀请码(TC|IP|端口|房间码) → 自动连接主机并加入房间
+func _paste_join() -> void:
+	var inv := parse_invite(DisplayServer.clipboard_get())
+	if inv.is_empty():
+		_set_status("剪贴板中没有有效的邀请码(请先复制房主发的邀请信息)", COLOR_RED)
+		return
+	var ip: String = str(inv["ip"])
+	var port: int = int(inv["port"])
+	var code: String = str(inv["code"])
+	var g := get_node_or_null("/root/GameSettings")
+	if g != null:
+		g.host = ip
+		g.host_port = port
+		g.save_settings()
+	host_edit.text = ip
+	port_edit.text = str(port)
+	_auto_join_code = code
+	_conn_fails = 0
+	net.disconnect_all()
+	net.auto_reconnect = true
+	net.connect_to(ip, port)
+	_set_status("正在连接主机 %s:%d, 连上后自动进房…" % [ip, port], COLOR_DIM)
+
+
+## 生成本房间邀请码(本机开房时用 Tailscale IP; 连远程服务器时用服务器地址)
+func _refresh_invite(state: Dictionary) -> void:
+	var code := str(state.get("room_code", ""))
+	if code == "":
+		_invite_code = ""
+		return
+	var ip := host_invite_ip if host_invite_ip != "" else str(GameSettings.host)
+	_invite_code = "TC|%s|%d|%s" % [ip, int(GameSettings.host_port), code]
 
 
 func _manual_connect() -> void:
@@ -142,40 +193,50 @@ func _build_ui() -> void:
 	add_child(nickname_edit)
 
 	# 三大主按钮(大尺寸, 好按)
-	quick_btn = AppTheme.make_button("🎲  快速匹配", Vector2(300, 56), 20)
-	quick_btn.position = Vector2(450, 100)
+	quick_btn = AppTheme.make_button("🎲  快速匹配", Vector2(300, 52), 19)
+	quick_btn.position = Vector2(450, 96)
 	quick_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
 		net.quick_match(_gather_rules()))
 	add_child(quick_btn)
 
-	create_btn = AppTheme.make_button("🏠  创建房间", Vector2(300, 56), 20)
-	create_btn.position = Vector2(450, 170)
+	create_btn = AppTheme.make_button("🏠  创建房间", Vector2(300, 52), 19)
+	create_btn.position = Vector2(450, 160)
 	create_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
 		net.create_room(_gather_rules()))
 	add_child(create_btn)
 
+	# 邀请码一键加入: 粘贴房主发的 TC|IP|端口|房间码, 自动连接并进房
+	paste_btn = AppTheme.make_button("📋 粘贴邀请码, 一键加入", Vector2(300, 52), 18)
+	paste_btn.position = Vector2(450, 228)
+	paste_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_save_nickname()
+		_paste_join())
+	add_child(paste_btn)
+
+	# 手动输房间码(已连接时使用)
 	code_edit = LineEdit.new()
-	code_edit.position = Vector2(450, 240)
+	code_edit.position = Vector2(450, 294)
 	code_edit.custom_minimum_size = Vector2(200, 44)
 	code_edit.size = Vector2(200, 44)
-	code_edit.placeholder_text = "输入房间码"
-	code_edit.add_theme_font_size_override("font_size", 20)
+	code_edit.placeholder_text = "或输入房间码"
+	code_edit.add_theme_font_size_override("font_size", 18)
 	add_child(code_edit)
 	join_btn = AppTheme.make_button("加入", Vector2(62, 44), 18)
-	join_btn.position = Vector2(658, 240)
+	join_btn.position = Vector2(658, 294)
 	join_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
 		net.join_room(code_edit.text.strip_edges()))
 	add_child(join_btn)
 
-	# 本机开房: 同进程内嵌服务器, 手机/PC 都能当主机, 朋友填 IP 直连
-	host_btn = AppTheme.make_button("🏠 本机开房(朋友填IP直连)", Vector2(280, 44), 16)
-	host_btn.position = Vector2(736, 240)
+	# 本机开房: 同进程内嵌服务器并自动建房, 朋友粘贴邀请码即可加入
+	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(264, 52), 17)
+	host_btn.position = Vector2(770, 228)
 	host_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
@@ -268,12 +329,15 @@ func _build_ui() -> void:
 		Audio.play("click")
 		net.leave_room())
 	add_child(leave_btn)
-	copy_btn = AppTheme.make_button("复制房间码", Vector2(140, 46), 17)
+	copy_btn = AppTheme.make_button("复制邀请码", Vector2(140, 46), 17)
 	copy_btn.position = Vector2(630, 470)
 	copy_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		DisplayServer.clipboard_set(_last_room_code)
-		_set_status("房间码已复制: " + _last_room_code, COLOR_GREEN))
+		var payload := _invite_code if _invite_code != "" else _last_room_code
+		if payload == "":
+			return
+		DisplayServer.clipboard_set(payload)
+		_set_status("已复制: " + payload + " , 发给朋友即可加入", COLOR_GREEN))
 	add_child(copy_btn)
 
 	# 规则设置
@@ -327,6 +391,7 @@ func _build_ui() -> void:
 		b.disabled = true
 	host_btn.disabled = false
 	connect_btn.disabled = false
+	paste_btn.disabled = false
 
 
 ## 房主可移除的第一个人类座位(不能移除自己/机器人)
@@ -357,7 +422,11 @@ func _save_nickname() -> void:
 func _bind_net() -> void:
 	net.connected_ok.connect(func() -> void:
 		update_btn.visible = false
+		_conn_fails = 0
 		_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
+		if auto_create_room:
+			auto_create_room = false
+			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房
 		for b: Button in [quick_btn, create_btn, join_btn]:
 			b.disabled = false
 		net.request_stats())
@@ -392,7 +461,7 @@ func _gather_rules() -> Dictionary:
 	return {
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
-		"rounds": rounds_option.get_selected_metadata(),
+		"rounds": rounds_option.get_selected_id(),
 	}
 
 
@@ -401,12 +470,13 @@ func _apply_settings(settings: Dictionary) -> void:
 	chk_revolution.set_pressed_no_signal(bool(settings.get("revolution", true)))
 	var rounds := int(settings.get("rounds", 3))
 	for i in rounds_option.item_count:
-		if int(rounds_option.get_item_metadata(i)) == rounds:
+		if int(rounds_option.get_item_id(i)) == rounds:
 			rounds_option.select(i)
 
 
 func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
+	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
 	_fill_state_seats(state)

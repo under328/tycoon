@@ -9,7 +9,7 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 # 每页: [标题, 正文(bbcode), 图示编号]
 const PAGES := [
 	["三步开始联机",
-		"[color=#7dd87d]准备(一次性)[/color]: 每台设备安装并登录 [color=#e0a83c]Tailscale[/color](免费, tailscale.com)。\n[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 大厅会显示你的 100.x.x.x 专用地址。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【创建房间】[/color], 把 100.x.x.x 和 6 位房间码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 右上角【服务器】填 100.x.x.x → 【连接】→ 输房间码【加入】。", 0],
+		"[color=#7dd87d]准备(一次性)[/color]: 每台设备安装并登录 [color=#e0a83c]Tailscale[/color](免费, tailscale.com)。\n[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 会自动建房并显示你的 100.x.x.x 地址。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【复制邀请码】[/color], 把邀请码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 点 [color=#e0a83c]【粘贴邀请码, 一键加入】[/color], 自动连主机进房间。", 0],
 	["朋友怎么连进来",
 		"所有设备各装一个 [color=#e0a83c]Tailscale[/color](免费), 各自登录账号即可。\n登录后每台设备都会获得一个 [color=#e0a83c]100.x.x.x[/color] 专用地址。\n朋友操作: 右上角【服务器】填主机的 100.x.x.x → 【连接】→ 状态变绿 → 输入房间码【加入】。\n不在同一 WiFi 也能玩, 跨城市/跨运营商都没有问题。", 1],
 	["主机专用说明",
@@ -149,8 +149,8 @@ func _build_fig(kind: int) -> void:
 	match kind:
 		0:  # 三步总览
 			var steps := [
-				["① 本机开房", AppTheme.GOLD], ["② 创建房间 → 发房间码", AppTheme.WHITE],
-				["③ 朋友填 IP 连接 + 房间码加入", AppTheme.GREEN],
+				["① 本机开房(自动建房)", AppTheme.GOLD], ["② 复制邀请码 → 发给朋友", AppTheme.WHITE],
+				["③ 朋友粘贴邀请码, 一键加入", AppTheme.GREEN],
 			]
 			for i in steps.size():
 				_box(Vector2(240, 20 + i * 84), Vector2(560, 60), str(steps[i][0]),
