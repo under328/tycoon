@@ -54,6 +54,7 @@ var _turn_remain := -1.0
 var _last_turn_seat := -99
 
 var info_label: Label
+var self_label: Label
 var status_label: Label
 var error_label: Label
 var timer_label: Label
@@ -359,7 +360,8 @@ func _build_ui() -> void:
 		add_child(tut))
 	add_child(rules_btn)
 
-	seat_labels.append(null)  # 座位0=自己，信息在底部手牌区
+	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
+	self_label = _make_seat_label(Vector2(76, 56))
 	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
 	seat_labels.append(_make_seat_label(Vector2(500, 14)))
 	seat_labels.append(_make_seat_label(Vector2(20, 300)))
@@ -545,10 +547,9 @@ func _show_emoji(seat: int, id: int) -> void:
 		view = net.latest_view
 	var pos := Vector2(560, 470)  # 自己的表情出现在手牌上方
 	if seat != int(view.get("my_seat", 0)):
-		var idx := seat
-		if idx >= 1 and idx <= 3:
-			var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
-			pos = positions[idx]
+		var rel := (seat - int(view.get("my_seat", 0)) + 4) % 4
+		var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
+		pos = positions[rel]
 	var lb := Label.new()
 	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
 	lb.add_theme_font_size_override("font_size", 42)
@@ -574,25 +575,22 @@ func _refresh() -> void:
 func _refresh_view(view: Dictionary) -> void:
 	var phase: String = view["phase"]
 
-	info_label.text = "第 %d/%d 局    %s    积分 %s" % [
+	info_label.text = "第 %d/%d 局    %s" % [
 		int(view["round"]) + 1,
 		int(view["rounds_total"]),
 		"革命!" if bool(view["revolution"]) else "",
-		str(view["scores"]),
 	]
 
-	for seat in range(1, 4):
-		seat_avatars[seat - 1].skin_id = _skin_for(view, seat)
-	for seat in range(1, 4):
-		var lb: Label = seat_labels[seat]
-		var turn_mark := "▶ " if int(view["turn"]) == seat else ""
-		var ident := ""
-		if (view["identities"] as Array).size() == 4 \
-				and (view["finished"] as Array).has(seat):
-			ident = "\n[%s]" % ScoringGd.IDENTITY_NAMES[int(view["identities"][seat])]
-		lb.text = "%s%s\n剩 %d 张%s" % [
-			turn_mark, _seat_name(view, seat), int(view["counts"][seat]), ident,
-		]
+	var my := int(view["my_seat"])
+	# 对手按相对方位入座: 右=下家, 上=对家, 左=上家
+	for i in 3:
+		var seat := (my + i + 1) % 4
+		seat_avatars[i].skin_id = _skin_for(view, seat)
+		var lb: Label = seat_labels[i + 1]
+		lb.text = _seat_info_text(view, seat)
+	if self_label != null:
+		self_label.text = _seat_info_text(view, my)
+	avatar_me.skin_id = _skin_for(view, my)
 
 	_refresh_field(view)
 	_refresh_hand(view)
@@ -678,6 +676,22 @@ func _seat_name(view: Dictionary, seat: int) -> String:
 	var rel := (seat - my + 4) % 4
 	var names := ["", "下家", "对家", "上家"]
 	return names[rel]
+
+
+## 座位信息区文本: 名字 / 剩牌与积分 / 身份（出完才显示）
+func _seat_info_text(view: Dictionary, seat: int) -> String:
+	var turn_mark := "▶ " if int(view["turn"]) == seat else ""
+	var scores: Array = view["scores"]
+	var score_line := "积分"
+	if scores.size() == 4:
+		score_line = "积分 %+d" % int(scores[seat])
+	var ident := ""
+	if (view["identities"] as Array).size() == 4 \
+			and (view["finished"] as Array).has(seat):
+		ident = "\n[%s]" % ScoringGd.IDENTITY_NAMES[int(view["identities"][seat])]
+	return "%s%s\n剩 %d 张 · %s%s" % [
+		turn_mark, _seat_name(view, seat), int(view["counts"][seat]), score_line, ident,
+	]
 
 
 func _round_end_text(view: Dictionary) -> String:
