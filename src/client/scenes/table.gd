@@ -691,6 +691,9 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase != _prev_phase:
 		if phase == "exchange":
 			_spawn_fx("exchange")
+			_turn_total = float(int(view["rules"].get("exchange_seconds", 15)))
+			_turn_remain = _turn_total
+			_prev_tick = -1
 		var round_over := phase == "round_end" or phase == "game_end"
 		if round_over and (view["identities"] as Array).size() == 4:
 			if _last_round_ids.size() == 4:
@@ -716,8 +719,9 @@ func _refresh_view(view: Dictionary) -> void:
 	elif phase == "exchange":
 		var er: Dictionary = _my_pending_return(view)
 		if not er.is_empty():
-			status_label.text = "换牌：请选 %d 张返还给 %s（已选 %d）" % [
-					int(er["n"]), _seat_name(view, int(er["to"])), selected.size()]
+			var remain_txt := "，剩余 %d 秒" % int(maxf(_turn_remain, 0.0)) if mode == "online" else ""
+			status_label.text = "换牌：请选 %d 张返还给 %s（已选 %d%s）" % [
+					int(er["n"]), _seat_name(view, int(er["to"])), selected.size(), remain_txt]
 		elif int(view["turn"]) >= 0:
 			status_label.text = "等待 %s 选牌返还…" % _seat_name(view, int(view["turn"]))
 		else:
