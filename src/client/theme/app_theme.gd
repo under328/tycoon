@@ -87,6 +87,7 @@ static func make_label(size: int, color: Color) -> Label:
 static func make_button(text: String, min_size := Vector2(96, 44), font_size := 18) -> Button:
 	var b := Button.new()
 	b.text = text
+	b.name = text
 	b.custom_minimum_size = min_size
 	b.size = min_size
 	b.add_theme_font_size_override("font_size", font_size)

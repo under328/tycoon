@@ -406,11 +406,15 @@ static func start_embedded(parent: Node, port: int) -> Node:
 	return server
 
 
-## 停掉本机开房的服务器分支
+## 停掉本机开房的服务器分支(立即释放, 确保端口可立即重绑)
 static func stop_embedded(parent: Node) -> void:
 	var embed := parent.get_node_or_null("Embed")
-	if embed != null:
-		embed.queue_free()
+	if embed == null:
+		return
+	var net := embed.get_node_or_null("Main/Net")
+	if net != null and net.multiplayer.multiplayer_peer != null:
+		net.multiplayer.multiplayer_peer.close()
+	embed.free()
 
 
 ## E2E 用：模拟断网（保留 token，自动重连）

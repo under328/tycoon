@@ -119,7 +119,6 @@ func _build_ui() -> void:
 		Audio.play("click")
 		net.leave_room()
 		back_to_menu.emit())
-	add_child(back_btn)
 
 	# 标题
 	var title := AppTheme.make_label(28, COLOR_GOLD)
@@ -283,9 +282,7 @@ func _build_ui() -> void:
 	c4.position = Vector2(830, 310)
 	add_child(c4)
 	chk_joker = _check("带王", Vector2(830, 340))
-	add_child(chk_joker)
 	chk_revolution = _check("革命", Vector2(830, 380))
-	add_child(chk_revolution)
 	var rounds_lbl := AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 460)
