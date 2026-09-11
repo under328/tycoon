@@ -171,8 +171,6 @@ func _build_ui() -> void:
 	add_child(chk_joker)
 	chk_revolution = _check("革命", Vector2(530, 518))
 	add_child(chk_revolution)
-	chk_stairs = _check("階段", Vector2(630, 518))
-	add_child(chk_stairs)
 	chk_eight = _check("8切", Vector2(730, 518))
 	add_child(chk_eight)
 	var rounds_lbl := _label(15, COLOR_WHITE)
@@ -298,7 +296,7 @@ func _gather_rules() -> Dictionary:
 	return {
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
-		"stairs": chk_stairs.button_pressed,
+		
 		"eight_cut": chk_eight.button_pressed,
 		"rounds": rounds_option.get_selected_metadata(),
 	}

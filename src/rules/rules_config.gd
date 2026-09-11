@@ -7,8 +7,8 @@ static func defaults() -> Dictionary:
 	return {
 		"with_joker": true,
 		"revolution": true,
-		"stairs": true,
-		"eight_cut": false,
+		
+		"eight_cut": true,
 		"rounds": 3,
 		"turn_seconds": 20,
 		"exchange_seconds": 15,

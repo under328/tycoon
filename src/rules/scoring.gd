@@ -2,7 +2,7 @@
 class_name Scoring
 extends RefCounted
 
-const IDENTITY_NAMES := ["大富豪", "富豪", "平民", "乞丐"]
+const IDENTITY_NAMES := ["大富豪", "富豪", "贫民", "大贫民"]
 const IDENTITY_POINTS := [2, 1, -1, -2]
 
 

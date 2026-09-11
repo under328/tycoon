@@ -1,22 +1,32 @@
-## 牌型识别与比较。契约见 docs/规则规格.md §2/§4。
-## 组合表示：{ "type": Type, "key": int(压制用端点), "len": int, "cards": Array }
+## 牌型识别与比较。契约见 docs/规则规格.md §4。
+## v2: 仅 单张/对子/三条/四条（革命）；♠3 单出时为最强单张；无顺子/階段。
 class_name Combo
 extends RefCounted
 
 const CardsGd = preload("res://src/rules/cards.gd")
 
-enum Type { SINGLE, PAIR, TRIPLE, QUAD, SEQ, STAIRS }
+enum Type { SINGLE, PAIR, TRIPLE, QUAD }
 
-const TYPE_NAMES := ["单张", "对子", "三条", "四条", "顺子", "階段"]
+const TYPE_NAMES := ["单张", "对子", "三条", "四条"]
+
+## ♠3 单出时的 key（比 JOKER 的 16 还大）
+const SPADE3_KEY := 17
 
 
 ## 识别一组牌；非法返回 {}。
+## 仅四种牌型: 单张 / 对子 / 三条 / 四条（含王补位）。
 static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 	var n := cards.size()
-	if n == 0:
+	if n == 0 or n > 4:
 		return {}
 	if n == 1:
-		return _mk(Type.SINGLE, CardsGd.value(cards[0]), 1, cards)
+		var card: int = cards[0]
+		if CardsGd.is_joker(card):
+			return _mk(Type.SINGLE, CardsGd.JOKER_VALUE, 1, cards)
+		# ♠3(id=0) 单出时是最强单张
+		if card == 0:
+			return _mk(Type.SINGLE, SPADE3_KEY, 1, cards)
+		return _mk(Type.SINGLE, CardsGd.value(card), 1, cards)
 	var naturals := []
 	var joker_count := 0
 	for c in cards:
@@ -25,15 +35,13 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 		else:
 			naturals.append(c)
 	if naturals.is_empty():
-		return {}  # 王+王不可组对（规格 §4）
-	# 同点数（对/三/四条），王补位
+		return {}  # 王+王不可组对
+	# 同点数（对/三/四条），王补位优先
 	var val_count := {}
 	for c in naturals:
 		var v := CardsGd.value(c)
 		val_count[v] = int(val_count.get(v, 0)) + 1
-	if val_count.size() == 1:
-		if n > 4:
-			return {}
+	if val_count.size() == 1 and n <= 4:
 		var v: int = val_count.keys()[0]
 		var t := Type.PAIR
 		if n == 3:
@@ -41,27 +49,8 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 		elif n == 4:
 			t = Type.QUAD
 		return _mk(t, v, n, cards)
-	# 顺序组合：自然牌必须互不相同
-	for v in val_count:
-		if int(val_count[v]) > 1:
-			return {}
-	if n < 3:
-		return {}
-	# 窗口锚定在最小自然牌，王补洞/向上延伸；端点不得超过 2(15)
-	var sorted_vals := val_count.keys()
-	sorted_vals.sort()
-	var top: int = int(sorted_vals[0]) + n - 1
-	if top > CardsGd.MAX_VALUE:
-		return {}
-	if int(sorted_vals[sorted_vals.size() - 1]) > top:
-		return {}
-	# 階段：自然牌同花色（王视作任意花色）
-	var suits := {}
-	for c in naturals:
-		suits[CardsGd.suit(c)] = true
-	if suits.size() == 1 and cfg.get("stairs", true):
-		return _mk(Type.STAIRS, top, n, cards)
-	return _mk(Type.SEQ, top, n, cards)
+	# 混合不同点数 → 非法（v2 无顺子/階段）
+	return {}
 
 
 ## next 能否压制 prev（revolution 时点序反转）。
@@ -79,17 +68,6 @@ static func type_name(combo: Dictionary) -> String:
 	if combo.is_empty():
 		return "—"
 	return TYPE_NAMES[int(combo["type"])]
-
-
-static func describe(combo: Dictionary) -> String:
-	if combo.is_empty():
-		return "自由出牌"
-	return "%s %s" % [type_name(combo), CardsGd.labels(_key_cards(combo))]
-
-
-## 用于展示的组合代表牌：顺子显示端点，其余显示点数代表。
-static func _key_cards(combo: Dictionary) -> Array:
-	return [int(combo["key"])]
 
 
 static func _mk(t: int, key: int, len: int, cards: Array) -> Dictionary:

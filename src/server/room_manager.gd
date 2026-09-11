@@ -13,7 +13,7 @@ const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
 
 const DEFAULT_SETTINGS := {
-	"with_joker": true, "revolution": true, "stairs": true,
+	"with_joker": true, "revolution": true, 
 	"eight_cut": false, "rounds": 3, "turn_seconds": 20,
 }
 
