@@ -117,13 +117,15 @@ func _draw_face() -> void:
 	draw_style_box(_face_sb, Rect2(Vector2.ZERO, size))
 	if card < 0 or card > 53:
 		return
+	# 全部元素按牌面高度等比缩放(标准 100 高 → s=1.0)
+	var s := size.y / 100.0
 	# 内框细线(双框)
-	draw_style_box(_inner_sb, Rect2(Vector2(4, 4), size - Vector2(8, 8)))
+	draw_style_box(_inner_sb, Rect2(Vector2(4, 4) * s, size - Vector2(8, 8) * s))
 	# 和纸颗粒与和风角饰
-	Wafu.speckle(self, Rect2(Vector2(5, 5), size - Vector2(10, 10)), 20, 100 + card,
-			_pal["speckle"])
-	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
-			Color(Wafu.GOLD, 0.5))
+	Wafu.speckle(self, Rect2(Vector2(5, 5) * s, size - Vector2(10, 10) * s),
+			int(20 * s), 100 + card, _pal["speckle"])
+	Wafu.corner_ticks(self, Rect2(Vector2(2, 2) * s, size - Vector2(4, 4) * s),
+			6.0 * s, Color(Wafu.GOLD, 0.5))
 	var ink: Color = _pal["red"] if CardsGd.is_red(card) else _pal["black"]
 	var rank: String = CardsGd.rank_label(card)
 	if CardsGd.is_joker(card):
@@ -133,26 +135,26 @@ func _draw_face() -> void:
 	var motif := str(_pal.get("motif", "washi"))
 	var c0 := size / 2.0
 	if rank in ["J", "Q", "K"]:
-		_draw_crest(motif, c0, 24.0, Color(ink, 0.30))
+		_draw_crest(motif, c0, 24.0 * s, Color(ink, 0.30))
 	else:
-		_draw_center_ring(motif, c0, 23.0, Color(ink, 0.18))
+		_draw_center_ring(motif, c0, 23.0 * s, Color(ink, 0.18))
 	# 左上: 点数牌匾(底色=花色) + 白字
 	var plaque := AppTheme.flat(ink, Color(0, 0, 0, 0), 3, 0)
-	plaque.set_content_margin_all(2)
-	plaque.draw(get_canvas_item(), Rect2(Vector2(4, 3), Vector2(19, 22)))
-	draw_string(_font_ascii, Vector2(8, 20), rank,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 16, _pal["face"])
-	_suit(card, Vector2(13, 38), 5.5, ink)
+	plaque.set_content_margin_all(2 * s)
+	plaque.draw(get_canvas_item(), Rect2(Vector2(4, 3) * s, Vector2(19, 22) * s))
+	draw_string(_font_ascii, Vector2(8, 20) * s, rank,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * s), _pal["face"])
+	_suit(card, Vector2(13, 38) * s, 5.5 * s, ink)
 	# 中心: 大花色(投影 + 内芯环)
 	var c := size / 2.0
-	_suit(card, c + Vector2(2.5, 2.5), 17, Color(0.20, 0.16, 0.10, 0.35))
-	_suit(card, c, 17, ink)
-	_suit(card, c, 17 * 0.42, _pal["face"])
+	_suit(card, c + Vector2(2.5, 2.5) * s, 17 * s, Color(0.20, 0.16, 0.10, 0.35))
+	_suit(card, c, 17 * s, ink)
+	_suit(card, c, 17 * s * 0.42, _pal["face"])
 	# 右下: 小点数
 	var rank_w: float = _font_ascii.get_string_size(
-			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-	draw_string(_font_ascii, size - Vector2(rank_w + 7, 6),
-			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ink)
+			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * s)).x
+	draw_string(_font_ascii, size - Vector2(rank_w + 7, 6) * s,
+			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * s), ink)
 
 
 ## 在 pos（中心）以半径 r 绘制花色形状。
@@ -247,12 +249,13 @@ func _draw_joker() -> void:
 		_:
 			_pixel_art(PIX_DARUMA, _pix_pal_daruma(), c, size)
 	# 角标: JOKER
-	draw_string(_font_ascii, Vector2(6, 15), "JOKER",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(Wafu.GOLD, 0.85))
+	var js := size.y / 100.0
+	draw_string(_font_ascii, Vector2(6, 15) * js, "JOKER",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * js), Color(Wafu.GOLD, 0.85))
 	var jw: float = _font_ascii.get_string_size(
-			"JOKER", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	draw_string(_font_ascii, size - Vector2(jw + 6, 6), "JOKER",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(Wafu.GOLD, 0.85))
+			"JOKER", HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * js)).x
+	draw_string(_font_ascii, size - Vector2(jw + 6, 6) * js, "JOKER",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * js), Color(Wafu.GOLD, 0.85))
 
 
 ## 像素画: grid 每行一个字符串, 字符映射调色板, '.' 为透明。
@@ -535,5 +538,6 @@ func _draw_back() -> void:
 				draw_circle(cm + Vector2.from_angle(ang) * size.y * 0.11,
 						size.y * 0.07, Color(_pal["face"], 0.8))
 			draw_circle(cm, size.y * 0.045, Color(Wafu.GOLD, 0.9))
-	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
+	Wafu.corner_ticks(self, Rect2(Vector2(2, 2) * (size.y / 100.0),
+			size - Vector2(4, 4) * (size.y / 100.0)), 6.0 * (size.y / 100.0),
 			Color(Wafu.GOLD, 0.55))
