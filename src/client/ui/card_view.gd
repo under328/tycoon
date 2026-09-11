@@ -8,6 +8,7 @@ signal picked(card: int)
 const CardsGd = preload("res://src/rules/cards.gd")
 const Wafu = preload("res://src/client/ui/wafu_paint.gd")
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const SkinsLib = preload("res://src/client/ui/skins.gd")
 
 const COLOR_FACE := Color("f9f4e6")        # 和纸米白
 const COLOR_BORDER := Color("caa24e")      # 描金
@@ -30,7 +31,9 @@ var face_down := false:
 		face_down = v
 		queue_redraw()
 
+var _pal: Dictionary = {}
 var _face_sb := StyleBoxFlat.new()
+var _inner_sb := StyleBoxFlat.new()
 var _joker_sb := StyleBoxFlat.new()
 var _back_sb := StyleBoxFlat.new()
 var _sel_sb := StyleBoxFlat.new()
@@ -47,6 +50,11 @@ func _init(p_card: int = -1) -> void:
 	_face_sb.set_corner_radius_all(7)
 	_face_sb.set_border_width_all(2)
 	_face_sb.border_color = COLOR_BORDER
+
+	_inner_sb.bg_color = Color(0, 0, 0, 0)
+	_inner_sb.set_corner_radius_all(5)
+	_inner_sb.set_border_width_all(1)
+	_inner_sb.border_color = Color(COLOR_BORDER, 0.6)
 
 	_joker_sb.bg_color = Color(0, 0, 0, 0)
 	_joker_sb.set_corner_radius_all(7)
@@ -65,6 +73,19 @@ func _init(p_card: int = -1) -> void:
 
 	_font_ascii = AppTheme.display_font()
 	_font_cjk = AppTheme.title_font()
+	_refresh_palette()
+
+
+## 当前装备卡面皮肤的调色板(跟随商城更换)
+func _refresh_palette() -> void:
+	var w := get_node_or_null("/root/Wallet")
+	var cid := "card_washi"
+	if w != null:
+		cid = str(w.equipped_card)
+	_pal = SkinsLib.palette(cid)
+	_face_sb.bg_color = _pal["face"]
+	_face_sb.border_color = _pal["border"]
+	_back_sb.bg_color = _pal["back"]
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -85,28 +106,34 @@ func _draw() -> void:
 
 
 func _draw_face() -> void:
+	_refresh_palette()
 	draw_style_box(_face_sb, Rect2(Vector2.ZERO, size))
 	if card < 0 or card > 53:
 		return
+	# 内框细线(双框)
+	draw_style_box(_inner_sb, Rect2(Vector2(4, 4), size - Vector2(8, 8)))
 	# 和纸颗粒与和风角饰
-	Wafu.speckle(self, Rect2(Vector2(3, 3), size - Vector2(6, 6)), 22, 100 + card,
-			Color(0.35, 0.28, 0.12, 0.10))
+	Wafu.speckle(self, Rect2(Vector2(5, 5), size - Vector2(10, 10)), 20, 100 + card,
+			_pal["speckle"])
 	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
-			Color(Wafu.GOLD, 0.45))
-	var ink := COLOR_BLACK
-	if CardsGd.is_red(card):
-		ink = COLOR_RED
+			Color(Wafu.GOLD, 0.5))
+	var ink: Color = _pal["red"] if CardsGd.is_red(card) else _pal["black"]
 	var rank: String = CardsGd.rank_label(card)
 	if CardsGd.is_joker(card):
 		_draw_joker()
 		return
-	# 左上: 点数 + 小花色
-	draw_string(_font_ascii, Vector2(7, 24), rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, ink)
-	_suit(card, Vector2(20, 36), 6, ink)
-	# 中心大花色(J/Q/K 与数字牌同版式, 靠角标区分)
+	# 左上: 点数牌匾(底色=花色) + 白字
+	var plaque := AppTheme.flat(ink, Color(0, 0, 0, 0), 3, 0)
+	plaque.set_content_margin_all(2)
+	plaque.draw(get_canvas_item(), Rect2(Vector2(4, 3), Vector2(19, 22)))
+	draw_string(_font_ascii, Vector2(8, 20), rank,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 16, _pal["face"])
+	_suit(card, Vector2(13, 38), 5.5, ink)
+	# 中心: 大花色(投影 + 内芯环)
 	var c := size / 2.0
 	_suit(card, c + Vector2(2.5, 2.5), 17, Color(0.20, 0.16, 0.10, 0.35))
 	_suit(card, c, 17, ink)
+	_suit(card, c, 17 * 0.42, _pal["face"])
 	# 右下: 小点数
 	var rank_w: float = _font_ascii.get_string_size(
 			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
@@ -211,6 +238,7 @@ func _draw_joker() -> void:
 
 
 func _draw_back() -> void:
+	_refresh_palette()
 	draw_style_box(_back_sb, Rect2(Vector2.ZERO, size))
 	var c := size / 2.0
 	# 和风云纹: 三道金弧 + 中央菱形

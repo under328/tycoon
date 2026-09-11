@@ -1,5 +1,5 @@
-## 皮肤与卡面数据表 + 程序化头像绘制（计划 §12.3）。
-## 全部程序化绘制, 零外部素材; 新增皮肤在此追加条目与绘制分支。
+## 皮肤与卡面数据表 + 程序化头像绘制 v2。
+## v2: 每款头像=皮肤色底+内环珠纹+肩部衣领+头部细节+描金外环; 新增皮肤在此追加。
 class_name SkinsLib
 extends RefCounted
 
@@ -55,101 +55,166 @@ static func skin_name(skin_id: String) -> String:
 	return "墨客"
 
 
-## 程序化头像: 在 center 以半径 r 绘制徽章(底盘+人物形象)。
+## 程序化头像 v2: 皮肤色底盘 + 内环珠纹 + 肩部衣领 + 头部细节 + 描金外环。
 static func draw_avatar(ci: CanvasItem, skin_id: String, center: Vector2, r: float) -> void:
-	# 底盘 + 描金环
-	ci.draw_circle(center, r, Color(0.10, 0.10, 0.22))
-	ci.draw_arc(center, r, 0, TAU, 32, Color(GOLD, 0.8), r * 0.07, true)
-	var head := r * 0.52
-	var head_c := center + Vector2(0, r * 0.08)
+	var theme := _skin_theme(skin_id)
+	ci.draw_circle(center, r, theme["bg"])
+	for i in 12:
+		var ang := TAU * i / 12.0
+		ci.draw_circle(center + Vector2.from_angle(ang) * r * 0.86,
+				r * 0.045, Color(GOLD, 0.5))
+	var shoulder := PackedVector2Array([
+		center + Vector2(-r * 0.78, r), center + Vector2(-r * 0.5, r * 0.52),
+		center + Vector2(r * 0.5, r * 0.52), center + Vector2(r * 0.78, r),
+	])
+	ci.draw_colored_polygon(shoulder, theme["cloth"])
+	var collar := PackedVector2Array([
+		center + Vector2(-r * 0.3, r * 0.56), center + Vector2(0, r * 0.86),
+		center + Vector2(r * 0.3, r * 0.56), center + Vector2(0, r * 0.62),
+	])
+	ci.draw_colored_polygon(collar, theme["collar"])
+	var head_c := center + Vector2(0, -r * 0.12)
+	var head_r := r * 0.52
 	match skin_id:
 		"skin_aka":
-			_oni(ci, head_c, head, Color("c9452e"))
+			_head_oni(ci, head_c, head_r, theme["skin"])
 		"skin_ao":
-			_oni(ci, head_c, head, Color("2e5ec9"))
+			_head_oni(ci, head_c, head_r, Color("a8c0e0"))
 		"skin_kitsu":
-			_kitsu(ci, head_c, head)
+			_head_kitsu(ci, head_c, head_r)
 		"skin_oiran":
-			_oiran(ci, head_c, head)
+			_head_oiran(ci, head_c, head_r)
 		"skin_tengu":
-			_tengu(ci, head_c, head)
+			_head_tengu(ci, head_c, head_r)
 		_:
-			_monomo(ci, head_c, head)
+			_head_monomo(ci, head_c, head_r, theme["skin"], theme["hair"])
+	ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
 
 
-## 墨客(默认): 斗笠行人
-static func _monomo(ci: CanvasItem, c: Vector2, r: float) -> void:
-	ci.draw_circle(c, r, Color("d8cfc0"))
-	ci.draw_circle(c + Vector2(-r * 0.35, -r * 0.1), r * 0.09, Color("2b2b3d"))
-	ci.draw_circle(c + Vector2(r * 0.35, -r * 0.1), r * 0.09, Color("2b2b3d"))
+static func _skin_theme(skin_id: String) -> Dictionary:
+	match skin_id:
+		"skin_aka":
+			return {"bg": Color("38141c"), "cloth": Color("8a2a20"),
+				"collar": Color("3a1420"), "skin": Color("e0a08a"),
+				"hair": Color("1c1c2a")}
+		"skin_ao":
+			return {"bg": Color("142038"), "cloth": Color("24508a"),
+				"collar": Color("12203a"), "skin": Color("a8c0e0"),
+				"hair": Color("1c1c2a")}
+		"skin_kitsu":
+			return {"bg": Color("2a2038"), "cloth": Color("c9c9d8"),
+				"collar": Color("8a8aa0"), "skin": Color("f2efe6"),
+				"hair": Color("f2efe6")}
+		"skin_oiran":
+			return {"bg": Color("301428"), "cloth": Color("5a1848"),
+				"collar": Color("2b0a20"), "skin": Color("f2e6d8"),
+				"hair": Color("241a28")}
+		"skin_tengu":
+			return {"bg": Color("30141c"), "cloth": Color("5a2020"),
+				"collar": Color("2a0a0a"), "skin": Color("e0a08a"),
+				"hair": Color("1c1c2a")}
+	return {"bg": Color("182038"), "cloth": Color("3a4a6a"),
+		"collar": Color("1a2438"), "skin": Color("e8dcc8"),
+		"hair": Color("3a3428")}
+
+
+static func _eyes(ci: CanvasItem, c: Vector2, r: float, ink: Color) -> void:
+	ci.draw_circle(c + Vector2(-r * 0.34, -r * 0.1), r * 0.11, ink)
+	ci.draw_circle(c + Vector2(r * 0.34, -r * 0.1), r * 0.11, ink)
+
+
+static func _head_monomo(ci: CanvasItem, c: Vector2, r: float, skin: Color, hair: Color) -> void:
+	ci.draw_circle(c, r, skin)
 	var hat := PackedVector2Array([
-		c + Vector2(-r * 1.25, -r * 0.35), c + Vector2(r * 1.25, -r * 0.35),
-		c + Vector2(0, -r * 1.05),
+		c + Vector2(-r * 1.35, -r * 0.3), c + Vector2(r * 1.35, -r * 0.3),
+		c + Vector2(r * 0.2, -r * 1.15), c + Vector2(-r * 0.2, -r * 1.15),
 	])
 	ci.draw_colored_polygon(hat, Color("8a7448"))
+	ci.draw_line(c + Vector2(-r * 1.1, -r * 0.34), c + Vector2(r * 1.1, -r * 0.34),
+			Color("6a5836"), r * 0.07, true)
+	_eyes(ci, c, r, Color("2b2b3d"))
+	ci.draw_circle(c + Vector2(0, r * 0.38), r * 0.07, Color("c93a3a"))
+	ci.draw_line(c + Vector2(-r * 0.12, r * 0.5), c + Vector2(-r * 0.2, r * 0.85),
+			Color("d8cfc0"), r * 0.06, true)
+	ci.draw_line(c + Vector2(r * 0.12, r * 0.5), c + Vector2(r * 0.2, r * 0.85),
+			Color("d8cfc0"), r * 0.06, true)
 
 
-## 鬼(赤/青): 角 + 凶眼
-static func _oni(ci: CanvasItem, c: Vector2, r: float, skin: Color) -> void:
-	ci.draw_circle(c, r, skin)
+static func _head_oni(ci: CanvasItem, c: Vector2, r: float, skin: Color, hair := Color("1c1c2a")) -> void:
 	for side in [-1.0, 1.0]:
 		var horn := PackedVector2Array([
-			c + Vector2(side * r * 0.35, -r * 0.7),
-			c + Vector2(side * r * 0.6, -r * 1.35),
-			c + Vector2(side * r * 0.75, -r * 0.45),
+			c + Vector2(side * r * 0.3, -r * 0.72),
+			c + Vector2(side * r * 0.62, -r * 1.4),
+			c + Vector2(side * r * 0.78, -r * 0.42),
 		])
 		ci.draw_colored_polygon(horn, Color("f2e6c8"))
-	ci.draw_circle(c + Vector2(-r * 0.32, -r * 0.05), r * 0.11, Color("f2e6c8"))
-	ci.draw_circle(c + Vector2(r * 0.32, -r * 0.05), r * 0.11, Color("f2e6c8"))
-	ci.draw_rect(Rect2(c + Vector2(-r * 0.28, r * 0.28), Vector2(r * 0.56, r * 0.10)),
-			Color("f2e6c8"))
+	ci.draw_circle(c, r, skin)
+	ci.draw_arc(c + Vector2(0, -r * 0.15), r * 0.92, PI + 0.3, TAU - 0.3, 24,
+			hair, r * 0.16, true)
+	for side in [-1.0, 1.0]:
+		ci.draw_circle(c + Vector2(side * r * 0.34, -r * 0.08), r * 0.13, Color("f2e6c8"))
+		ci.draw_circle(c + Vector2(side * r * 0.34, -r * 0.08), r * 0.06, Color("1c1c2a"))
+	for side in [-1.0, 1.0]:
+		var fang := PackedVector2Array([
+			c + Vector2(side * r * 0.2, r * 0.42),
+			c + Vector2(side * r * 0.32, r * 0.42),
+			c + Vector2(side * r * 0.26, r * 0.62),
+		])
+		ci.draw_colored_polygon(fang, Color("f2e6c8"))
+	ci.draw_line(c + Vector2(-r * 0.2, -r * 0.4), c + Vector2(r * 0.2, -r * 0.4),
+			Color(0, 0, 0, 0.4), r * 0.06, true)
 
 
-## 狐妖: 白狐面 + 赤纹
-static func _kitsu(ci: CanvasItem, c: Vector2, r: float) -> void:
+static func _head_kitsu(ci: CanvasItem, c: Vector2, r: float) -> void:
+	var white := Color("f2efe6")
 	for side in [-1.0, 1.0]:
 		var ear := PackedVector2Array([
-			c + Vector2(side * r * 0.15, -r * 0.75),
-			c + Vector2(side * r * 0.85, -r * 1.25),
-			c + Vector2(side * r * 0.75, -r * 0.3),
+			c + Vector2(side * r * 0.15, -r * 0.7),
+			c + Vector2(side * r * 0.85, -r * 1.3),
+			c + Vector2(side * r * 0.78, -r * 0.28),
 		])
-		ci.draw_colored_polygon(ear, Color("f2efe6"))
-	ci.draw_circle(c, r * 0.92, Color("f2efe6"))
-	ci.draw_circle(c + Vector2(-r * 0.3, -r * 0.05), r * 0.09, Color("2b2b3d"))
-	ci.draw_circle(c + Vector2(r * 0.3, -r * 0.05), r * 0.09, Color("2b2b3d"))
+		ci.draw_colored_polygon(ear, white)
+		var inner := PackedVector2Array([
+			c + Vector2(side * r * 0.32, -r * 0.72),
+			c + Vector2(side * r * 0.7, -r * 1.08),
+			c + Vector2(side * r * 0.66, -r * 0.45),
+		])
+		ci.draw_colored_polygon(inner, Color("e8b4b4"))
+	ci.draw_circle(c, r * 0.92, white)
+	ci.draw_circle(c + Vector2(-r * 0.45, r * 0.28), r * 0.14, Color("e8a0a0"))
+	ci.draw_circle(c + Vector2(r * 0.45, r * 0.28), r * 0.14, Color("e8a0a0"))
+	_eyes(ci, c, r, Color("2b2b3d"))
 	var nose := PackedVector2Array([
-		c + Vector2(0, r * 0.12), c + Vector2(-r * 0.12, r * 0.3),
+		c + Vector2(0, r * 0.1), c + Vector2(-r * 0.12, r * 0.3),
 		c + Vector2(r * 0.12, r * 0.3),
 	])
 	ci.draw_colored_polygon(nose, Color("c93a3a"))
-	ci.draw_line(c + Vector2(-r * 0.35, r * 0.42), c + Vector2(-r * 0.1, r * 0.34),
-			Color("c93a3a"), r * 0.08, true)
-	ci.draw_line(c + Vector2(r * 0.35, r * 0.42), c + Vector2(r * 0.1, r * 0.34),
-			Color("c93a3a"), r * 0.08, true)
 
 
-## 花魁: 黑发 + 髪饰
-static func _oiran(ci: CanvasItem, c: Vector2, r: float) -> void:
-	ci.draw_circle(c + Vector2(0, -r * 0.15), r * 1.0, Color("2b2b3d"))
-	ci.draw_circle(c + Vector2(0, r * 0.1), r * 0.75, Color("f2e6c8"))
-	ci.draw_circle(c + Vector2(-r * 0.3, -r * 0.05), r * 0.09, Color("2b2b3d"))
-	ci.draw_circle(c + Vector2(r * 0.3, -r * 0.05), r * 0.09, Color("2b2b3d"))
-	ci.draw_circle(c + Vector2(0, r * 0.32), r * 0.10, Color("c93a3a"))
-	for side in [-1.0, 1.0]:
-		ci.draw_circle(c + Vector2(side * r * 0.55, -r * 0.55), r * 0.18,
-				Color("e0a83c"))
+static func _head_oiran(ci: CanvasItem, c: Vector2, r: float) -> void:
+	ci.draw_circle(c + Vector2(0, -r * 0.12), r * 1.0, Color("241a28"))
+	ci.draw_circle(c + Vector2(-r * 0.7, -r * 0.75), r * 0.22, Color("241a28"))
+	ci.draw_circle(c + Vector2(r * 0.7, -r * 0.75), r * 0.22, Color("241a28"))
+	ci.draw_circle(c + Vector2(-r * 0.7, -r * 0.75), r * 0.09, Color("e0a83c"))
+	ci.draw_circle(c + Vector2(r * 0.7, -r * 0.75), r * 0.09, Color("e0a83c"))
+	ci.draw_circle(c + Vector2(0, r * 0.08), r * 0.72, Color("f2e6d8"))
+	_eyes(ci, c + Vector2(0, r * 0.05), r, Color("2b2b3d"))
+	ci.draw_circle(c + Vector2(0, r * 0.4), r * 0.09, Color("c93a3a"))
+	ci.draw_circle(c + Vector2(0, -r * 0.02), r * 0.05, Color("c93a3a"))
+	ci.draw_circle(c + Vector2(r * 0.55, -r * 0.85), r * 0.14, Color("e8a0b4"))
+	ci.draw_circle(c + Vector2(r * 0.55, -r * 0.85), r * 0.06, Color("e0a83c"))
 
 
-## 天狗: 红面长鼻
-static func _tengu(ci: CanvasItem, c: Vector2, r: float) -> void:
+static func _head_tengu(ci: CanvasItem, c: Vector2, r: float) -> void:
+	ci.draw_circle(c + Vector2(0, -r * 0.3), r * 0.95, Color("1c1c2a"))
 	ci.draw_circle(c, r * 0.9, Color("c93a3a"))
-	var nose := PackedVector2Array([
-		c + Vector2(-r * 0.12, r * 0.05), c + Vector2(r * 0.12, r * 0.05),
-		c + Vector2(r * 0.05, r * 1.15), c + Vector2(-r * 0.05, r * 1.15),
-	])
-	ci.draw_colored_polygon(nose, Color("f2e6c8"))
-	ci.draw_circle(c + Vector2(-r * 0.32, -r * 0.2), r * 0.12, Color("f2efe6"))
-	ci.draw_circle(c + Vector2(r * 0.32, -r * 0.2), r * 0.12, Color("f2efe6"))
 	for side in [-1.0, 1.0]:
-		ci.draw_line(c + Vector2(side * r * 0.45, -r * 0.85),
-				c + Vector2(side * r * 0.7, -r * 1.25), Color("2b2b3d"), r * 0.12, true)
+		ci.draw_line(c + Vector2(side * r * 0.15, -r * 0.32),
+				c + Vector2(side * r * 0.55, -r * 0.42), Color("f2e6c8"), r * 0.14, true)
+	_eyes(ci, c + Vector2(0, -r * 0.05), r, Color("2b2b3d"))
+	var nose := PackedVector2Array([
+		c + Vector2(-r * 0.1, r * 0.05), c + Vector2(r * 0.1, r * 0.05),
+		c + Vector2(r * 0.06, r * 1.1), c + Vector2(-r * 0.06, r * 1.1),
+	])
+	ci.draw_colored_polygon(nose, Color("f2e6d8"))
+	ci.draw_circle(c + Vector2(r * 0.95, -r * 0.1), r * 0.28, Color("e0a83c"))
