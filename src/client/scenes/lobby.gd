@@ -7,6 +7,7 @@ signal host_requested
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
+const LobbyHelpScript = preload("res://src/client/ui/lobby_help.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 
@@ -190,6 +191,16 @@ func _build_ui() -> void:
 		Audio.play("click")
 		OS.shell_open(GameSettings.DOWNLOAD_URL))
 	add_child(update_btn)
+
+	# 联机帮助(图文, 四页: 三步开房/朋友加入/主机须知/常见问题)
+	var help_btn := AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)
+	help_btn.position = Vector2(990, 138)
+	help_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var help := LobbyHelpScript.new()
+		help.closed.connect(func() -> void: help.queue_free())
+		add_child(help))
+	add_child(help_btn)
 
 	# 服务器地址区(右上)
 	var c2 := AppTheme.make_label(15, COLOR_GOLD)
