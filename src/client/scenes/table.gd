@@ -23,7 +23,6 @@ const AvatarScript = preload("res://src/client/ui/avatar.gd")
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 const AI_THINK_SEC := 0.7
-const EXCHANGE_SHOW_SEC := 1.4
 
 
 var mode := "local"
@@ -431,6 +430,7 @@ func _build_ui() -> void:
 		fan.position = info["pos"]
 		fan.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		fan.set_meta("vert", info["vert"])
+		fan.set_meta("count", -1)
 		add_child(fan)
 		_opp_hands.append(fan)
 
@@ -764,6 +764,9 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 	for i in 3:
 		var box: Control = _opp_hands[i]
 		var n := int(counts[(my + i + 1) % 4])
+		if int(box.get_meta("count", -1)) == n:
+			continue  # 数量未变不重建(消除每手 AI 动作的节点抖动)
+		box.set_meta("count", n)
 		var vert: bool = bool(box.get_meta("vert"))
 		for child in box.get_children():
 			child.queue_free()

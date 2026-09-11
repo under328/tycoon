@@ -23,3 +23,29 @@ jobs:
       - name: Run test suite
         run: |
           "./Godot_v${GODOT_VERSION}_linux.x86_64" --headless --path . --script tests/run_tests.gd
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot (headless)
+        run: |
+          curl -L -o godot.zip             "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip godot.zip
+          chmod +x "Godot_v${GODOT_VERSION}_linux.x86_64"
+
+      - name: E2E (server + real client + embedded host)
+        run: |
+          GODOT="./Godot_v${GODOT_VERSION}_linux.x86_64"
+          "$GODOT" --headless --path . --server --port 24575 --ai-delay 60 --phase-delay 250 &
+          SERVER_PID=$!
+          sleep 8
+          timeout 240 "$GODOT" --headless --path . --script tests/e2e_client.gd
+          E1=$?
+          kill $SERVER_PID 2>/dev/null
+          timeout 120 "$GODOT" --headless --path . --script tests/e2e_embedded_host.gd
+          E2=$?
+          echo "e2e_client=$E1 embedded=$E2"
+          [ "$E1" = "0" ] && [ "$E2" = "0" ]

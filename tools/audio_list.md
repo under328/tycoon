@@ -9,8 +9,8 @@
 |---|---|---|---|
 | 大厅 | `lobby` | 主菜单/大厅 `_ready` | D 羽调式轻快 Lo-fi，无缝循环 |
 | 对局 | `table` | 牌桌 `_ready` | A 羽调式舒缓，节奏略紧不抢注意力 |
-| 革命变奏 | （预留） | 革命转场 | 对局主题的倒转强化版，8–16s |
-| 终局结算 | （预留） | 终局演出 | 凯旋短句 8 小节 |
+| 革命变奏 | `table_rev`（已实现） | 革命期间自动切换/恢复 | 对局主题小调下行+鼓点 |
+| 终局结算 | `result`（SFX 短句, 已实现） | game_end 演出 | 凯旋琶音短句 |
 
 替换方式：`src/autoload/audio.gd` 的 `_bgm_tracks` 处改为
 `load("res://assets/audio/bgm/<name>.ogg")`，导入设置开 loop。
@@ -30,6 +30,9 @@
 | pop | 表情 | 气泡弹出 |
 | tick | 倒计时最后 5s | 每秒滴答 |
 | turn | 轮到你（联机） | 轻铃 |
+| eight_cut | 8切清桌 | 高频下扫+爆点 |
+| fall | 一落千丈 | 下坠滑音 |
+| result | 终局结算演出 | 凯旋琶音短句 |
 
 替换方式：`src/autoload/audio.gd` 的 `_build_library()` 中把
 `Synth.wav(...)` 换成 `load("res://assets/audio/sfx/<name>.wav")`，键名不变。
