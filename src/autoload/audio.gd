@@ -67,6 +67,10 @@ func _build_library() -> void:
 	library["pop"] = Synth.wav(Synth.tone(0.06, 880.0, 0.28, 26.0))
 	library["tick"] = Synth.wav(Synth.tone(0.03, 1500.0, 0.18, 55.0))
 	library["turn"] = Synth.wav(Synth.tone(0.08, 987.77, 0.20, 16.0))
+	library["eight_cut"] = Synth.wav(Synth.concat([
+		Synth.sweep(0.16, 1500.0, 260.0, 0.30), Synth.snap(0.12, 0.40, 30.0),
+	]))
+	library["fall"] = Synth.wav(Synth.sweep(0.55, 520.0, 70.0, 0.30))
 
 
 

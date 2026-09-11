@@ -14,9 +14,35 @@ func run(t) -> void:
 	_pass_and_clear(t)
 	_revolution(t)
 	_eight_cut_last_card(t)
+	_fall_from_grace(t)
 	_full_match_flow(t)
 	_exchange_details(t)
 	_view_privacy(t)
+
+
+## 一落千丈: 上局大富豪未保住第一 → 与本局末位互换身份。
+func _fall_from_grace(t) -> void:
+	var st := GameStateGd.new_match({}, 7)
+	# 上局身份: 座位3 = 大富豪
+	st["identities"] = [1, 3, 2, 0]
+	# 本局完牌顺序: 0→3→1, 剩 2 → 自然身份 0=大富豪,3=富豪,1=贫民,2=大贫民
+	st["finish_order"] = [0, 3]
+	var r := GameStateGd._finish_player(st, 1)
+	t.expect(bool(r["ok"]), "一落千丈结算成功")
+	var ids: Array = r["state"]["identities"]
+	t.expect_eq(int(ids[3]), 3, "上局大富豪掉到末位")
+	t.expect_eq(int(ids[2]), 1, "原末位顶替其富豪位")
+	t.expect_eq(int(ids[0]), 0, "本局第一仍是大富豪")
+	var uniq := {}
+	for id in ids:
+		uniq[int(id)] = true
+	t.expect_eq(uniq.size(), 4, "互换后身份仍 4 种各一")
+	# 上局大富豪保住第一 → 不触发
+	var st2 := GameStateGd.new_match({}, 7)
+	st2["identities"] = [1, 3, 2, 0]
+	st2["finish_order"] = [3, 0]
+	var r2 := GameStateGd._finish_player(st2, 1)
+	t.expect_eq(int(r2["state"]["identities"][3]), 0, "保住第一不降位")
 
 
 ## 回归：8切开启时，最后一张牌恰好是 8 也必须正常登记出完（曾死循环）。

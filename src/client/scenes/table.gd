@@ -16,6 +16,7 @@ const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 const BackdropScript = preload("res://src/client/ui/table_backdrop.gd")
 const GameEndPanelScript = preload("res://src/client/ui/game_end_panel.gd")
+const FxOverlayScript = preload("res://src/client/ui/fx_overlay.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
@@ -44,6 +45,8 @@ var avatar_me: Control
 # M4 视听状态
 var _last_hand: Array = []
 var _prev_revolution := false
+var _prev_phase := ""
+var _last_round_ids: Array = []
 var _end_shown := false
 var _field_count := -1
 var _turn_total := -1.0
@@ -105,6 +108,8 @@ func _new_match() -> void:
 	selected.clear()
 	_end_shown = false
 	_prev_revolution = false
+	_prev_phase = ""
+	_last_round_ids = []
 	_field_count = -1
 	_last_hand = []
 	# 本地: 我用已装备皮肤, AI 随机皮肤
@@ -116,6 +121,8 @@ func _new_match() -> void:
 		_seat_skins[i] = ids[randi() % ids.size()]
 	_end_shown = false
 	_prev_revolution = false
+	_prev_phase = ""
+	_last_round_ids = []
 	_field_count = -1
 	_last_hand = []
 	_advance()
@@ -145,6 +152,7 @@ func _advance() -> void:
 			if not bool(r["ok"]):
 				push_error("local table: AI 非法动作 %s" % str(r["error"]))
 				break
+			_detect_local_eight_cut(action, r["state"])
 			state = r["state"]
 		elif phase == "exchange":
 			_refresh()
@@ -170,6 +178,7 @@ func _human_apply(action: Dictionary) -> void:
 	if not bool(r["ok"]):
 		_flash_error(str(r["error"]))
 		return
+	_detect_local_eight_cut(action, r["state"])
 	state = r["state"]
 	selected.clear()
 	_refresh()
@@ -280,6 +289,8 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 		Audio.play("pop")
 	elif event == "chat":
 		_append_chat(int(data.get("seat", 0)), str(data.get("text", "")))
+	elif event == "played" and bool(data.get("eight_cut", false)):
+		_spawn_fx("eight_cut")
 
 
 func _append_chat(seat: int, text: String) -> void:
@@ -586,12 +597,28 @@ func _refresh_view(view: Dictionary) -> void:
 	_refresh_field(view)
 	_refresh_hand(view)
 
-	# 革命检测（两种模式统一）
+	# 革命检测（两种模式统一; 换局重置不播反革命）
 	var rev: bool = bool(view["revolution"])
 	if rev != _prev_revolution:
 		_prev_revolution = rev
 		if rev:
-			_revolution_fx()
+			_spawn_fx("revolution")
+		elif phase == "play":
+			_spawn_fx("anti_revolution")
+
+	# 阶段切换: 交换过场 / 一落千丈(上局大富豪本轮垫底)
+	if phase != _prev_phase:
+		if phase == "exchange":
+			_spawn_fx("exchange")
+		var round_over := phase == "round_end" or phase == "game_end"
+		if round_over and (view["identities"] as Array).size() == 4:
+			if _last_round_ids.size() == 4:
+				for s in range(4):
+					if int(_last_round_ids[s]) == 0 and int(view["identities"][s]) == 3:
+						_spawn_fx("fall")
+						break
+			_last_round_ids = (view["identities"] as Array).duplicate()
+		_prev_phase = phase
 
 	var lead: Dictionary = view["lead"]
 	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
@@ -773,31 +800,26 @@ func _refresh_hand(view: Dictionary) -> void:
 
 # ---------------------------------------------------------------- 特效
 
-func _revolution_fx() -> void:
-	Audio.play("revolution")
-	var flash := ColorRect.new()
-	flash.color = Color(0.85, 0.15, 0.12, 0.0)
-	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fx_layer.add_child(flash)
-	var big := _make_label(120, AppTheme.GOLD)
-	big.text = "革 命"
-	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	big.set_anchors_preset(Control.PRESET_CENTER)
-	big.position = Vector2(-200, -80)
-	big.custom_minimum_size = Vector2(400, 160)
-	big.pivot_offset = Vector2(200, 80)
-	big.scale = Vector2(0.4, 0.4)
-	big.modulate.a = 0.0
-	fx_layer.add_child(big)
-	var tw := create_tween()
-	tw.tween_property(flash, "color:a", 0.32, 0.16)
-	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.3)\
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(big, "modulate:a", 1.0, 0.2)
-	tw.tween_interval(0.9)
-	tw.tween_property(flash, "color:a", 0.0, 0.5)
-	tw.parallel().tween_property(big, "modulate:a", 0.0, 0.5)
-	tw.tween_callback(func() -> void:
-		flash.queue_free()
-		big.queue_free())
+
+func _spawn_fx(fx_type: String) -> void:
+	var sounds := {
+		"revolution": "revolution", "anti_revolution": "revolution",
+		"eight_cut": "eight_cut", "fall": "fall", "exchange": "exchange",
+	}
+	Audio.play(str(sounds.get(fx_type, "pop")))
+	if fx_layer != null:
+		fx_layer.add_child(FxOverlayScript.create(fx_type))
+
+
+## 本地对局: 出牌动作后检测 8 切(含8的牌清空了桌面)
+func _detect_local_eight_cut(action: Dictionary, st_after: Dictionary) -> void:
+	if str(action.get("t", "")) != "play":
+		return
+	var field_empty: bool = (st_after["field"] as Array).is_empty()
+	var lead_empty: bool = (st_after["lead"] as Dictionary).is_empty()
+	if not (field_empty and lead_empty):
+		return
+	for c in action.get("cards", []):
+		if CardsGd.value(int(c)) == 8:
+			_spawn_fx("eight_cut")
+			return

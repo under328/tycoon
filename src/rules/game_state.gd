@@ -181,6 +181,19 @@ static func _finish_player(st: Dictionary, seat: int) -> Dictionary:
 				break
 		var order: Array = st["finish_order"]
 		var ids := ScoringGd.identities(order.slice(0, 3), int(order[3]))
+		# 一落千丈: 上局大富豪未保住第一 → 与本局末位互换身份
+		var prev: Array = st["identities"]
+		if prev.size() == 4:
+			var rich := prev.find(0)
+			if rich >= 0 and int(ids[rich]) != 0:
+				var last_seat := rich
+				for s in SEATS:
+					if int(ids[s]) == 3:
+						last_seat = s
+						break
+				var tmp: int = int(ids[rich])
+				ids[rich] = 3
+				ids[last_seat] = tmp
 		var deltas := [0, 0, 0, 0]
 		for s in SEATS:
 			deltas[s] = ScoringGd.round_delta(int(ids[s]))

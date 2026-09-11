@@ -6,6 +6,7 @@ extends RefCounted
 const GameStateGd = preload("res://src/rules/game_state.gd")
 const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 const ComboGd = preload("res://src/rules/combo.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 
 var state: Dictionary
 var seat_peer: Array = []      # 座位 → peer id（AI 为 -1）
@@ -82,8 +83,17 @@ func _step(action: Dictionary, now_ms: int) -> Dictionary:
 	var t: String = str(action.get("t", ""))
 	if t == "play":
 		var combo := ComboGd.identify(action.get("cards", []), state["cfg"])
+		var cleared: bool = (state["field"] as Array).is_empty() \
+				and (state["lead"] as Dictionary).is_empty()
+		var is_eight_cut := cleared and bool(state["cfg"]["eight_cut"])
+		if is_eight_cut:
+			is_eight_cut = false
+			for c in combo.get("cards", []):
+				if CardsGd.value(int(c)) == 8:
+					is_eight_cut = true
+					break
 		events.append({"event": "s_game_played", "data": {
-			"seat": seat, "combo": combo,
+			"seat": seat, "combo": combo, "eight_cut": is_eight_cut,
 			"remain": (state["hands"][seat] as Array).size(),
 		}})
 	elif t == "pass":

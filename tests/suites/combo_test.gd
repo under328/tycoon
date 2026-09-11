@@ -1,10 +1,10 @@
-## 牌型识别与比较测试（对应 docs/规则规格.md §4）。
+## 牌型识别与比较测试（v2: 仅 单张/对子/三条/四条, ♠3 单出最强, 无顺子/階段）。
 ## 牌 id 备查: 0..3=3(♠♥♦♣) 4..7=4 … 32..35=J 36..39=Q 40..43=K 44..47=A 48..51=2 52/53=王
 extends RefCounted
 
 const ComboGd = preload("res://src/rules/combo.gd")
 
-var cfg: Dictionary = {"stairs": true}
+var cfg: Dictionary = {}
 
 
 func run(t) -> void:
@@ -30,28 +30,21 @@ func run(t) -> void:
 	t.expect_eq(ComboGd.identify([48, 49, 50, 51], cfg)["key"], 15, "四条2 key=15")
 	t.expect(ComboGd.identify([0, 1, 2, 3, 4], cfg).is_empty(), "五张同点非法")
 
-	# --- 顺子 ---
-	var s := ComboGd.identify([0, 5, 10], cfg)  # 3♠ 4♥ 5♠
-	t.expect_eq(s["key"], 5, "345 端点 5")
-	t.expect_eq(s["len"], 3, "345 长度 3")
-	var s4 := ComboGd.identify([0, 4, 8, 12], cfg)  # 3♠4♠5♠6♠
-	t.expect_eq(s4["len"], 4, "3456 长度 4")
-	t.expect_eq(ComboGd.identify([32, 37, 42], cfg)["key"], 13, "J♠Q♥K♦ → 端点 K")
-	t.expect_eq(ComboGd.identify([36, 40, 45], cfg)["key"], 14, "Q♠K♦A♥ → 端点 A")
-	t.expect(ComboGd.identify([36, 45, 50], cfg).is_empty(), "Q,A,2 跳过K 非顺子")
-	t.expect(ComboGd.identify([0, 8], cfg).is_empty(), "两张不成顺")
-	t.expect(ComboGd.identify([0, 8, 12], cfg).is_empty(), "3♠5♠6♠ 缺口无王不可补")
-	t.expect_eq(ComboGd.identify([0, 9, 52], cfg)["key"], 5, "3♠5♥+王 → 345 端点5")
+	# --- 顺子/階段: v2 已废除, 一律非法 ---
+	t.expect(ComboGd.identify([0, 5, 10], cfg).is_empty(), "345 顺子非法")
+	t.expect(ComboGd.identify([0, 4, 8, 12], cfg).is_empty(), "3456 连顺非法")
+	t.expect(ComboGd.identify([32, 37, 42], cfg).is_empty(), "J Q K 顺子非法")
+	t.expect(ComboGd.identify([0, 4, 52], cfg).is_empty(), "3 4 +王 不能补成顺子")
+	t.expect(ComboGd.identify([0, 9, 52], cfg).is_empty(), "3 6 +王 不能补成顺子")
 	# 王补位优先解释为同点数组合（规格 §4）
 	var jj := ComboGd.identify([0, 52, 53], cfg)
 	t.expect_eq(jj["type"], ComboGd.Type.TRIPLE, "3♠+两王 优先成三条3")
 	t.expect_eq(jj["key"], 3, "三条3 key=3")
 	t.expect(ComboGd.identify([44, 48, 52], cfg).is_empty(), "A2+王 端点越界(超过2)非法")
 
-	# --- 階段（同花顺）---
-	var stair := ComboGd.identify([0, 4, 8], cfg)  # 3♠4♠5♠
-	var off := ComboGd.identify([0, 4, 8], {"stairs": false})
-	var with_joker := ComboGd.identify([0, 4, 52], cfg)  # 3♠4♠+王
+	# --- ♠3 特判 ---
+	t.expect(ComboGd.identify([0], cfg)["key"] > ComboGd.identify([52], cfg)["key"], "♠3 单张压王")
+	t.expect(ComboGd.identify([0, 1], cfg)["key"] == 3, "♠3 成对后按 3 计")
 
 	# --- 比较与革命 ---
 	t.expect(ComboGd.beats({"type": 1, "key": 5, "len": 2}, {"type": 1, "key": 3, "len": 2}, false),
@@ -64,7 +57,9 @@ func run(t) -> void:
 			"革命: 对2 不压 对3")
 	t.expect(not ComboGd.beats({"type": 0, "key": 16, "len": 1}, {"type": 1, "key": 3, "len": 2}, false),
 			"牌型不同 互不压")
-	t.expect(not ComboGd.beats({"type": 4, "key": 8, "len": 4}, {"type": 4, "key": 6, "len": 3}, false),
-			"顺子长度不同 互不压")
-	t.expect(not ComboGd.beats({"type": 5, "key": 8, "len": 3}, {"type": 4, "key": 8, "len": 3}, false),
-			"階段与顺子 互不压")
+	t.expect(not ComboGd.beats({"type": 1, "key": 15, "len": 2}, {"type": 1, "key": 3, "len": 3}, false),
+			"长度不同 互不压")
+	t.expect(ComboGd.beats({"type": 3, "key": 8, "len": 4}, {"type": 3, "key": 3, "len": 4}, false),
+			"四条8 压 四条3")
+	t.expect(ComboGd.beats({"type": 3, "key": 3, "len": 4}, {"type": 3, "key": 8, "len": 4}, true),
+			"革命: 四条3 压 四条8")
