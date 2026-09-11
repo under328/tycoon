@@ -437,10 +437,10 @@ func _build_ui() -> void:
 	# 牌桌中央: 桌面区
 	var field_panel := Panel.new()
 	var field_sb := StyleBoxFlat.new()
-	field_sb.bg_color = AppTheme.PANEL
-	field_sb.set_corner_radius_all(12)
-	field_sb.set_border_width_all(1)
-	field_sb.border_color = Color(0.79, 0.66, 0.24, 0.45)
+	field_sb.bg_color = Color(0.09, 0.09, 0.20, 0.94)
+	field_sb.set_corner_radius_all(14)
+	field_sb.set_border_width_all(2)
+	field_sb.border_color = Color(AppTheme.GOLD, 0.50)
 	field_panel.add_theme_stylebox_override("panel", field_sb)
 	field_panel.position = Vector2(320, 216)
 	field_panel.custom_minimum_size = Vector2(640, 214)

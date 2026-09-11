@@ -9,9 +9,12 @@ const COLOR_INDIGO := Color("3a3a6e")
 
 var _t := 0.0
 var _grad := GradientTexture2D.new()
+var _vignette := GradientTexture2D.new()
 var _back_sb := StyleBoxFlat.new()
 var _petals: Array = []
 var _cards: Array = []
+var _stars: Array = []
+var _birds: Array = []
 
 
 func _ready() -> void:
@@ -24,6 +27,13 @@ func _ready() -> void:
 	_grad.gradient = g
 	_grad.fill_from = Vector2(0, 0)
 	_grad.fill_to = Vector2(0, 1)
+	var vg := Gradient.new()
+	vg.offsets = PackedFloat32Array([0.55, 1.0])
+	vg.colors = PackedColorArray([Color(0, 0, 0, 0.0), Color(0, 0, 0, 0.5)])
+	_vignette.gradient = vg
+	_vignette.fill = GradientTexture2D.FILL_RADIAL
+	_vignette.fill_from = Vector2(0.5, 0.5)
+	_vignette.fill_to = Vector2(1.0, 1.0)
 
 	_back_sb.bg_color = Color("20204a")
 	_back_sb.set_corner_radius_all(6)
@@ -40,6 +50,20 @@ func _ready() -> void:
 			"sway_spd": rng.randf_range(0.6, 1.6),
 			"r": rng.randf_range(1.4, 3.4),
 			"a": rng.randf_range(0.25, 0.7),
+		})
+	for i in 70:
+		_stars.append({
+			"x": rng.randf(), "y": rng.randf() * 0.55,
+			"r": rng.randf_range(0.8, 2.2),
+			"tw": rng.randf_range(0, TAU),
+			"tw_spd": rng.randf_range(1.0, 3.0),
+		})
+	for i in 5:
+		_birds.append({
+			"x": rng.randf(), "y": rng.randf_range(0.12, 0.38),
+			"spd": rng.randf_range(0.008, 0.016),
+			"ph": rng.randf_range(0, TAU),
+			"s": rng.randf_range(0.7, 1.3),
 		})
 	for i in 6:
 		_cards.append({
@@ -67,6 +91,11 @@ func _process(delta: float) -> void:
 			c["x"] = -0.02
 		elif float(c["x"]) < -0.02:
 			c["x"] = 1.02
+	for b in _birds:
+		b["x"] -= b["spd"] * delta
+		if float(b["x"]) < -0.05:
+			b["x"] = 1.05
+			b["y"] = randf_range(0.10, 0.40)
 	queue_redraw()
 
 
@@ -76,14 +105,38 @@ func _draw() -> void:
 		return
 	draw_texture_rect(_grad, Rect2(Vector2.ZERO, sz), false)
 
+	for st in _stars:
+		var tw_a := 0.25 + 0.45 * (0.5 + 0.5 * sin(_t * float(st["tw_spd"]) + float(st["tw"])))
+		draw_circle(Vector2(float(st["x"]) * sz.x, float(st["y"]) * sz.y),
+				float(st["r"]), Color(Wafu.GOLD, tw_a * 0.5))
 	var sun := Vector2(sz.x * 0.76, sz.y * 0.30)
+	var breath := 1.0 + 0.05 * sin(_t * 1.4)
+	draw_circle(sun, 150.0 * breath, Color(Wafu.RED, 0.08))
+	draw_circle(sun, 132.0 * breath, Color(Wafu.RED, 0.10))
 	Wafu.sun(self, sun, 110.0)
 
 	Wafu.mountains(self, sz, sz.y * 0.66 - 30.0, sz.y * 0.30, Color("101028"))
 	Wafu.mountains(self, sz, sz.y * 0.66 + 10.0, sz.y * 0.22, Color("181834"))
 
+	var torii_c := Vector2(sz.x * 0.30, sz.y * 0.52)
+	var tw2 := 46.0
+	var torii := PackedVector2Array([
+		torii_c + Vector2(-tw2 * 0.75, 0), torii_c + Vector2(-tw2 * 0.55, -tw2 * 0.95),
+		torii_c + Vector2(tw2 * 0.55, -tw2 * 0.95), torii_c + Vector2(tw2 * 0.75, 0),
+	])
+	draw_colored_polygon(torii, Color(0.05, 0.04, 0.10, 0.85))
+	draw_rect(Rect2(torii_c + Vector2(-tw2 * 1.05, -tw2 * 1.18), Vector2(tw2 * 2.1, tw2 * 0.14)),
+			Color(0.05, 0.04, 0.10, 0.85))
+	draw_rect(Rect2(torii_c + Vector2(-tw2 * 0.85, -tw2 * 0.86), Vector2(tw2 * 1.7, tw2 * 0.11)),
+			Color(0.05, 0.04, 0.10, 0.85))
 	Wafu.seigaiha(self, sz, sz.y * 0.78, 4, 44.0, _t * 6.0,
 			COLOR_INDIGO.lerp(Color.BLACK, 0.25), Color(COLOR_GOLD, 0.35))
+	for b in _birds:
+		var bp := Vector2(float(b["x"]) * sz.x, float(b["y"]) * sz.y)
+		var s: float = float(b["s"])
+		var flap := sin(_t * 6.0 + float(b["ph"])) * 4.0 * s
+		draw_line(bp + Vector2(-7 * s, flap), bp, Color(0.06, 0.05, 0.12, 0.85), 1.6 * s, true)
+		draw_line(bp, bp + Vector2(7 * s, flap), Color(0.06, 0.05, 0.12, 0.85), 1.6 * s, true)
 
 	for c in _cards:
 		var pos := Vector2(float(c["x"]) * sz.x, float(c["y"]) * sz.y) \
@@ -110,4 +163,21 @@ func _draw() -> void:
 	Wafu.stripes(self, Rect2(sz.x * 0.62, 0, sz.x * 0.38, sz.y * 0.16), 26.0,
 			Color(Wafu.GOLD, 0.05))
 
+	var branch := PackedVector2Array([
+		Vector2(0, 26), Vector2(90, 40), Vector2(180, 34), Vector2(260, 62),
+		Vector2(330, 58), Vector2(392, 96),
+	])
+	draw_polyline(branch, Color(0.07, 0.05, 0.10, 0.9), 9.0, true)
+	draw_polyline(PackedVector2Array([
+		Vector2(180, 34), Vector2(238, 20), Vector2(300, 8),
+	]), Color(0.07, 0.05, 0.10, 0.9), 6.0, true)
+	var blossoms := [Vector2(96, 30), Vector2(196, 22), Vector2(268, 54),
+			Vector2(340, 50), Vector2(300, 6), Vector2(392, 92), Vector2(60, 34)]
+	for bl in blossoms:
+		for pi in 5:
+			var ang := TAU * pi / 5.0
+			draw_circle(bl + Vector2.from_angle(ang) * 7.5, 5.5,
+					Color(Color("f2b8c6"), 0.85))
+		draw_circle(bl, 3.0, Color(Wafu.GOLD, 0.9))
+	draw_texture_rect(_vignette, Rect2(Vector2.ZERO, sz), false)
 	Wafu.frame(self, sz, Color(Wafu.GOLD, 0.28))

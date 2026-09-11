@@ -287,8 +287,7 @@ func _build_ui() -> void:
 	add_child(help_btn)
 
 	# 服务器地址区(右上)
-	var c2 := AppTheme.make_label(15, COLOR_GOLD)
-	c2.text = "服务器"
+	var c2 := AppTheme.section_label("服务器")
 	c2.position = Vector2(830, 66)
 	add_child(c2)
 	host_edit = LineEdit.new()
@@ -370,8 +369,7 @@ func _build_ui() -> void:
 	add_child(copy_btn)
 
 	# 规则设置
-	var c4 := AppTheme.make_label(15, COLOR_GOLD)
-	c4.text = "规则设置"
+	var c4 := AppTheme.section_label("规则设置")
 	c4.position = Vector2(830, 310)
 	add_child(c4)
 	chk_joker = _check("带王", Vector2(830, 340))

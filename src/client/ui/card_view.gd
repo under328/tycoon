@@ -129,6 +129,10 @@ func _draw_face() -> void:
 	var s := size.y / 100.0
 	# 内框细线(双框)
 	draw_style_box(_inner_sb, Rect2(Vector2(4, 4) * s, size - Vector2(8, 8) * s))
+	# 和纸纵向微渐变(顶部微亮)
+	for gi in 4:
+		draw_rect(Rect2(0, size.y * gi / 4.0, size.x, size.y / 4.0 + 1.0),
+				Color(1, 1, 1, 0.030 * (4 - gi)))
 	# 和纸颗粒与和风角饰
 	Wafu.speckle(self, Rect2(Vector2(5, 5) * s, size - Vector2(10, 10) * s),
 			int(20 * s), 100 + card, _pal["speckle"])
@@ -146,11 +150,21 @@ func _draw_face() -> void:
 		_draw_crest(motif, c0, 24.0 * s, Color(ink, 0.30))
 	else:
 		_draw_center_ring(motif, c0, 23.0 * s, Color(ink, 0.18))
-	# 左上: 点数牌匾(底色=花色) + 白字
-	var plaque := AppTheme.flat(ink, Color(0, 0, 0, 0), 3, 0)
-	plaque.set_content_margin_all(2 * s)
-	plaque.draw(get_canvas_item(), Rect2(Vector2(4, 3) * s, Vector2(19, 22) * s))
-	draw_string(_font_ascii, Vector2(8, 20) * s, rank,
+	# 左上: 斜切点数牌匾(底色=花色) + 白字, P5 语言
+	var pw: float = 21 * s
+	var ph: float = 23 * s
+	var px: float = 5 * s
+	var py: float = 3 * s
+	var skew: float = 4 * s
+	var pl_pts := PackedVector2Array([
+		Vector2(px + skew, py), Vector2(px + pw, py),
+		Vector2(px + pw - skew, py + ph), Vector2(px, py + ph),
+	])
+	draw_colored_polygon(pl_pts, ink)
+	var pl_line := pl_pts.duplicate()
+	pl_line.append(pl_pts[0])
+	draw_polyline(pl_line, Color(_pal["face"], 0.35), 1.0 * s, true)
+	draw_string(_font_ascii, Vector2(px + skew + 3 * s, py + 17 * s), rank,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * s), _pal["face"])
 	_suit(card, Vector2(13, 38) * s, 5.5 * s, ink)
 	# 中心: 大花色(投影 + 内芯环)
@@ -546,6 +560,8 @@ func _draw_back() -> void:
 				draw_circle(cm + Vector2.from_angle(ang) * size.y * 0.11,
 						size.y * 0.07, Color(_pal["face"], 0.8))
 			draw_circle(cm, size.y * 0.045, Color(Wafu.GOLD, 0.9))
-	Wafu.corner_ticks(self, Rect2(Vector2(2, 2) * (size.y / 100.0),
-			size - Vector2(4, 4) * (size.y / 100.0)), 6.0 * (size.y / 100.0),
-			Color(Wafu.GOLD, 0.55))
+	var s2 := size.y / 100.0
+	draw_rect(Rect2(Vector2(5, 5) * s2, size - Vector2(10, 10) * s2),
+			Color(_pal["border"], 0.4), false, 1.5 * s2)
+	Wafu.corner_ticks(self, Rect2(Vector2(2, 2) * s2, size - Vector2(4, 4) * s2),
+			6.0 * s2, Color(Wafu.GOLD, 0.55))

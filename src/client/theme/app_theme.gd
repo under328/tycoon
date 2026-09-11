@@ -52,7 +52,7 @@ static func body_font() -> FontFile:
 	return _body_font
 
 
-## 共享 Theme: 正文黑体默认 + 全局黄油体按钮 + 金色样式(普通/悬停/按下)。
+## 共享 Theme 2.0: 三态按钮(普通/悬停加亮/按下内凹红边) + 正文字体 + 焦点隐藏。
 static func build_theme() -> Theme:
 	if _theme != null:
 		return _theme
@@ -61,10 +61,30 @@ static func build_theme() -> Theme:
 	_theme.default_font_size = 18
 	_theme.set_font("font", "Button", display_font())
 	_theme.set_font_size("font_size", "Button", 18)
-	_theme.set_stylebox("normal", "Button", flat(PANEL, Color(GOLD, 0.55)))
-	_theme.set_stylebox("hover", "Button", flat(Color(0.16, 0.15, 0.34, 0.95), GOLD))
-	_theme.set_stylebox("pressed", "Button", flat(Color(0.22, 0.12, 0.16, 0.95), GOLD))
+	# 普通态: 深靛面板 + 弱金描边
+	var bn := flat(PANEL, Color(GOLD, 0.45), 8, 1)
+	bn.content_margin_left = 14
+	bn.content_margin_right = 14
+	bn.content_margin_top = 8
+	bn.content_margin_bottom = 8
+	# 悬停态: 亮面板 + 实金描边
+	var bh := flat(Color(0.17, 0.16, 0.36, 0.97), GOLD, 8, 2)
+	bh.content_margin_left = 14
+	bh.content_margin_right = 14
+	bh.content_margin_top = 8
+	bh.content_margin_bottom = 8
+	# 按下态: 内凹 + 朱红描边
+	var bp := flat(Color(0.20, 0.11, 0.14, 0.97), Color(RED, 0.9), 8, 2)
+	bp.content_margin_left = 15
+	bp.content_margin_right = 13
+	bp.content_margin_top = 9
+	bp.content_margin_bottom = 7
+	_theme.set_stylebox("normal", "Button", bn)
+	_theme.set_stylebox("hover", "Button", bh)
+	_theme.set_stylebox("pressed", "Button", bp)
 	_theme.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	_theme.set_color("font_hover_color", "Button", Color("ffd75e"))
+	_theme.set_color("font_pressed_color", "Button", Color("ffd75e"))
 	return _theme
 
 
@@ -75,6 +95,25 @@ static func flat(bg: Color, border: Color, radius := 8, border_width := 2) -> St
 	sb.set_border_width_all(border_width)
 	sb.border_color = border
 	return sb
+
+
+## 分区标题: 斜切红块 + 金字(P5 语言)
+static func section_label(text: String, size := 15) -> Label:
+	var lb := make_label(size, GOLD)
+	lb.text = "▎" + text
+	lb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	lb.add_theme_constant_override("shadow_offset_x", 1)
+	lb.add_theme_constant_override("shadow_offset_y", 1)
+	return lb
+
+
+## 带阴影的文字(深色桌面/背景上更清晰)
+static func make_shadow_label(size: int, color: Color) -> Label:
+	var lb := make_label(size, color)
+	lb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	lb.add_theme_constant_override("shadow_offset_x", 1)
+	lb.add_theme_constant_override("shadow_offset_y", 1)
+	return lb
 
 
 static func make_label(size: int, color: Color) -> Label:
