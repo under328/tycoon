@@ -9,13 +9,13 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 # 每页: [标题, 正文(bbcode), 图示编号]
 const PAGES := [
 	["三步开始联机",
-		"[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 游戏内置服务器随之启动。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【创建房间】[/color], 把 6 位房间码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 在右上角【服务器】填主机的 IP 并【连接】, 再输房间码【加入】。\n四个人凑不齐? 房主点【空位加AI】补机器人。", 0],
+		"[color=#7dd87d]准备(一次性)[/color]: 每台设备安装并登录 [color=#e0a83c]Tailscale[/color](免费, tailscale.com)。\n[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 大厅会显示你的 100.x.x.x 专用地址。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【创建房间】[/color], 把 100.x.x.x 和 6 位房间码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 右上角【服务器】填 100.x.x.x → 【连接】→ 输房间码【加入】。", 0],
 	["朋友怎么连进来",
-		"[color=#7dd87d]同一 WiFi / 热点[/color]: 主机把局域网 IP(192.168.x.x)发给朋友, 直接填。\n[color=#7dd87d]跨城市 / 不同网络[/color]: 双方安装 [color=#e0a83c]Tailscale[/color](免费), 登录同一账号后互填 100.x.x.x 虚拟 IP, 效果等同同一局域网。\n朋友操作: 右上角【服务器】填 IP → 【连接】→ 状态变绿 → 输入房间码【加入】。", 1],
+		"所有设备各装一个 [color=#e0a83c]Tailscale[/color](免费), 各自登录账号即可。\n登录后每台设备都会获得一个 [color=#e0a83c]100.x.x.x[/color] 专用地址。\n朋友操作: 右上角【服务器】填主机的 100.x.x.x → 【连接】→ 状态变绿 → 输入房间码【加入】。\n不在同一 WiFi 也能玩, 跨城市/跨运营商都没有问题。", 1],
 	["主机专用说明",
-		"【本机开房】会在后台启动一台内置服务器, 你的客户端自动连入本机。\n服务器地址会被记住; 朋友连你, 改的是[color=#e0a83c]朋友自己[/color]的【服务器】地址。\n房主权限: 空位加AI / 开始游戏 / 移除玩家 / 修改规则(开局前)。\n首次运行弹出的防火墙提示请点【允许】(需要 UDP 24565 端口)。", 2],
+		"【本机开房】会在后台启动一台内置服务器, 你的客户端自动连入本机。\n点完后状态栏会显示你的 Tailscale IP(100.x.x.x), 把它和房间码一起发给朋友。\n服务器地址会被记住; 朋友连你, 改的是[color=#e0a83c]朋友自己[/color]的【服务器】地址。\n房主权限: 空位加AI / 开始游戏 / 移除玩家 / 修改规则(开局前)。", 2],
 	["常见问题",
-		"[color=#e0a83c]一直「无法连接」?[/color] 确认主机在线、IP 填对、双方在同一网络(或已装 Tailscale)。\n[color=#e0a83c]被踢出并提示版本?[/color] 主机的游戏版本更新了, 重新下载进入即可。\n[color=#e0a83c]对局中掉线?[/color] 自动凭凭证重连回座(掉线期间 AI 代打), 无需任何操作。\n[color=#e0a83c]想换服务器?[/color] 右上角改地址点【连接】, 地址会自动保存。", 3],
+		"[color=#e0a83c]一直「无法连接」?[/color] 确认主机在线、双方 Tailscale 都已登录、填的是 100.x.x.x。\n[color=#e0a83c]被踢出并提示版本?[/color] 主机的游戏版本更新了, 重新下载进入即可。\n[color=#e0a83c]对局中掉线?[/color] 自动凭凭证重连回座(掉线期间 AI 代打), 无需任何操作。\n[color=#e0a83c]想换服务器?[/color] 右上角改地址点【连接】, 地址会自动保存。", 3],
 ]
 
 var page := 0
@@ -158,13 +158,13 @@ func _build_fig(kind: int) -> void:
 				if i < steps.size() - 1:
 					_line(Vector2(520, 80 + i * 84), Vector2(520, 104 + i * 84))
 		1:  # 朋友加入: 设备连线图
-			_box(Vector2(60, 90), Vector2(240, 90), "朋友 A\n填主机 IP → 连接", AppTheme.WHITE, 16)
-			_box(Vector2(380, 70), Vector2(240, 100), "主机(你)\n本机开房 · 房间码", AppTheme.GOLD, 16)
-			_box(Vector2(700, 90), Vector2(240, 90), "朋友 B\nTailscale 虚拟 IP", AppTheme.WHITE, 16)
+			_box(Vector2(60, 90), Vector2(240, 90), "朋友 A\n填 100.x.x.x → 连接", AppTheme.WHITE, 16)
+			_box(Vector2(380, 70), Vector2(240, 100), "主机(你) 100.y.y.y\n本机开房 · 房间码", AppTheme.GOLD, 16)
+			_box(Vector2(700, 90), Vector2(240, 90), "朋友 B\n填 100.x.x.x → 连接", AppTheme.WHITE, 16)
 			_line(Vector2(300, 135), Vector2(380, 120))
 			_line(Vector2(620, 120), Vector2(700, 135))
-			_text("同一 WiFi: 192.168.x.x", Vector2(150, 210))
-			_text("跨网络: 装 Tailscale, 100.x.x.x", Vector2(600, 210))
+			_text("所有设备装 Tailscale", Vector2(150, 210))
+			_text("tailscale.com 免费下载", Vector2(600, 210))
 			_text("朋友在大厅右上角【服务器】里填 IP", Vector2(240, 250), AppTheme.GOLD, 16)
 		2:  # 主机流程链
 			var flow := ["本机开房", "创建房间", "复制房间码", "空位加AI", "开始游戏"]

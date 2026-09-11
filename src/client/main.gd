@@ -110,9 +110,13 @@ func _start_host() -> void:
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to("127.0.0.1", port)
-	var ips := _lan_ips()
-	lobby.show_status("本机服务器已启动（端口 %d）\n本机 IP: %s\n朋友在右上「服务器」填上面的 IP 点「连接」，再输房间码加入"
-			% [port, " / ".join(ips)])
+	var ts := _tailscale_ips()
+	if ts.is_empty():
+		lobby.show_status("本机服务器已启动（端口 %d）\n未检测到 Tailscale IP。\n请先在所有设备上安装并登录 Tailscale（tailscale.com，免费），再重新点击本机开房。" % port,
+				Color("ffd75e"))
+	else:
+		lobby.show_status("本机服务器已启动（端口 %d）\n把你的 Tailscale IP 发给朋友: %s\n朋友在大厅右上「服务器」填上面的 IP 点「连接」，再输房间码加入"
+				% [port, " / ".join(ts)])
 
 
 func _stop_host() -> void:
@@ -121,24 +125,14 @@ func _stop_host() -> void:
 		embed_server = null
 
 
-func _lan_ips() -> Array:
-	var out := []
+## Tailscale 虚拟网 IP(100.x.x.x): 跨网络联机的首选地址
+func _tailscale_ips() -> Array:
+	var out: Array = []
 	for ip in IP.get_local_addresses():
 		var s := str(ip)
 		var parts := s.split(".")
-		if parts.size() != 4:
-			continue
-		var a := int(parts[0])
-		var b := int(parts[1])
-		var is_private := a == 192 and b == 168
-		if a == 10:
-			is_private = true
-		if a == 172 and b >= 16 and b <= 31:
-			is_private = true
-		if is_private:
+		if parts.size() == 4 and int(parts[0]) == 100:
 			out.append(s)
-	if out.is_empty():
-		out.append("127.0.0.1")
 	return out
 
 
