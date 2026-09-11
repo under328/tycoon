@@ -27,5 +27,14 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"identities": (st["identities"] as Array).duplicate(),
 		"last_points": (st["last_points"] as Array).duplicate(),
 		"exchange": (st["exchange"] as Array).duplicate(true),
+		"exchange_return": _pending_return(st),
 		"must_include": st["must_include"],
 	}
+
+
+static func _pending_return(st: Dictionary) -> Dictionary:
+	var pend: Array = st.get("exchange_returns", [])
+	if pend.is_empty():
+		return {}
+	var cur: Dictionary = pend[0]
+	return {"seat": int(cur["seat"]), "n": int(cur["n"]), "to": int(cur["to"])}

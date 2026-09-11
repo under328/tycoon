@@ -19,6 +19,7 @@ signal stats_updated(entry: Dictionary)
 const MsgC = preload("res://src/protocol/msg.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
 const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 
 var is_server := false
 var server_port := 0   # >0 时 _ready 用它, 否则读 AppMode(专用服务器 CLI)
@@ -232,6 +233,13 @@ func c_game_pass(_data: Dictionary) -> void:
 	if not is_server:
 		return
 	_flush(manager.pass_turn(_sender()))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_exchange_return(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.exchange_return(_sender(), data.get("cards", [])))
 
 
 # ================================================================ S → C
@@ -459,6 +467,11 @@ func pass_turn() -> void:
 	_c_send("c_game_pass", {})
 
 
+## 换牌阶段: 返还 n 张牌
+func exchange_return(cards: Array) -> void:
+	_c_send("c_exchange_return", {"cards": cards})
+
+
 ## 房主：修改房间规则（对局未开始时）
 func set_settings(rules: Dictionary) -> void:
 	_c_send("c_room_settings", {"rules": rules})
@@ -586,6 +599,15 @@ func _sender() -> int:
 
 func _autoplay_tick() -> void:
 	if not _autoplay_armed or latest_view.is_empty() or my_seat < 0:
+		return
+	if str(latest_view["phase"]) == "exchange":
+		var er: Dictionary = latest_view.get("exchange_return", {})
+		if er.is_empty() or int(er.get("seat", -1)) != my_seat:
+			return
+		_autoplay_armed = false
+		var hand: Array = latest_view["hand"].duplicate()
+		CardsGd.sort_cards(hand)
+		exchange_return(hand.slice(0, int(er["n"])))
 		return
 	if str(latest_view["phase"]) != "play":
 		return

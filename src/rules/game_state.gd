@@ -36,7 +36,7 @@ static func new_match(cfg: Dictionary, seed_v: int = -1) -> Dictionary:
 	return st
 
 
-## 动作: play{seat,cards} / pass{seat} / exchange_done{seat} / next_round
+## 动作: play{seat,cards} / pass{seat} / exchange_return{seat,cards} / next_round
 static func apply(state: Dictionary, action: Dictionary) -> Dictionary:
 	var st: Dictionary = state.duplicate(true)
 	st["error"] = ""
@@ -47,8 +47,8 @@ static func apply(state: Dictionary, action: Dictionary) -> Dictionary:
 			return _do_play(st, seat, action.get("cards", []))
 		"pass":
 			return _do_pass(st, seat)
-		"exchange_done":
-			return _do_exchange_done(st)
+		"exchange_return":
+			return _do_exchange_return(st, action)
 		"next_round":
 			return _do_next_round(st)
 		_:
@@ -145,11 +145,11 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 		_give(st, beggar, millionaire, 2),
 		_give(st, commoner, rich, 1),
 	]
-	# 强者返还等量最弱牌
-	var ret1 := _return_cards(st, millionaire, beggar, 2)
-	var ret2 := _return_cards(st, rich, commoner, 1)
-	st["exchange"].append(ret1)
-	st["exchange"].append(ret2)
+	# 强者返还等量"任意牌"——由接收者自选(M3 换牌流程), 依次结算
+	st["exchange_returns"] = [
+		{"seat": millionaire, "to": beggar, "n": 2},
+		{"seat": rich, "to": commoner, "n": 1},
+	]
 	st["revolution"] = false
 	st["quads"] = 0
 	st["finish_order"] = []
@@ -159,15 +159,41 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 	st["last_player"] = -1
 	st["must_include"] = -1
 	st["phase"] = "exchange"
-	st["turn"] = beggar
+	st["turn"] = millionaire
 	return _ok(st)
 
 
-static func _do_exchange_done(st: Dictionary) -> Dictionary:
+## 接收者选定返还牌: 数量校验 + 归属校验, 全部返还完进入 play(乞丐先出)。
+static func _do_exchange_return(st: Dictionary, action: Dictionary) -> Dictionary:
 	if st["phase"] != "exchange":
 		return _fail(st, "not_exchange")
-	st["phase"] = "play"
-	st["turn"] = _seat_with_identity(st["identities"], 3)  # 乞丐先出
+	var pending: Array = st.get("exchange_returns", [])
+	if pending.is_empty():
+		return _fail(st, "not_exchange")
+	var cur: Dictionary = pending[0]
+	var seat := int(action.get("seat", -1))
+	if seat != int(cur["seat"]):
+		return _fail(st, "not_your_turn")
+	var cards: Array = action.get("cards", [])
+	if cards.size() != int(cur["n"]):
+		return _fail(st, "wrong_card_count")
+	var hand: Array = st["hands"][seat]
+	for c in cards:
+		if not hand.has(c):
+			return _fail(st, "card_not_in_hand")
+	for c in cards:
+		hand.erase(c)
+	for c in cards:
+		st["hands"][int(cur["to"])].append(c)
+	CardsGd.sort_cards(st["hands"][int(cur["to"])])
+	st["exchange"].append({"from": seat, "to": int(cur["to"]),
+			"cards": cards.duplicate(), "count": cards.size()})
+	pending.pop_front()
+	if pending.is_empty():
+		st["phase"] = "play"
+		st["turn"] = _seat_with_identity(st["identities"], 3)  # 乞丐先出
+	else:
+		st["turn"] = int(pending[0]["seat"])
 	return _ok(st)
 
 
@@ -230,6 +256,7 @@ static func _empty_state(cfg: Dictionary, seed_v: int) -> Dictionary:
 		"last_points": [],
 		"must_include": -1,
 		"exchange": [],
+		"exchange_returns": [],
 		"error": "",
 	}
 
@@ -273,19 +300,6 @@ static func _give(st: Dictionary, from_seat: int, to_seat: int, count: int) -> D
 	var hand: Array = st["hands"][from_seat]
 	CardsGd.sort_cards(hand)
 	var cards: Array = hand.slice(hand.size() - count)
-	for c in cards:
-		hand.erase(c)
-	for c in cards:
-		st["hands"][to_seat].append(c)
-	CardsGd.sort_cards(st["hands"][to_seat])
-	return {"from": from_seat, "to": to_seat, "cards": cards, "count": count}
-
-
-## 强者返还等量最弱牌给弱者（换牌的"回礼"环节）。
-static func _return_cards(st: Dictionary, from_seat: int, to_seat: int, count: int) -> Dictionary:
-	var hand: Array = st["hands"][from_seat]
-	CardsGd.sort_cards(hand)
-	var cards: Array = hand.slice(0, count)  # 最弱的 count 张
 	for c in cards:
 		hand.erase(c)
 	for c in cards:

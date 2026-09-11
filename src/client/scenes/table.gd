@@ -158,13 +158,44 @@ func _advance() -> void:
 			state = r["state"]
 		elif phase == "exchange":
 			_refresh()
-			await get_tree().create_timer(EXCHANGE_SHOW_SEC).timeout
-			var r2 := GameStateGd.apply(state, {"t": "exchange_done", "seat": int(state["turn"])})
+			# 返还选牌: 轮到玩家(座位0)时等待其选牌确认, AI 由 bot 决策
+			var er: Dictionary = _pending_return_for(0)
+			if not er.is_empty():
+				break  # 等玩家选牌
+			await get_tree().create_timer(AI_THINK_SEC).timeout
+			var action := BotPlayerGd.decide(state, int(state["turn"]))
+			var r2 := GameStateGd.apply(state, action)
+			if not bool(r2["ok"]):
+				push_error("local table: 换牌返还非法 %s" % str(r2["error"]))
+				break
 			state = r2["state"]
 		elif phase == "round_end" or phase == "game_end":
 			break  # 等按钮
 	_refresh()
 	advancing = false
+
+
+## 当前待返还的换牌任务(本地=state, 联机=latest_view)
+func _current_view() -> Dictionary:
+	if mode == "online" and net != null and not (net.latest_view as Dictionary).is_empty():
+		return net.latest_view
+	if state.is_empty():
+		return {}
+	return ViewGd.build(state, 0)
+
+
+func _pending_return_for(seat: int) -> Dictionary:
+	var er: Dictionary = _current_view().get("exchange_return", {})
+	if er.is_empty() or int(er.get("seat", -1)) != seat:
+		return {}
+	return er
+
+
+func _my_pending_return(view: Dictionary) -> Dictionary:
+	var er: Dictionary = view.get("exchange_return", {})
+	if er.is_empty() or int(er.get("seat", -1)) != int(view["my_seat"]):
+		return {}
+	return er
 
 
 func _local_apply(action: Dictionary) -> Dictionary:
@@ -189,6 +220,22 @@ func _human_apply(action: Dictionary) -> void:
 
 func _on_play_pressed() -> void:
 	Audio.play("click")
+	# 换牌阶段: 确认返还所选牌
+	var cur_view: Dictionary = _current_view()
+	if str(cur_view.get("phase", "")) == "exchange":
+		var er: Dictionary = _my_pending_return(cur_view)
+		if er.is_empty():
+			return
+		if selected.size() != int(er["n"]):
+			_flash_error("需选择 %d 张返还" % int(er["n"]))
+			return
+		var cards: Array = selected.duplicate()
+		selected.clear()
+		if mode == "online":
+			net.exchange_return(cards)
+		else:
+			_human_apply({"t": "exchange_return", "seat": 0, "cards": cards})
+		return
 	if mode == "online":
 		if selected.is_empty():
 			_flash_error("先选牌")
@@ -653,7 +700,14 @@ func _refresh_view(view: Dictionary) -> void:
 			status_label.text = "等待 %s 出牌…" % _seat_name(view, int(view["turn"]))
 			status_label.add_theme_color_override("font_color", AppTheme.DIM)
 	elif phase == "exchange":
-		status_label.text = "局间交换：乞丐→大富豪 2 张，平民→富豪 1 张"
+		var er: Dictionary = _my_pending_return(view)
+		if not er.is_empty():
+			status_label.text = "换牌：请选 %d 张返还给 %s（已选 %d）" % [
+					int(er["n"]), _seat_name(view, int(er["to"])), selected.size()]
+		elif int(view["turn"]) >= 0:
+			status_label.text = "等待 %s 选牌返还…" % _seat_name(view, int(view["turn"]))
+		else:
+			status_label.text = "局间交换"
 		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 	elif phase == "round_end":
 		status_label.text = "本局结束   " + _round_end_text(view)
@@ -662,7 +716,9 @@ func _refresh_view(view: Dictionary) -> void:
 		status_label.text = "全场结束！  " + _round_end_text(view)
 		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 
-	btn_play.visible = my_turn
+	var returning := not _my_pending_return(view).is_empty()
+	btn_play.visible = my_turn or returning
+	btn_play.text = "确认返还" if returning else "出牌"
 	btn_hint.visible = my_turn
 	btn_pass.visible = my_turn and not lead.is_empty()
 	btn_next.visible = mode == "local" and phase == "round_end"
@@ -674,6 +730,7 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase == "game_end" and not _end_shown \
 			and (view["identities"] as Array).size() == 4:
 		_end_shown = true
+		Audio.play("result")
 		var reward: Dictionary = {}
 		if mode == "local":
 			var my_rank := int(view["identities"][int(view["my_seat"])])

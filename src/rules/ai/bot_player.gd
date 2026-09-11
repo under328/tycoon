@@ -12,9 +12,20 @@ const GameStateGd = preload("res://src/rules/game_state.gd")
 static func decide(st: Dictionary, seat: int) -> Dictionary:
 	match str(st["phase"]):
 		"exchange":
-			return {"t": "exchange_done", "seat": seat}
+			return _decide_exchange_return(st, seat)
 		"play":
 			return _decide_play(st, seat)
+	return {"t": "pass", "seat": seat}
+
+
+## 换牌返还: 返还最弱 n 张(强者留强, 策略最优)。
+static func _decide_exchange_return(st: Dictionary, seat: int) -> Dictionary:
+	for e in st.get("exchange_returns", []):
+		if int(e["seat"]) == seat:
+			var hand: Array = st["hands"][seat].duplicate()
+			CardsGd.sort_cards(hand)
+			return {"t": "exchange_return", "seat": seat,
+					"cards": hand.slice(0, int(e["n"]))}
 	return {"t": "pass", "seat": seat}
 
 

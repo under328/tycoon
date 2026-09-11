@@ -170,7 +170,7 @@ func _full_match_flow(t) -> void:
 			"play":
 				action = BotPlayerGd.decide(st, int(st["turn"]))
 			"exchange":
-				action = {"t": "exchange_done", "seat": int(st["turn"])}
+				action = BotPlayerGd.decide(st, int(st["turn"]))
 			"round_end":
 				rounds_seen += 1
 				t.expect_eq((st["finish_order"] as Array).size(), 4, "局终名次齐 4 人")
@@ -209,11 +209,14 @@ func _exchange_details(t) -> void:
 	var beggar := -1
 	var millionaire := -1
 	var commoner := -1
+	var rich := -1
 	for s in 4:
 		if int(ids[s]) == 3:
 			beggar = s
 		elif int(ids[s]) == 0:
 			millionaire = s
+		elif int(ids[s]) == 1:
+			rich = s
 		elif int(ids[s]) == 2:
 			commoner = s
 	var r := GameStateGd.apply(st, {"t": "next_round"})
@@ -230,7 +233,7 @@ func _exchange_details(t) -> void:
 			fresh[s].append(deck[s * 13 + i])
 		CardsGd.sort_cards(fresh[s])
 	t.expect_eq(str(st2["phase"]), "exchange", "交换阶段")
-	t.expect((st2["exchange"] as Array).size() >= 2, "两笔交换(含返还)")
+	t.expect_eq((st2["exchange"] as Array).size(), 2, "两笔交牌(返还待玩家选择)")
 	var ex: Array = st2["exchange"]
 	t.expect_eq(int(ex[0]["from"]), beggar, "乞丐交 2 张")
 	t.expect_eq(int(ex[0]["to"]), millionaire, "交给大富豪")
@@ -239,11 +242,31 @@ func _exchange_details(t) -> void:
 	t.expect_eq((ex[1]["cards"] as Array), (fresh[commoner] as Array).slice(-1), "交出的是新手牌最大 1 张")
 	t.expect((st2["hands"][millionaire] as Array).has(ex[0]["cards"][0]), "大富豪收到牌")
 	t.expect(not (st2["hands"][beggar] as Array).has(ex[0]["cards"][0]), "乞丐失去最大牌")
-	# 交换完成 → 乞丐先出
-	var r2 := GameStateGd.apply(st2, {"t": "exchange_done", "seat": beggar})
-	t.expect_eq(str(r2["state"]["phase"]), "play", "交换完成进入 play")
-	t.expect_eq(int(r2["state"]["turn"]), beggar, "乞丐先出")
-	t.expect(not bool(r2["state"]["revolution"]), "新局革命重置")
+	# 返还环节: 大富豪先选 2 张, 再轮富豪选 1 张
+	t.expect_eq(int(st2["turn"]), millionaire, "大富豪先返还")
+	# 错误数量被拒
+	var bad := GameStateGd.apply(st2, {"t": "exchange_return", "seat": millionaire, "cards": []})
+	t.expect(not bool(bad["ok"]), "返还数量错误被拒")
+	# 非当前接收者被拒
+	var not_turn := GameStateGd.apply(st2, {"t": "exchange_return", "seat": rich, "cards": []})
+	t.expect(not bool(not_turn["ok"]), "非当前返还者被拒")
+	var ret_hand: Array = st2["hands"][millionaire].duplicate()
+	CardsGd.sort_cards(ret_hand)
+	var give_back: Array = ret_hand.slice(0, 2)
+	var r2 := GameStateGd.apply(st2, {"t": "exchange_return", "seat": millionaire, "cards": give_back})
+	t.expect(bool(r2["ok"]), "大富豪返还 2 张")
+	var st3: Dictionary = r2["state"]
+	t.expect_eq(int(st3["turn"]), rich, "轮到富豪返还 1 张")
+	t.expect((st3["hands"][beggar] as Array).has(give_back[0]), "乞丐收到返还牌")
+	var rich_hand: Array = st3["hands"][rich].duplicate()
+	CardsGd.sort_cards(rich_hand)
+	var r3 := GameStateGd.apply(st3, {"t": "exchange_return", "seat": rich,
+			"cards": [rich_hand[0]]})
+	t.expect(bool(r3["ok"]), "富豪返还 1 张")
+	t.expect_eq(str(r3["state"]["phase"]), "play", "交换完成进入 play")
+	t.expect_eq(int(r3["state"]["turn"]), beggar, "乞丐先出")
+	t.expect_eq((r3["state"]["exchange"] as Array).size(), 4, "交换记录含 2 笔返还")
+	t.expect(not bool(r3["state"]["revolution"]), "新局革命重置")
 
 
 func _view_privacy(t) -> void:

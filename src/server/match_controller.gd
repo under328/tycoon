@@ -52,8 +52,12 @@ func tick(now_ms: int) -> Dictionary:
 				# 人类超时 → 托管决策（跟牌 Pass / 领出最小牌）
 				return _step(BotPlayerGd.decide(state, int(state["turn"])), now_ms)
 		"exchange":
-			if now_ms >= _phase_until_ms:
-				return _step({"t": "exchange_done", "seat": int(state["turn"])}, now_ms)
+			if is_bot_seat(int(state["turn"])):
+				if now_ms >= _next_act_ms:
+					return _step(BotPlayerGd.decide(state, int(state["turn"])), now_ms)
+			elif now_ms >= _turn_deadline_ms:
+				# 人类超时 → 托管返还最弱牌
+				return _step(BotPlayerGd.decide(state, int(state["turn"])), now_ms)
 		"round_end":
 			if now_ms >= _phase_until_ms:
 				return _step({"t": "next_round"}, now_ms)
@@ -125,7 +129,8 @@ func _arm(now_ms: int) -> void:
 			_next_act_ms = now_ms + ai_delay_ms
 			_turn_deadline_ms = now_ms + int(state["cfg"]["turn_seconds"]) * 1000
 		"exchange":
-			_phase_until_ms = now_ms + phase_delay_ms
+			_next_act_ms = now_ms + ai_delay_ms
+			_turn_deadline_ms = now_ms + int(state["cfg"].get("exchange_seconds", 15)) * 1000
 		"round_end":
 			_phase_until_ms = now_ms + phase_delay_ms
 		"game_end":

@@ -39,7 +39,7 @@ func _bot_action(st: Dictionary) -> Dictionary:
 		"play":
 			return BotPlayerGd.decide(st, int(st["turn"]))
 		"exchange":
-			return {"t": "exchange_done", "seat": int(st["turn"])}
+			return BotPlayerGd.decide(st, int(st["turn"]))
 		"round_end":
 			return {"t": "next_round"}
 	return {}

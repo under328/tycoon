@@ -14,7 +14,7 @@ const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu",
 
 const DEFAULT_SETTINGS := {
 	"with_joker": true, "revolution": true, 
-	"eight_cut": false, "rounds": 3, "turn_seconds": 20,
+	"eight_cut": true, "rounds": 3, "turn_seconds": 20,
 }
 
 var rooms: Dictionary = {}       # code -> Room
@@ -317,6 +317,10 @@ func play(peer: int, cards: Array, now_ms: int = -1) -> Array:
 
 func pass_turn(peer: int, now_ms: int = -1) -> Array:
 	return _game_action(peer, {"t": "pass", "seat": -1}, now_ms)
+
+
+func exchange_return(peer: int, cards: Array, now_ms: int = -1) -> Array:
+	return _game_action(peer, {"t": "exchange_return", "seat": -1, "cards": cards}, now_ms)
 
 
 func _game_action(peer: int, action: Dictionary, now_ms: int) -> Array:

@@ -21,6 +21,7 @@ static func normalize(cfg: Dictionary) -> Dictionary:
 	for k in out.keys():
 		if cfg.has(k):
 			out[k] = cfg[k]
+	out["eight_cut"] = true  # rule.md: 8切为基础规则, 不可关闭
 	out["rounds"] = clampi(int(out["rounds"]), 1, 5)
 	out["turn_seconds"] = clampi(int(out["turn_seconds"]), 5, 120)
 	out["exchange_seconds"] = clampi(int(out["exchange_seconds"]), 5, 60)

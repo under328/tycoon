@@ -182,6 +182,16 @@ static func bgm_koto() -> AudioStreamWAV:
 	], 20260911, 0.5, 1.1, true)
 
 
+## 革命变奏 BGM: 对局主题的倒转强化版(小调下行 + 鼓点)
+static func bgm_koto_rev() -> AudioStreamWAV:
+	return _bgm_base([
+		[220.0, 261.63],   # Am
+		[207.65, 246.94],  # G# + B (紧张)
+		[174.61, 220.0],   # F + A
+		[196.0, 246.94],   # G + B
+	], 20260913, 0.15, 0.6, true)
+
+
 ## 大厅 BGM: D 羽调式, 稍快更轻快
 static func bgm_lobby() -> AudioStreamWAV:
 	return _bgm_base([

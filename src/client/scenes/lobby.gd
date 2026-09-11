@@ -33,7 +33,6 @@ var room_label: Label
 var stats_label: Label
 var chk_joker: CheckButton
 var chk_revolution: CheckButton
-var chk_eight: CheckButton
 var rounds_option: OptionButton
 var _last_room_code := ""
 var host_edit: LineEdit
@@ -263,8 +262,6 @@ func _build_ui() -> void:
 	add_child(chk_joker)
 	chk_revolution = _check("革命", Vector2(830, 380))
 	add_child(chk_revolution)
-	chk_eight = _check("8切", Vector2(830, 420))
-	add_child(chk_eight)
 	var rounds_lbl := AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 460)
@@ -358,7 +355,6 @@ func _gather_rules() -> Dictionary:
 	return {
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
-		"eight_cut": chk_eight.button_pressed,
 		"rounds": rounds_option.get_selected_metadata(),
 	}
 
@@ -366,7 +362,6 @@ func _gather_rules() -> Dictionary:
 func _apply_settings(settings: Dictionary) -> void:
 	chk_joker.set_pressed_no_signal(bool(settings.get("with_joker", true)))
 	chk_revolution.set_pressed_no_signal(bool(settings.get("revolution", true)))
-	chk_eight.set_pressed_no_signal(bool(settings.get("eight_cut", false)))
 	var rounds := int(settings.get("rounds", 3))
 	for i in rounds_option.item_count:
 		if int(rounds_option.get_item_metadata(i)) == rounds:
