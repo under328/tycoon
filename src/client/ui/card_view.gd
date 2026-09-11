@@ -72,10 +72,10 @@ func _init(p_card: int = -1) -> void:
 	_back_sb.set_border_width_all(2)
 	_back_sb.border_color = COLOR_BORDER
 
-	_sel_sb.bg_color = Color(1, 1, 1, 0.06)
+	_sel_sb.bg_color = Color(1, 1, 1, 0.10)
 	_sel_sb.set_corner_radius_all(7)
-	_sel_sb.set_border_width_all(3)
-	_sel_sb.border_color = COLOR_GOLD
+	_sel_sb.set_border_width_all(4)
+	_sel_sb.border_color = Color("ffd75e")
 
 	_font_ascii = AppTheme.display_font()
 	_font_cjk = AppTheme.title_font()
@@ -110,6 +110,14 @@ func _draw() -> void:
 		_draw_face()
 	if selected:
 		draw_style_box(_sel_sb, Rect2(Vector2.ZERO, size))
+		# 顶部金色指示三角(选中标记)
+		var tw := size.x * 0.20
+		var tri := PackedVector2Array([
+			Vector2(size.x / 2.0 - tw / 2, 0),
+			Vector2(size.x / 2.0 + tw / 2, 0),
+			Vector2(size.x / 2.0, tw * 0.55),
+		])
+		draw_colored_polygon(tri, COLOR_GOLD)
 
 
 func _draw_face() -> void:

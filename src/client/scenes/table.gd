@@ -895,7 +895,9 @@ func _on_hand_card_picked(card: int) -> void:
 	# 更新所有手牌卡的选中态
 	for child in hand_box.get_children():
 		if "selected" in child:
-			child.selected = selected.has(child.card)
+			var is_sel := selected.has(child.card)
+			child.selected = is_sel
+			_apply_hand_card_state(child, is_sel)
 
 
 ## 手牌：卡牌控件化；仅在手牌实际变化时重建并播放发牌动画。
@@ -906,7 +908,7 @@ func _refresh_hand(view: Dictionary) -> void:
 		var idx := 0
 		for child in hand_box.get_children():
 			if idx < hand.size():
-				child.selected = selected.has(int(hand[idx]))
+				_apply_hand_card_state(child, selected.has(int(hand[idx])))
 			idx += 1
 		return
 	_last_hand = hand.duplicate()
@@ -915,8 +917,10 @@ func _refresh_hand(view: Dictionary) -> void:
 	var i := 0
 	for c in hand:
 		var card_id: int = c
-		var cv := _make_card(card_id, 72, 100, selected.has(card_id))
+		var is_sel := selected.has(card_id)
+		var cv := _make_card(card_id, 72, 100, is_sel)
 		hand_box.add_child(cv)
+		_apply_hand_card_state(cv, is_sel)
 		cv.modulate.a = 0.0
 		var tw := cv.create_tween()  # 绑定卡牌节点: 重建释放时自动终止
 		tw.tween_interval(0.02 * i)
@@ -924,6 +928,14 @@ func _refresh_hand(view: Dictionary) -> void:
 		i += 1
 	if i > 0:
 		Audio.play("deal")
+
+
+## 手牌选中态视觉: 选中的上浮放大全亮, 未选中的微压暗
+func _apply_hand_card_state(cv: Control, is_sel: bool) -> void:
+	cv.pivot_offset = Vector2(cv.size.x / 2.0, cv.size.y)
+	cv.scale = Vector2(1.07, 1.07) if is_sel else Vector2.ONE
+	var a: float = cv.modulate.a
+	cv.modulate = Color(1, 1, 1, a) if is_sel else Color(0.76, 0.78, 0.9, a)
 
 
 # ---------------------------------------------------------------- 特效
