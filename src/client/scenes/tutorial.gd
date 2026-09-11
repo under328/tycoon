@@ -12,13 +12,13 @@ const CardViewScript = preload("res://src/client/ui/card_view.gd")
 
 # 每页: [标题, 正文(多行), 图示编号]
 const PAGES := [
-	["欢迎来到大富豪", "你的目标只有一个:【尽快出完手牌】。\n最先出完的是【大富豪】, 依次为富豪、平民, 最后一名是【乞丐】。\n一场连打 3 局, 总分最高的玩家获胜。", 0],
-	["牌的大小", "点序从 3 最小到 2 次大, 【王】最大。\n花色不分大小: 红桃 A 和黑桃 A 一样大。", 1],
-	["牌型", "出牌必须【同牌型、同张数、点更大】, 或选择不要。\n单张 / 对子 / 三条 / 四条; 3 张以上连续点数是【顺子】;\n同花色的顺子叫【階段】, 只能被同长度更大的階段压过。", 2],
-	["王牌是万能牌", "王单出时是最大的单张; 和其他牌一起出时会自动补位:\n3♥ + 王 = 对 3;  5♣ 7♥ + 王 = 顺子 5-6-7。", 3],
+	["欢迎来到大富豪", "你的目标只有一个:【尽快出完手牌】。\n最先出完的是【大富豪】, 依次为富豪、贫民, 最后一名是【大贫民】。\n一场连打 3 局, 总分最高的玩家获胜。", 0],
+	["牌的大小", "点序从 3 最小到 2 次大, 【王】最大。\n唯一例外: 【黑桃3】单出时比王还大, 是全场最强单张。\n花色不分大小: 红桃 A 和黑桃 A 一样大。", 1],
+	["牌型与8切", "出牌必须【同牌型、同张数、点更大】, 或选择不要。\n只有四种牌型: 单张 / 对子 / 三条 / 四条(触发革命)。\n打出任何带 8 的组合, 立即清桌并继续领出(8切)。", 2],
+	["王牌是万能牌", "王单出时是最大的单张; 和其他牌一起出时会自动补位:\n3♥ + 王 = 对 3;  3♥ 3♦ + 王 = 三条 3。\n注意: 两张王不能组成对子。", 3],
 	["革命", "打出【四条】立刻触发革命: 点序大小反转!\n3 变成最大, 王变成最小, 直到有人再打出一次四条才恢复。\n劣势局里, 一组四条就是翻盘的号角。", 4],
-	["身份与换牌", "每局结束按出完顺序结算身份。\n下一局开始前: 乞丐把最大的 2 张交给大富豪,\n平民把最大的 1 张交给富豪 —— 强者更强, 但弱者手握先出权。", 5],
-	["计分", "单局积分: 大富豪 +2, 富豪 +1, 平民 -1, 乞丐 -2。\n3 局积分累加, 总分最高者赢得整场。", 6],
+	["身份与换牌", "下一局开始前换牌: 大贫民把最大的 2 张交给大富豪,\n贫民把最大的 1 张交给富豪; 收到牌的强者需【自选等量牌】返还。\n另外: 上局大富豪若没保住第一, 直接跌到大贫民(一落千丈)!\n作为补偿, 大贫民手握下一局的先出权。", 5],
+	["计分", "单局积分: 大富豪 +2, 富豪 +1, 贫民 -1, 大贫民 -2。\n3 局积分累加, 总分最高者赢得整场。", 6],
 	["界面操作", "点选手牌使其亮起, 再点【出牌】; 跟不上就点【不要】。\n回合倒计时结束会自动托管; 联机时还能发表情和聊天。\n随时点右上角【规则】可以翻看本教程。", 7],
 ]
 
@@ -180,44 +180,51 @@ func _build_fig(kind: int) -> void:
 			_fig_label("大", Vector2(736, 190), AppTheme.DIM, 16)
 		2:
 			var groups := [
-				{"cards": [8], "label": "单张"},
-				{"cards": [16, 20], "label": "对子"},
-				{"cards": [24, 28, 32], "label": "三条"},
+				{"cards": [32], "label": "单张"},
+				{"cards": [16, 17], "label": "对子"},
+				{"cards": [24, 25, 26], "label": "三条"},
 				{"cards": [36, 37, 38, 39], "label": "四条→革命!"},
-				{"cards": [4, 8, 12], "label": "顺子(混花)"},
-				{"cards": [0, 4, 8], "label": "階段(同花)"},
 			]
 			for gi in groups.size():
-				var col := gi % 3
-				var row := gi / 3
-				var bx := 30.0 + col * 264.0
-				var by := 16.0 + row * 140.0
+				var col := gi % 2
+				var row := gi / 2
+				var bx := 90.0 + col * 380.0
+				var by := 30.0 + row * 140.0
 				var cards: Array = groups[gi]["cards"]
 				for ci in cards.size():
-					_mini(cards[ci], Vector2(bx + ci * 34.0, by), 0.62)
+					_mini(cards[ci], Vector2(bx + ci * 40.0, by), 0.68)
 				var col2 := AppTheme.RED if gi == 3 else AppTheme.DIM
-				_fig_label(str(groups[gi]["label"]), Vector2(bx + 4, by + 78), col2, 15)
+				_fig_label(str(groups[gi]["label"]), Vector2(bx + 4, by + 84), col2, 16)
+			_fig_label("带 8 的组合一出即清桌(8切)", Vector2(200, 268), AppTheme.GOLD, 16)
 		3:
-			_mini(52, Vector2(300, 40), 1.3)
-			_mini(1, Vector2(420, 70), 0.9)
-			_fig_label("+", Vector2(392, 96), AppTheme.GOLD, 26)
-			_fig_label("=", Vector2(500, 96), AppTheme.GOLD, 26)
-			_mini(1, Vector2(530, 70), 0.9)
-			_fig_label("对 3", Vector2(556, 96), AppTheme.GREEN, 18)
-			_fig_label("王自动补位, 缺什么补什么", Vector2(240, 210), AppTheme.DIM, 16)
+			_mini(52, Vector2(200, 40), 1.3)
+			_mini(1, Vector2(330, 70), 0.9)
+			_mini(2, Vector2(382, 70), 0.9)
+			_fig_label("+", Vector2(302, 96), AppTheme.GOLD, 26)
+			_fig_label("+", Vector2(354, 96), AppTheme.GOLD, 26)
+			_fig_label("=", Vector2(444, 96), AppTheme.GOLD, 26)
+			_mini(1, Vector2(474, 70), 0.9)
+			_mini(2, Vector2(526, 70), 0.9)
+			_mini(52, Vector2(578, 70), 0.9)
+			_fig_label("三条 3", Vector2(486, 168), AppTheme.GREEN, 18)
+			_fig_label("王自动补位, 缺什么补什么(两王不可成对)", Vector2(200, 224), AppTheme.DIM, 16)
+			_mini(0, Vector2(640, 200), 0.75)
+			_fig_label("但 ♠3 单出比王大!", Vector2(560, 288), AppTheme.RED, 15)
 		4:
 			_mini(0, Vector2(200, 40), 0.95)
 			_arrow(258, 96, 380)
 			_fig_label("3 最强", Vector2(200, 150), AppTheme.RED, 17)
 			_mini(48, Vector2(420, 40), 0.95)
 			_fig_label("王最弱", Vector2(416, 150), AppTheme.DIM, 17)
+			_mini(0, Vector2(640, 40), 0.95)
+			_fig_label("♠3 也垫底!", Vector2(620, 150), AppTheme.GOLD, 15)
 			_mini(48, Vector2(540, 40), 0.95)
 			_mini(49, Vector2(568, 40), 0.95)
 			_mini(50, Vector2(596, 40), 0.95)
 			_mini(51, Vector2(624, 40), 0.95)
 			_fig_label("打出四条 = 革命!", Vector2(520, 150), AppTheme.RED, 17)
 		5:
-			var steps := [["大富豪", AppTheme.GOLD], ["富豪", AppTheme.WHITE], ["平民", AppTheme.DIM], ["乞丐", AppTheme.RED]]
+			var steps := [["大富豪", AppTheme.GOLD], ["富豪", AppTheme.WHITE], ["贫民", AppTheme.DIM], ["大贫民", AppTheme.RED]]
 			for i in steps.size():
 				var bx := 60.0 + i * 185.0
 				var by := 30.0 + i * 42.0
@@ -231,9 +238,10 @@ func _build_fig(kind: int) -> void:
 				lb.text = str(steps[i][0])
 				lb.position = Vector2(35, 6)
 				panel.add_child(lb)
-			_fig_label("乞丐 —2张→ 大富豪      平民 —1张→ 富豪", Vector2(70, 230), AppTheme.GOLD, 17)
+			_fig_label("大贫民 —2张→ 大富豪      贫民 —1张→ 富豪", Vector2(60, 230), AppTheme.GOLD, 16)
+			_fig_label("收到牌的强者自选等量牌返还", Vector2(150, 262), AppTheme.DIM, 15)
 		6:
-			var rows := [["大富豪", "+2", AppTheme.GOLD], ["富豪", "+1", AppTheme.GREEN], ["平民", "-1", AppTheme.DIM], ["乞丐", "-2", AppTheme.RED]]
+			var rows := [["大富豪", "+2", AppTheme.GOLD], ["富豪", "+1", AppTheme.GREEN], ["贫民", "-1", AppTheme.DIM], ["大贫民", "-2", AppTheme.RED]]
 			for i in rows.size():
 				var y := 18.0 + i * 58.0
 				var panel := ColorRect.new()

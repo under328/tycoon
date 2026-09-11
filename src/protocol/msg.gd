@@ -2,7 +2,7 @@
 class_name Msg
 extends RefCounted
 
-const PROTOCOL_VERSION := 1
+const PROTOCOL_VERSION := 2  # v2: exchange_return 动作 + s_game_played.eight_cut
 
 # C → S
 const HELLO := "hello"
