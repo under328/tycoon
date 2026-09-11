@@ -508,9 +508,9 @@ func skin_of_seat(seat: int) -> String:
 
 
 func _client_skin() -> String:
-	var gs := get_node_or_null("/root/GameSettings")
-	if gs != null:
-		return str(gs.equipped_skin)
+	var w := get_node_or_null("/root/Wallet")
+	if w != null:
+		return str(w.equipped_skin)
 	return "skin_default"
 
 

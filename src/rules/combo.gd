@@ -9,8 +9,8 @@ enum Type { SINGLE, PAIR, TRIPLE, QUAD }
 
 const TYPE_NAMES := ["单张", "对子", "三条", "四条"]
 
-## ♠3 单出时的 key（比 JOKER 的 16 还大）
-const SPADE3_KEY := 17
+## ♠3 单出时的 key: 比 JOKER(16) 大但比 4(4) 小
+const SPADE3_KEY := 3.5
 
 
 ## 识别一组牌；非法返回 {}。
@@ -22,10 +22,9 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 	if n == 1:
 		var card: int = cards[0]
 		if CardsGd.is_joker(card):
-			return _mk(Type.SINGLE, CardsGd.JOKER_VALUE, 1, cards)
-		# ♠3(id=0) 单出时是最强单张
+			return _mk(Type.SINGLE, 3.25, 1, cards)
 		if card == 0:
-			return _mk(Type.SINGLE, SPADE3_KEY, 1, cards)
+			return _mk(Type.SINGLE, 3.5, 1, cards)
 		return _mk(Type.SINGLE, CardsGd.value(card), 1, cards)
 	var naturals := []
 	var joker_count := 0
@@ -70,5 +69,5 @@ static func type_name(combo: Dictionary) -> String:
 	return TYPE_NAMES[int(combo["type"])]
 
 
-static func _mk(t: int, key: int, len: int, cards: Array) -> Dictionary:
+static func _mk(t: int, key: float, len: int, cards: Array) -> Dictionary:
 	return {"type": t, "key": key, "len": len, "cards": cards.duplicate()}
