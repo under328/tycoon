@@ -34,6 +34,7 @@ func _ready() -> void:
 
 func _build_title() -> void:
 	var title := _label(92, AppTheme.GOLD)
+	title.add_theme_font_override("font", AppTheme.title_font())
 	title.text = "大富豪"
 	title.add_theme_constant_override("shadow_offset_x", 4)
 	title.add_theme_constant_override("shadow_offset_y", 4)
@@ -45,6 +46,7 @@ func _build_title() -> void:
 	add_child(title)
 
 	var sub := _label(20, AppTheme.DIM)
+	sub.add_theme_font_override("font", AppTheme.display_font())
 	sub.text = "T  Y  C  O  O  N"
 	sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	sub.position = Vector2(-160, 172)
@@ -61,6 +63,7 @@ func _build_title() -> void:
 	seal.rotation = 0.08
 	add_child(seal)
 	var seal_char := _label(40, AppTheme.WHITE)
+	seal_char.add_theme_font_override("font", AppTheme.title_font())
 	seal_char.text = "富"
 	seal_char.position = Vector2(10, 4)
 	seal.add_child(seal_char)

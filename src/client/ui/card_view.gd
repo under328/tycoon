@@ -7,6 +7,7 @@ signal picked(card: int)
 
 const CardsGd = preload("res://src/rules/cards.gd")
 const Wafu = preload("res://src/client/ui/wafu_paint.gd")
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
 
 const COLOR_FACE := Color("f9f4e6")        # 和纸米白
 const COLOR_BORDER := Color("caa24e")      # 描金
@@ -32,8 +33,8 @@ var face_down := false:
 var _face_sb := StyleBoxFlat.new()
 var _back_sb := StyleBoxFlat.new()
 var _sel_sb := StyleBoxFlat.new()
-var _font_ascii := SystemFont.new()
-var _font_cjk := SystemFont.new()
+var _font_ascii: Font = AppTheme.display_font() if false else null
+var _font_cjk: Font = null
 
 
 func _init(p_card: int = -1) -> void:
@@ -56,10 +57,8 @@ func _init(p_card: int = -1) -> void:
 	_sel_sb.set_border_width_all(3)
 	_sel_sb.border_color = COLOR_GOLD
 
-	_font_ascii.font_names = PackedStringArray(["Arial", "Microsoft YaHei", "Noto Sans"])
-	_font_cjk.font_names = PackedStringArray([
-		"Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "SimHei",
-	])
+	_font_ascii = AppTheme.display_font()
+	_font_cjk = AppTheme.title_font()
 
 
 func _gui_input(event: InputEvent) -> void:

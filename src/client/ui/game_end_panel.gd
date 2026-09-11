@@ -20,6 +20,7 @@ func setup(view: Dictionary, seat_namer: Callable) -> void:
 	add_child(dark)
 
 	var big := AppTheme.make_label(96, AppTheme.GOLD if my_rank <= 1 else AppTheme.DIM)
+	big.add_theme_font_override("font", AppTheme.title_font())
 	big.text = "勝利" if my_rank <= 1 else "敗北"
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	big.set_anchors_preset(Control.PRESET_CENTER)

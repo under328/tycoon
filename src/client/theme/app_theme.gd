@@ -13,26 +13,46 @@ const DIM := Color("8a8ab0")             # 灰蓝次要文字
 const GREEN := Color("7dd87d")           # 若竹绿(成功/轮到你)
 const OVERLAY_BG := Color(0.08, 0.08, 0.17, 0.97)  # 教程等全屏覆盖层
 
-static var _font: SystemFont
+const FONT_TITLE_PATH := "res://assets/fonts/MaShanZheng.ttf"      # 毛笔楷书: 大标题/演出
+const FONT_DISPLAY_PATH := "res://assets/fonts/ZCOOL.ttf"          # 站酷黄油体: 按钮/HUD/卡面
+const FONT_BODY_PATH := "res://assets/fonts/NotoSansSC.ttf"        # 思源黑体: 正文/聊天
+
+static var _title_font: FontFile
+static var _display_font: FontFile
+static var _body_font: FontFile
 static var _theme: Theme
 
 
-static func font() -> SystemFont:
-	if _font == null:
-		_font = SystemFont.new()
-		_font.font_names = PackedStringArray([
-			"Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "SimHei", "Arial",
-		])
-	return _font
+## 毛笔楷书（标题/勝利敗北/朱印）
+static func title_font() -> FontFile:
+	if _title_font == null:
+		_title_font = load(FONT_TITLE_PATH)
+	return _title_font
 
 
-## 共享 Theme: 默认中文字体 + 全局金色按钮样式(普通/悬停/按下)。
+## 站酷黄油体（按钮/HUD/卡面点数）
+static func display_font() -> FontFile:
+	if _display_font == null:
+		_display_font = load(FONT_DISPLAY_PATH)
+	return _display_font
+
+
+## 思源黑体（正文/聊天）
+static func body_font() -> FontFile:
+	if _body_font == null:
+		_body_font = load(FONT_BODY_PATH)
+	return _body_font
+
+
+## 共享 Theme: 正文黑体默认 + 全局黄油体按钮 + 金色样式(普通/悬停/按下)。
 static func build_theme() -> Theme:
 	if _theme != null:
 		return _theme
 	_theme = Theme.new()
-	_theme.default_font = font()
+	_theme.default_font = body_font()
 	_theme.default_font_size = 18
+	_theme.set_font("font", "Button", display_font())
+	_theme.set_font_size("font_size", "Button", 18)
 	_theme.set_stylebox("normal", "Button", flat(PANEL, Color(GOLD, 0.55)))
 	_theme.set_stylebox("hover", "Button", flat(Color(0.16, 0.15, 0.34, 0.95), GOLD))
 	_theme.set_stylebox("pressed", "Button", flat(Color(0.22, 0.12, 0.16, 0.95), GOLD))
