@@ -70,7 +70,7 @@ func _ready() -> void:
 	# 商品网格
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(40, 170)
-	scroll.custom_minimum_size = Vector2(1200, 460)
+	scroll.custom_minimum_size = Vector2(1200, 484)
 	add_child(scroll)
 	_grid = GridContainer.new()
 	_grid.columns = 3
@@ -109,55 +109,89 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 	var owned: bool = Wallet.is_owned(kind, id)
 	var equipped: bool = Wallet.is_equipped(kind, id)
 
+	# 卡片外框: 留足内边距, 装备中金框高亮
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(380, 190)
-	panel.add_theme_stylebox_override("panel", AppTheme.flat(
+	panel.custom_minimum_size = Vector2(372, 232)
+	var sb := AppTheme.flat(
 			Color(0.13, 0.13, 0.28), AppTheme.GOLD if equipped
-					else Color(1, 1, 1, 0.15), 12, 2 if not equipped else 3))
+					else Color(1, 1, 1, 0.15), 12, 2 if not equipped else 3)
+	sb.content_margin_left = 22
+	sb.content_margin_right = 22
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 14
+	panel.add_theme_stylebox_override("panel", sb)
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
+	v.add_theme_constant_override("separation", 10)
 	panel.add_child(v)
 
+	# 头行: 名称 + 状态徽标
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
 	v.add_child(head)
-	var name_lbl := AppTheme.make_label(19, AppTheme.GOLD if equipped else AppTheme.WHITE)
+	var name_lbl := AppTheme.make_label(20, AppTheme.GOLD if equipped else AppTheme.WHITE)
 	name_lbl.text = str(item["name"])
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	head.add_child(name_lbl)
 	if equipped:
-		var eq := AppTheme.make_label(14, AppTheme.GREEN)
-		eq.text = "使用中"
-		head.add_child(eq)
+		var tag_sb := AppTheme.flat(Color(AppTheme.GREEN, 0.16), AppTheme.GREEN, 6, 1)
+		tag_sb.content_margin_left = 10
+		tag_sb.content_margin_right = 10
+		tag_sb.content_margin_top = 3
+		tag_sb.content_margin_bottom = 3
+		var tag := PanelContainer.new()
+		tag.add_theme_stylebox_override("panel", tag_sb)
+		var tag_lbl := AppTheme.make_label(13, AppTheme.GREEN)
+		tag_lbl.text = "使用中"
+		tag.add_child(tag_lbl)
+		head.add_child(tag)
 
-	# 预览
-	var preview := Control.new()
-	preview.custom_minimum_size = Vector2(0, 72)
-	v.add_child(preview)
+	# 预览井: 内嵌暗色衬底把预览框起来, 上下留呼吸感
+	var well := PanelContainer.new()
+	well.custom_minimum_size = Vector2(0, 100)
+	var well_sb := AppTheme.flat(Color(0.07, 0.07, 0.17, 0.9), Color(1, 1, 1, 0.08), 8, 1)
+	well_sb.content_margin_left = 12
+	well_sb.content_margin_right = 12
+	well_sb.content_margin_top = 8
+	well_sb.content_margin_bottom = 8
+	well.add_theme_stylebox_override("panel", well_sb)
+	v.add_child(well)
+	var well_center := CenterContainer.new()
+	well.add_child(well_center)
 	if kind == "skin":
 		var av := AvatarScript.new()
 		av.skin_id = id
-		av.set_anchors_preset(Control.PRESET_FULL_RECT)
-		preview.add_child(av)
+		av.custom_minimum_size = Vector2(84, 84)
+		well_center.add_child(av)
 	else:
 		var pal: Dictionary = SkinsLib.palette(id)
 		var strip := HBoxContainer.new()
 		strip.alignment = BoxContainer.ALIGNMENT_CENTER
-		strip.add_theme_constant_override("separation", 10)
-		preview.add_child(strip)
+		strip.add_theme_constant_override("separation", 12)
+		well_center.add_child(strip)
 		for c: Color in [pal["face"], pal["red"], pal["black"], pal["back"]]:
 			var sw := PanelContainer.new()
-			sw.custom_minimum_size = Vector2(42, 60)
-			sw.add_theme_stylebox_override("panel", AppTheme.flat(
-					c, pal["border"], 6, 2))
+			sw.custom_minimum_size = Vector2(46, 66)
+			var sw_sb := AppTheme.flat(c, pal["border"], 6, 2)
+			sw_sb.content_margin_left = 5
+			sw_sb.content_margin_right = 5
+			sw_sb.content_margin_top = 7
+			sw_sb.content_margin_bottom = 7
+			sw.add_theme_stylebox_override("panel", sw_sb)
 			strip.add_child(sw)
 
-	# 价格 + 操作按钮
+	# 底行: 价格在左, 操作按钮在右
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 10)
 	v.add_child(foot)
+	var price_lbl := AppTheme.make_label(16, AppTheme.WHITE if not owned else AppTheme.DIM)
+	price_lbl.text = "已拥有" if owned else "💎 %d" % price
+	price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	price_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	foot.add_child(price_lbl)
 	if owned:
 		var act := AppTheme.make_button(
-				"使用中" if equipped else "装 备", Vector2(120, 38), 15)
+				"使用中" if equipped else "装 备", Vector2(128, 40), 15)
 		act.disabled = equipped
 		act.pressed.connect(func() -> void:
 			Audio.play("click")
@@ -165,11 +199,7 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 			_refresh())
 		foot.add_child(act)
 	else:
-		var price_lbl := AppTheme.make_label(16, AppTheme.WHITE)
-		price_lbl.text = "💎 %d" % price
-		price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		foot.add_child(price_lbl)
-		var buy := AppTheme.make_button("购 买", Vector2(96, 38), 15)
+		var buy := AppTheme.make_button("购 买", Vector2(112, 40), 15)
 		buy.disabled = Wallet.diamonds < price
 		buy.pressed.connect(func() -> void:
 			if Wallet.buy(kind, id, price):
