@@ -16,6 +16,9 @@ var tutorial_seen := false  # 是否已看过新手引导
 var last_room_code := ""    # 最近加入的房间码(方便再次输入)
 var host: String = DEFAULT_HOST  # 联机服务器地址(大厅可改, 持久化)
 var host_port := 24565      # 联机服务器端口(持久化)
+var fullscreen := false         # 显示偏好: 全屏(持久化)
+var vsync_enabled := true       # 显示偏好: 垂直同步(持久化)
+var window_size := Vector2i.ZERO  # 显示偏好: 窗口尺寸(ZERO=不改)
 
 
 func _ready() -> void:
@@ -36,6 +39,10 @@ func load_settings() -> void:
 		last_room_code = cf.get_value("player", "last_room_code", "")
 		host = str(cf.get_value("net", "host", host))
 		host_port = int(cf.get_value("net", "host_port", host_port))
+		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
+		vsync_enabled = bool(cf.get_value("display", "vsync", vsync_enabled))
+		window_size = Vector2i(cf.get_value("display", "window_size_x", 0),
+				cf.get_value("display", "window_size_y", 0))
 
 
 func save_settings() -> void:
@@ -47,4 +54,9 @@ func save_settings() -> void:
 	cf.set_value("player", "tutorial_seen", tutorial_seen)
 	cf.set_value("net", "host", host)
 	cf.set_value("net", "host_port", host_port)
+	cf.save(SAVE_PATH)
+	cf.set_value("display", "fullscreen", fullscreen)
+	cf.set_value("display", "vsync", vsync_enabled)
+	cf.set_value("display", "window_size_x", window_size.x)
+	cf.set_value("display", "window_size_y", window_size.y)
 	cf.save(SAVE_PATH)

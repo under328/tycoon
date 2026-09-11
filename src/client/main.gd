@@ -27,10 +27,22 @@ func _ready() -> void:
 	menu.name = "Menu"
 	add_child(menu)
 	_fit_safe_area(menu)
+	_apply_display_prefs()
 	menu.local_game.connect(_start_local)
 	menu.online_game.connect(_start_online)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
+
+
+## 启动时应用持久化的显示偏好(用户在设置里保存过的才生效)
+func _apply_display_prefs() -> void:
+	if GameSettings.window_size != Vector2i.ZERO:
+		DisplayServer.window_set_size(GameSettings.window_size)
+	DisplayServer.window_set_vsync_mode(
+			DisplayServer.VSYNC_ENABLED if GameSettings.vsync_enabled
+			else DisplayServer.VSYNC_DISABLED)
+	if GameSettings.fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
 ## 刘海/圆角安全区: 把场景根整体移进系统安全区(桌面为全屏, 无变化)。

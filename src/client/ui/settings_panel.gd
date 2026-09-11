@@ -113,9 +113,10 @@ func _ready() -> void:
 	# ── 关闭 ──
 	box.add_child(HSeparator.new())
 	var cc := CenterContainer.new()
-	var close := AppTheme.make_button("关 闭", Vector2(200, 42), 17)
+	var close := AppTheme.make_button("保存并关闭", Vector2(200, 42), 17)
 	close.pressed.connect(func() -> void:
 		Audio.play("click")
+		_save_all()
 		_close())
 	cc.add_child(close)
 	box.add_child(cc)
@@ -159,22 +160,37 @@ func _slider(box: VBoxContainer, text: String, on_change: Callable) -> HSlider:
 	return slider
 
 
+func _save_all() -> void:
+	var g := get_node_or_null("/root/GameSettings")
+	if g != null:
+		g.save_settings()
+
+
 func _load_settings() -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
 		_nickname_edit.text = str(gs.nickname)
 		_bgm_slider.set_value_no_signal(float(gs.bgm_volume))
 		_sfx_slider.set_value_no_signal(float(gs.sfx_volume))
+		_fullscreen_btn.set_pressed_no_signal(bool(gs.fullscreen))
+		_vsync_btn.set_pressed_no_signal(bool(gs.vsync_enabled))
+		var want: Vector2i = gs.window_size
+		for i in _resolution_btn.item_count:
+			if _resolution_btn.get_item_metadata(i) == want:
+				_resolution_btn.select(i)
+				break
 
 
 func _on_fullscreen(toggled: bool) -> void:
 	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if toggled else DisplayServer.WINDOW_MODE_WINDOWED
 	DisplayServer.window_set_mode(mode)
+	_save_display(toggled, null, Vector2i.ZERO)
 
 
 func _on_vsync(toggled: bool) -> void:
 	DisplayServer.window_set_vsync_mode(
 			DisplayServer.VSYNC_ENABLED if toggled else DisplayServer.VSYNC_DISABLED)
+	_save_display(null, toggled, Vector2i.ZERO)
 
 
 func _on_resolution(index: int) -> void:
@@ -187,6 +203,20 @@ func _on_apply_resolution() -> void:
 	DisplayServer.window_set_size(r)
 	if not _fullscreen_btn.button_pressed:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	_save_display(null, null, r)
+
+
+func _save_display(fullscreen, vsync, res: Vector2i) -> void:
+	var g := get_node_or_null("/root/GameSettings")
+	if g == null:
+		return
+	if fullscreen != null:
+		g.fullscreen = fullscreen
+	if vsync != null:
+		g.vsync_enabled = vsync
+	if res != Vector2i.ZERO:
+		g.window_size = res
+	g.save_settings()
 
 
 func _on_bgm_changed(v: float) -> void:
