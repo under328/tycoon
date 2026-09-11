@@ -6,6 +6,7 @@ signal closed
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const P5Header = preload("res://src/client/ui/p5_header.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
+const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
 const COLOR_BG := Color(0.94, 0.94, 0.96, 0.98)
@@ -164,21 +165,19 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 		av.custom_minimum_size = Vector2(84, 84)
 		well_center.add_child(av)
 	else:
-		var pal: Dictionary = SkinsLib.palette(id)
+		# 迷你实卡预览: 牌背 + ♠5(纹环) + JOKER(像素画), 展示整套卡面美术
 		var strip := HBoxContainer.new()
 		strip.alignment = BoxContainer.ALIGNMENT_CENTER
-		strip.add_theme_constant_override("separation", 12)
+		strip.add_theme_constant_override("separation", 14)
 		well_center.add_child(strip)
-		for c: Color in [pal["face"], pal["red"], pal["black"], pal["back"]]:
-			var sw := PanelContainer.new()
-			sw.custom_minimum_size = Vector2(46, 66)
-			var sw_sb := AppTheme.flat(c, pal["border"], 6, 2)
-			sw_sb.content_margin_left = 5
-			sw_sb.content_margin_right = 5
-			sw_sb.content_margin_top = 7
-			sw_sb.content_margin_bottom = 7
-			sw.add_theme_stylebox_override("panel", sw_sb)
-			strip.add_child(sw)
+		for card_id: int in [-1, 4, 53]:
+			var cv := CardViewScript.new(card_id)
+			cv.palette_id = id
+			cv.face_down = card_id < 0
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cv.custom_minimum_size = Vector2(42, 60)
+			cv.size = Vector2(42, 60)
+			strip.add_child(cv)
 
 	# 底行: 价格在左, 操作按钮在右
 	var foot := HBoxContainer.new()

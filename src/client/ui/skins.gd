@@ -18,19 +18,19 @@ const SKINS := [
 
 ## 卡面皮肤(整套牌面+牌背配色主题)
 const CARDS := [
-	{"id": "card_washi", "name": "和纸", "price": 0, "face": Color("f9f4e6"),
+	{"id": "card_washi", "motif": "washi", "name": "和纸", "price": 0, "face": Color("f9f4e6"),
 		"border": Color("caa24e"), "red": Color("c93a3a"), "black": Color("2b2b3d"),
 		"shadow": Color(0.2, 0.16, 0.1, 0.35), "back": Color("20204a"),
 		"speckle": Color(0.35, 0.28, 0.12, 0.10)},
-	{"id": "card_mo", "name": "墨玉", "price": 40, "face": Color("1c1c30"),
+	{"id": "card_mo", "motif": "sumi", "name": "墨玉", "price": 40, "face": Color("1c1c30"),
 		"border": Color("e0a83c"), "red": Color("ff6b6b"), "black": Color("d8d8ea"),
 		"shadow": Color(0, 0, 0, 0.4), "back": Color("101024"),
 		"speckle": Color(0.88, 0.66, 0.24, 0.12)},
-	{"id": "card_hi", "name": "绯红", "price": 40, "face": Color("3a1420"),
+	{"id": "card_hi", "motif": "hi", "name": "绯红", "price": 40, "face": Color("3a1420"),
 		"border": Color("e0a83c"), "red": Color("ffb4a0"), "black": Color("f0e0e0"),
 		"shadow": Color(0, 0, 0, 0.45), "back": Color("241018"),
 		"speckle": Color(1.0, 0.7, 0.6, 0.10)},
-	{"id": "card_umi", "name": "苍海", "price": 60, "face": Color("12233f"),
+	{"id": "card_umi", "motif": "umi", "name": "苍海", "price": 60, "face": Color("12233f"),
 		"border": Color("7fb0d8"), "red": Color("ff8899"), "black": Color("d0e2f2"),
 		"shadow": Color(0, 0, 0, 0.4), "back": Color("0e1a30"),
 		"speckle": Color(0.5, 0.7, 1.0, 0.10)},
