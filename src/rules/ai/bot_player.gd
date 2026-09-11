@@ -96,7 +96,7 @@ static func decide_from_view(view: Dictionary) -> Dictionary:
 	return decide(st, seat)
 
 
-## 枚举手牌全部合法组合（含王补位；顺子窗口锚定最小自然牌向上延伸，与规则一致）。
+## 枚举手牌全部合法组合（v2: 单张/对子/三条/四条, 含王补位）。
 static func all_combos(hand: Array, cfg: Dictionary) -> Array:
 	var out := []
 	var by_val := {}
@@ -128,21 +128,4 @@ static func all_combos(hand: Array, cfg: Dictionary) -> Array:
 			var combo2 := ComboGd.identify(cards, cfg)
 			if not combo2.is_empty():
 				out.append(combo2)
-	# 顺子 / 階段：枚举窗口（锚定最小自然牌 → 窗口内自然牌 + 王补齐）
-	for length in range(3, 14):
-		for start in range(3, CardsGd.MAX_VALUE - length + 2):
-			var cards := []
-			var natural_count := 0
-			for v in range(start, start + length):
-				if by_val.has(v):
-					cards.append(by_val[v][0])
-					natural_count += 1
-			var need_jokers := length - natural_count
-			if need_jokers == 0 or need_jokers > jokers.size():
-				continue
-			for j in need_jokers:
-				cards.append(jokers[j])
-			var combo3 := ComboGd.identify(cards, cfg)
-			if not combo3.is_empty():
-				out.append(combo3)
 	return out
