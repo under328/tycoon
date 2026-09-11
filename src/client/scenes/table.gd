@@ -57,6 +57,7 @@ var field_box: HBoxContainer
 var field_hint: Label
 var fx_layer: Control
 var btn_play: Button
+var btn_hint: Button
 var btn_pass: Button
 var btn_next: Button
 var btn_rematch: Button
@@ -172,6 +173,24 @@ func _on_play_pressed() -> void:
 		_flash_error("先选牌")
 		return
 	_human_apply({"t": "play", "seat": 0, "cards": selected.duplicate()})
+
+
+## 提示: 用 AI 策略自动选中一手合理牌型, 玩家确认后打出; 压不过则自动不要。
+func _on_hint_pressed() -> void:
+	Audio.play("click")
+	var view: Dictionary
+	if mode == "online" and net != null:
+		view = net.latest_view
+	elif not state.is_empty():
+		view = ViewGd.build(state, 0)
+	if view.is_empty() or str(view["phase"]) != "play" 			or int(view["turn"]) != int(view["my_seat"]):
+		return
+	var action := BotPlayerGd.decide_from_view(view)
+	if str(action.get("t")) == "play":
+		selected = (action.get("cards", []) as Array).duplicate()
+		_refresh()
+	else:
+		_on_pass_pressed()
 
 
 func _on_pass_pressed() -> void:
@@ -348,13 +367,15 @@ func _build_ui() -> void:
 	add_child(hand_box)
 
 	var row := HBoxContainer.new()
-	row.position = Vector2(856, 662)
+	row.position = Vector2(826, 662)
 	row.custom_minimum_size = Vector2(408, 44)
 	row.add_theme_constant_override("separation", 10)
 	add_child(row)
 
 	btn_play = _button("出牌")
 	btn_play.pressed.connect(_on_play_pressed)
+	btn_hint = _button("提示")
+	btn_hint.pressed.connect(_on_hint_pressed)
 	btn_pass = _button("不要")
 	btn_pass.pressed.connect(_on_pass_pressed)
 	btn_next = _button("下一局")
@@ -363,7 +384,7 @@ func _build_ui() -> void:
 	btn_rematch.pressed.connect(_on_rematch_pressed)
 	btn_leave = _button("返回大厅")
 	btn_leave.pressed.connect(_on_leave_pressed)
-	for b: Button in [btn_play, btn_pass, btn_next, btn_rematch, btn_leave]:
+	for b: Button in [btn_play, btn_hint, btn_pass, btn_next, btn_rematch, btn_leave]:
 		row.add_child(b)
 
 	# 快捷表情（仅联机模式）
@@ -563,6 +584,7 @@ func _refresh_view(view: Dictionary) -> void:
 		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 
 	btn_play.visible = my_turn
+	btn_hint.visible = my_turn
 	btn_pass.visible = my_turn and not lead.is_empty()
 	btn_next.visible = mode == "local" and phase == "round_end"
 	btn_rematch.visible = mode == "local" and phase == "game_end"
