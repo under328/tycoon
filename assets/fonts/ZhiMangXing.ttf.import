@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://d16s0er6m1033"
-path="res://.godot/imported/MaShanZheng.ttf-dd94d963a0ac4e3384c6d8de4147339c.fontdata"
+uid="uid://5m0s7wh3aipm"
+path="res://.godot/imported/ZhiMangXing.ttf-1f2631237e9fb5b866efe89a3e9b007f.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/MaShanZheng.ttf"
-dest_files=["res://.godot/imported/MaShanZheng.ttf-dd94d963a0ac4e3384c6d8de4147339c.fontdata"]
+source_file="res://assets/fonts/ZhiMangXing.ttf"
+dest_files=["res://.godot/imported/ZhiMangXing.ttf-1f2631237e9fb5b866efe89a3e9b007f.fontdata"]
 
 [params]
 

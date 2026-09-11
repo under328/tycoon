@@ -13,21 +13,30 @@ const DIM := Color("8a8ab0")             # 灰蓝次要文字
 const GREEN := Color("7dd87d")           # 若竹绿(成功/轮到你)
 const OVERLAY_BG := Color(0.08, 0.08, 0.17, 0.97)  # 教程等全屏覆盖层
 
-const FONT_TITLE_PATH := "res://assets/fonts/MaShanZheng.ttf"      # 毛笔楷书: 大标题/演出
+const FONT_TITLE_PATH := "res://assets/fonts/ZhiMangXing.ttf"      # 志莽行书: 主标题/勝利敗北
 const FONT_DISPLAY_PATH := "res://assets/fonts/ZCOOL.ttf"          # 站酷黄油体: 按钮/HUD/卡面
+const FONT_ACCENT_PATH := "res://assets/fonts/ZCOOLKuaiLe.ttf"     # 站酷快乐体: 点缀标签
 const FONT_BODY_PATH := "res://assets/fonts/NotoSansSC.ttf"        # 思源黑体: 正文/聊天
 
 static var _title_font: FontFile
 static var _display_font: FontFile
+static var _accent_font: FontFile
 static var _body_font: FontFile
 static var _theme: Theme
 
 
-## 毛笔楷书（标题/勝利敗北/朱印）
+## 志莽行书（主标题/勝利敗北/朱印）
 static func title_font() -> FontFile:
 	if _title_font == null:
 		_title_font = load(FONT_TITLE_PATH)
 	return _title_font
+
+
+## 站酷快乐体（点缀标签）
+static func accent_font() -> FontFile:
+	if _accent_font == null:
+		_accent_font = load(FONT_ACCENT_PATH)
+	return _accent_font
 
 
 ## 站酷黄油体（按钮/HUD/卡面点数）

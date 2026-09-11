@@ -4,6 +4,7 @@ extends Control
 signal closed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const P5Header = preload("res://src/client/ui/p5_header.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
@@ -29,10 +30,12 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var title := AppTheme.make_label(30, AppTheme.GOLD)
-	title.text = "商  城"
-	title.position = Vector2(40, 26)
-	add_child(title)
+	var header := P5Header.new()
+	header.text = "商  城"
+	header.position = Vector2(36, 22)
+	header.custom_minimum_size = Vector2(300, 54)
+	header.size = Vector2(300, 54)
+	add_child(header)
 
 	_balance_lbl = AppTheme.make_label(20, AppTheme.WHITE)
 	_balance_lbl.position = Vector2(980, 30)

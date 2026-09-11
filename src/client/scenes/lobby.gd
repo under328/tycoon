@@ -6,6 +6,7 @@ signal start_game
 signal back_to_menu
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const P5Header = preload("res://src/client/ui/p5_header.gd")
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]

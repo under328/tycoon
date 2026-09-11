@@ -101,4 +101,13 @@ func _draw() -> void:
 		draw_circle(Vector2(float(p["x"]) * sz.x, float(p["y"]) * sz.y),
 				float(p["r"]), Color(Wafu.GOLD, float(p["a"])))
 
+	# P5 视觉: 半调网点(左上) + 标题后锯齿星芒 + 右上斜纹
+	Wafu.halftone(self, Rect2(36, 36, 300, 170), 16.0, 2.6, Color(Wafu.GOLD, 0.15))
+	Wafu.burst(self, Vector2(sz.x * 0.68, sz.y * 0.20), 180.0, 100.0, 14,
+			Color(Wafu.RED, 0.10))
+	Wafu.burst(self, Vector2(sz.x * 0.68, sz.y * 0.20), 125.0, 72.0, 10,
+			Color(Wafu.GOLD, 0.08))
+	Wafu.stripes(self, Rect2(sz.x * 0.62, 0, sz.x * 0.38, sz.y * 0.16), 26.0,
+			Color(Wafu.GOLD, 0.05))
+
 	Wafu.frame(self, sz, Color(Wafu.GOLD, 0.28))
