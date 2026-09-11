@@ -22,6 +22,8 @@ var peer_room: Dictionary = {}   # peer -> code
 var peer_client: Dictionary = {} # peer -> client_id（游客身份）
 var peer_chat_ms: Dictionary = {}# peer -> 上次发言/表情时间（服务端限速）
 var peer_skin: Dictionary = {}   # peer -> 皮肤 id
+var soak_rooms := 0              # --soak 压测房间数
+var soak_matches := 0            # 压测已完成对局数
 var stats = null                 # StatsLib
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
@@ -352,7 +354,11 @@ func tick(now_ms: int) -> Array:
 			_after_state_change(out, room, r)
 		if ctl.game_finished(now_ms):
 			room.end_match()
-			_bcast_room_state(out, room)
+			if room.soak:
+				soak_matches += 1
+				room.start(now_ms, ai_delay_ms, phase_delay_ms)  # 压测: 无缝续局
+			else:
+				_bcast_room_state(out, room)
 	return out
 
 
@@ -458,6 +464,17 @@ func _room_of(peer: int):
 
 func _seat_of(room, peer: int) -> int:
 	return room.seat_of_peer(peer)
+
+
+## --soak: 创建 N 个全机器人压测房间(对局结束自动续局)
+func start_soak(n: int) -> void:
+	soak_rooms = n
+	for i in n:
+		var room = RoomGd.new(_gen_code(), DEFAULT_SETTINGS.duplicate(), _rng)
+		room.soak = true
+		rooms[room.code] = room
+		room.start(Time.get_ticks_msec(), ai_delay_ms, phase_delay_ms)
+	print("[server] soak 压测启动: %d 个机器人房间" % n)
 
 
 func _human_online(room, seat: int) -> bool:

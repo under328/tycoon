@@ -47,7 +47,10 @@ bash tools/build_android_release.sh     # 产物 builds/Tycoon-release.apk
 | 状态日志 | 服务器每 60s 打印 `rooms/players/uptime` |
 | 对局状态 | 全内存态，重启即清空（房间作废，客户端提示重连） |
 | 战绩持久化 | ✅ 已实现（`user://stats.json`，按客户端 ID 记录场数/胜场/积分） |
-| 压测 | `tests/stress_bot.gd`（已验证 6 并发 150s 65 场零错误） |
+| 压测 | `--soak N` 全机器人房间模式：`godot --headless --path . --server --port 24565 --soak 20`
+  （20 房 80 机器人座位，对局结束无缝续局）。健康端点含 `mem_mb/soak_matches`，日志每 60s 输出。
+  实测 20 房 15 分钟内存平稳 ~29MB；8h 验收同命令后台跑一晚即可。
+  客户端机器人压测（模拟真人连入）：`tests/stress_bot.gd` |
 
 ## 6. 客户端连接
 

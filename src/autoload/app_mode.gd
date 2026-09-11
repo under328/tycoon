@@ -17,6 +17,7 @@ var address_from_cli := false
 var port_from_cli := false
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
+var soak_rooms := 0      # --soak N: 服务器启动即创建 N 个全机器人房间循环压测
 
 
 func _ready() -> void:
@@ -51,5 +52,9 @@ func _ready() -> void:
 			"--phase-delay":
 				if i + 1 < args.size():
 					phase_delay_ms = maxi(1, int(args[i + 1]))
+					i += 1
+			"--soak":
+				if i + 1 < args.size():
+					soak_rooms = maxi(0, int(args[i + 1]))
 					i += 1
 		i += 1

@@ -78,6 +78,8 @@ func _ready() -> void:
 		manager = ManagerGd.new()
 		manager.ai_delay_ms = ai_ms
 		manager.phase_delay_ms = phase_ms
+		if am != null and int(am.soak_rooms) > 0:
+			manager.start_soak(int(am.soak_rooms))
 		# 健康检查: HTTP GET http://<host>:%d/ → JSON 状态（运维探活用）
 		if _health.listen(port_v + 1) == OK:
 			print("[server] 健康检查端口 http=%d" % (port_v + 1))
@@ -98,15 +100,17 @@ func _poll_health(delta: float) -> void:
 	_log_accum += delta
 	if _log_accum >= 60.0:
 		_log_accum = 0.0
-		print("[server] rooms=%d players=%d uptime=%ds" % [
+		print("[server] rooms=%d players=%d uptime=%ds mem=%.1fMB soak_matches=%d" % [
 			manager.rooms.size(), manager.peer_room.size(),
-			int(Time.get_ticks_msec() / 1000.0)])
+			int(Time.get_ticks_msec() / 1000.0),
+			OS.get_static_memory_usage() / 1048576.0, manager.soak_matches])
 	if _health.is_listening():
 		while _health.is_connection_available():
 			var s: StreamPeerTCP = _health.take_connection()
-			var body := "{\"status\":\"ok\",\"rooms\":%d,\"players\":%d,\"uptime\":%d}" % [
+			var body := "{\"status\":\"ok\",\"rooms\":%d,\"players\":%d,\"uptime\":%d,\"mem_mb\":%.1f,\"soak_matches\":%d}" % [
 				manager.rooms.size(), manager.peer_room.size(),
-				int(Time.get_ticks_msec() / 1000.0)]
+				int(Time.get_ticks_msec() / 1000.0),
+				OS.get_static_memory_usage() / 1048576.0, manager.soak_matches]
 			var resp := "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
 				body.to_utf8_buffer().size(), body]
 			s.put_data(resp.to_utf8_buffer())

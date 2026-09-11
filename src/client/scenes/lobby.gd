@@ -40,6 +40,7 @@ var host_edit: LineEdit
 var port_edit: LineEdit
 var connect_btn: Button
 var host_btn: Button
+var update_btn: Button
 var _conn_fails := 0
 
 
@@ -181,6 +182,15 @@ func _build_ui() -> void:
 		host_requested.emit())
 	add_child(host_btn)
 
+	# 发现新版本: 版本握手不匹配时显示, 点击打开下载页
+	update_btn = AppTheme.make_button("⬇ 发现新版本, 点击更新", Vector2(260, 46), 16)
+	update_btn.position = Vector2(40, 220)
+	update_btn.visible = false
+	update_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		OS.shell_open(GameSettings.DOWNLOAD_URL))
+	add_child(update_btn)
+
 	# 服务器地址区(右上)
 	var c2 := AppTheme.make_label(15, COLOR_GOLD)
 	c2.text = "服务器"
@@ -312,6 +322,7 @@ func _save_nickname() -> void:
 
 func _bind_net() -> void:
 	net.connected_ok.connect(func() -> void:
+		update_btn.visible = false
 		_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
 		for b: Button in [quick_btn, create_btn, join_btn]:
 			b.disabled = false
@@ -327,7 +338,8 @@ func _bind_net() -> void:
 			_set_status("错误 %s: %s" % [code, msg], COLOR_RED))
 	net.kicked_off.connect(func(reason: String) -> void:
 		if reason == "version":
-			_set_status("版本不符, 请更新", COLOR_RED)
+			_set_status("服务器版本更高, 请更新客户端", COLOR_RED)
+			update_btn.visible = true
 		else:
 			_set_status("已被移出房间(%s)" % reason, COLOR_RED))
 	net.stats_updated.connect(func(entry: Dictionary) -> void:

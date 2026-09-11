@@ -16,6 +16,7 @@ var host_seat := 0
 var settings: Dictionary = {}
 var seats: Array = []          # 长度4, 空位为 null
 var match_ctl = null           # MatchController 或 null
+var soak := false              # 压测房间: 对局结束自动续局
 var token_rng: RandomNumberGenerator
 
 func _init(p_code: String, p_settings: Dictionary, rng: RandomNumberGenerator) -> void:

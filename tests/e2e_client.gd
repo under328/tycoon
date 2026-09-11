@@ -70,7 +70,7 @@ func _initialize() -> void:
 			played_count += 1)
 	net.view_changed.connect(_on_view)
 
-	var guard := create_timer(90.0)
+	var guard := create_timer(240.0)  # 慢速服务器(默认 600ms 延迟)下一整场可能 >3 分钟
 	guard.timeout.connect(func() -> void:
 		if not done:
 			_fail("超时 stage played=%d dropped=%s" % [played_count, str(dropped)]))
