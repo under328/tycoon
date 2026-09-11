@@ -9,6 +9,7 @@ var nickname := "玩家"
 var bgm_volume := 0.8
 var sfx_volume := 1.0
 var client_id := ""      # 游客身份：首启随机生成，持久化
+var tutorial_seen := false  # 是否已看过新手引导
 
 
 func _ready() -> void:
@@ -25,6 +26,7 @@ func load_settings() -> void:
 		bgm_volume = cf.get_value("audio", "bgm", bgm_volume)
 		sfx_volume = cf.get_value("audio", "sfx", sfx_volume)
 		client_id = cf.get_value("player", "client_id", "")
+		tutorial_seen = cf.get_value("player", "tutorial_seen", false)
 
 
 func save_settings() -> void:
@@ -33,4 +35,5 @@ func save_settings() -> void:
 	cf.set_value("audio", "bgm", bgm_volume)
 	cf.set_value("audio", "sfx", sfx_volume)
 	cf.set_value("player", "client_id", client_id)
+	cf.set_value("player", "tutorial_seen", tutorial_seen)
 	cf.save(SAVE_PATH)

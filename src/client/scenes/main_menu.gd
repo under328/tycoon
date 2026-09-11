@@ -5,6 +5,7 @@ signal local_game
 signal online_game
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
+const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 
 const COLOR_GOLD := Color("e0a83c")
 const COLOR_RED := Color("e0503c")
@@ -14,6 +15,7 @@ const COLOR_PANEL := Color(0.10, 0.10, 0.22, 0.92)
 
 var _settings_panel: PanelContainer
 var _nickname_edit: LineEdit
+var _tutorial_btn: Button
 
 
 func _ready() -> void:
@@ -82,9 +84,9 @@ func _build_title() -> void:
 func _build_menu() -> void:
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.position = Vector2(-170, -60)
-	box.custom_minimum_size = Vector2(340, 300)
-	box.add_theme_constant_override("separation", 18)
+	box.position = Vector2(-170, -95)
+	box.custom_minimum_size = Vector2(340, 380)
+	box.add_theme_constant_override("separation", 16)
 	add_child(box)
 
 	box.add_child(_menu_button("本地游戏", func() -> void:
@@ -96,16 +98,33 @@ func _build_menu() -> void:
 	box.add_child(_menu_button("设  置", func() -> void:
 		Audio.play("click")
 		_settings_panel.visible = not _settings_panel.visible))
+	_tutorial_btn = _menu_button("新手引导", func() -> void:
+		Audio.play("click")
+		_open_tutorial())
+	box.add_child(_tutorial_btn)
 	box.add_child(_menu_button("退出游戏", func() -> void:
 		get_tree().quit()))
+	_refresh_tutorial_badge()
 
 	var hint := _label(13, COLOR_DIM)
 	hint.text = "和朋友开一局: 联机游戏 → 创建房间 → 把房间码发给朋友"
 	hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	hint.position = Vector2(-300, -46)
+	hint.position = Vector2(-300, -40)
 	hint.custom_minimum_size = Vector2(600, 26)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(hint)
+
+
+func _refresh_tutorial_badge() -> void:
+	var gs := get_node_or_null("/root/GameSettings")
+	var seen: bool = gs != null and bool(gs.tutorial_seen)
+	_tutorial_btn.text = "新手引导" if seen else "新手引导 ★"
+
+
+func _open_tutorial() -> void:
+	var tut := TutorialScript.new()
+	tut.closed.connect(_refresh_tutorial_badge)
+	add_child(tut)
 
 
 func _menu_button(text: String, on_press: Callable) -> Button:

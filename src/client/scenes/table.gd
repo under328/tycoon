@@ -11,6 +11,7 @@ const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 const ScoringGd = preload("res://src/rules/scoring.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
+const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
@@ -297,6 +298,16 @@ func _build_ui() -> void:
 	timer_label.position = Vector2(1180, 12)
 	timer_label.visible = mode == "online"
 	add_child(timer_label)
+
+	var rules_btn := _button("规则")
+	rules_btn.position = Vector2(1076, 10)
+	rules_btn.custom_minimum_size = Vector2(72, 32)
+	rules_btn.add_theme_font_size_override("font_size", 15)
+	rules_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var tut := TutorialScript.new()
+		add_child(tut))
+	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在底部手牌区
 	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
