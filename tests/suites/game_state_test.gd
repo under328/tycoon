@@ -67,18 +67,20 @@ func _fall_from_grace(t) -> void:
 	var st := GameStateGd.new_match({}, 7)
 	# 上局身份: 座位3 = 大富豪
 	st["identities"] = [1, 3, 2, 0]
-	# 本局完牌顺序: 0→3→1, 剩 2 → 自然身份 0=大富豪,3=富豪,1=贫民,2=大贫民
+	# 本局完牌顺序: 0→3→1, 剩 2
+	# 一落千丈(非互换): 3 直接垫底为大贫民; 其余按出完顺序 0=大富豪,1=富豪,2=贫民
 	st["finish_order"] = [0, 3]
 	var r := GameStateGd._finish_player(st, 1)
 	t.expect(bool(r["ok"]), "一落千丈结算成功")
 	var ids: Array = r["state"]["identities"]
-	t.expect_eq(int(ids[3]), 3, "上局大富豪掉到末位")
-	t.expect_eq(int(ids[2]), 1, "原末位顶替其富豪位")
-	t.expect_eq(int(ids[0]), 0, "本局第一仍是大富豪")
+	t.expect_eq(int(ids[3]), 3, "上局大富豪掉到大贫民")
+	t.expect_eq(int(ids[0]), 0, "完牌第1名获得大富豪")
+	t.expect_eq(int(ids[1]), 1, "完牌第3名(座位1)获得富豪")
+	t.expect_eq(int(ids[2]), 2, "未出完者(座位2)获得贫民")
 	var uniq := {}
 	for id in ids:
 		uniq[int(id)] = true
-	t.expect_eq(uniq.size(), 4, "互换后身份仍 4 种各一")
+	t.expect_eq(uniq.size(), 4, "身份仍 4 种各一")
 	# 上局大富豪保住第一 → 不触发
 	var st2 := GameStateGd.new_match({}, 7)
 	st2["identities"] = [1, 3, 2, 0]

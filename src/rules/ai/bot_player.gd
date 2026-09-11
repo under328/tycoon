@@ -45,11 +45,18 @@ static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
 			return {"t": "pass", "seat": seat}
 		return {"t": "play", "seat": seat, "cards": best["cards"]}
 	var beat := {}
-	var lead_key := int(lead["key"])
+	var lead_eff := ComboGd.eff_key(float(lead["key"]), st["revolution"])
+	var beat_d := INF
+	var beat_jokers := 99
 	for combo in combos:
-		if ComboGd.beats(combo, lead, st["revolution"]):
-			if beat.is_empty() or _closer(combo, beat, lead_key):
-				beat = combo
+		if not ComboGd.beats(combo, lead, st["revolution"]):
+			continue
+		var d: float = absf(ComboGd.eff_key(float(combo["key"]), st["revolution"]) - lead_eff)
+		var jc := _joker_count(combo)
+		if beat.is_empty() or d < beat_d or (d == beat_d and jc < beat_jokers):
+			beat = combo
+			beat_d = d
+			beat_jokers = jc
 	if beat.is_empty():
 		return {"t": "pass", "seat": seat}
 	return {"t": "play", "seat": seat, "cards": beat["cards"]}
@@ -59,23 +66,7 @@ static func _prefer_lead(a: Dictionary, b: Dictionary, revolution: bool) -> bool
 	# 牌数多者优先（先跑为敬）；同数取当前点序下更弱者（反转时 key 大者更弱）
 	if int(a["len"]) != int(b["len"]):
 		return int(a["len"]) > int(b["len"])
-	if revolution:
-		# ♠3 例外: 反转下仍是最强, 不视为弱牌
-		if float(a["key"]) == ComboGd.SPADE3_KEY:
-			return false
-		if float(b["key"]) == ComboGd.SPADE3_KEY:
-			return true
-		return int(a["key"]) > int(b["key"])
-	return int(a["key"]) < int(b["key"])
-
-
-## 跟牌选"离 lead 最近的能压牌"（最不容易被压的弱牌）；同距少用王。
-static func _closer(a: Dictionary, b: Dictionary, lead_key: int) -> bool:
-	var da: int = absi(int(a["key"]) - lead_key)
-	var db: int = absi(int(b["key"]) - lead_key)
-	if da != db:
-		return da < db
-	return _joker_count(a) < _joker_count(b)
+	return ComboGd.eff_key(float(a["key"]), revolution) 			< ComboGd.eff_key(float(b["key"]), revolution)
 
 
 static func _joker_count(combo: Dictionary) -> int:

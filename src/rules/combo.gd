@@ -52,21 +52,29 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 	return {}
 
 
-## next 能否压制 prev（revolution 时点序反转）。
-## 例外: ♠3 单张(key=16.5)不受反转影响, 永远最强。
+## next 能否压制 prev。
+## - 四条(炸弹)可压制任何非四条组合; 四条之间按点序比较(革命时同样反转)。
+## - 其他情况必须同牌型、同长度。
+## - 革命仅反转 3..2 的自然牌点序(3 最强, 2 最弱); 王(16)与 ♠3(16.5) 保持最大。
 static func beats(next: Dictionary, prev: Dictionary, revolution: bool) -> bool:
 	if next.is_empty() or prev.is_empty():
 		return false
-	if int(next["type"]) != int(prev["type"]) or int(next["len"]) != int(prev["len"]):
+	var nt := int(next["type"])
+	var pt := int(prev["type"])
+	if nt == Type.QUAD:
+		return pt != Type.QUAD 				or eff_key(float(next["key"]), revolution) > eff_key(float(prev["key"]), revolution)
+	if pt == Type.QUAD:
 		return false
-	if int(next["type"]) == Type.SINGLE:
-		if float(next["key"]) == SPADE3_KEY:
-			return true
-		if float(prev["key"]) == SPADE3_KEY:
-			return false
-	if revolution:
-		return next["key"] < prev["key"]
-	return next["key"] > prev["key"]
+	if nt != pt or int(next["len"]) != int(prev["len"]):
+		return false
+	return eff_key(float(next["key"]), revolution) > eff_key(float(prev["key"]), revolution)
+
+
+## 革命时的有效点数: 仅反转 3..2 的自然牌(3→15 … 2→3); 王(16)/♠3(16.5) 不变。
+static func eff_key(key: float, revolution: bool) -> float:
+	if revolution and key < 16.0:
+		return 18.0 - key
+	return key
 
 
 static func _mk(t: int, key: float, len: int, cards: Array) -> Dictionary:
