@@ -6,7 +6,7 @@ const ScoringGd = preload("res://src/rules/scoring.gd")
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 
 
-func setup(view: Dictionary, seat_namer: Callable) -> void:
+func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -47,6 +47,14 @@ func setup(view: Dictionary, seat_namer: Callable) -> void:
 	detail.custom_minimum_size = Vector2(520, 140)
 	add_child(detail)
 
+	if not reward.is_empty():
+		var gain := AppTheme.make_label(24, AppTheme.GOLD)
+		gain.text = "获得  💰+%d   💎+%d" % [int(reward.get("gold", 0)), int(reward.get("diamonds", 0))]
+		gain.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		gain.set_anchors_preset(Control.PRESET_CENTER)
+		gain.position = Vector2(-200, 96)
+		gain.custom_minimum_size = Vector2(400, 40)
+		add_child(gain)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(dark, "color:a", 0.55, 0.4)

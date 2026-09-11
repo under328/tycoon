@@ -30,6 +30,7 @@ var _log_accum := 0.0
 
 # --- 客户端侧 ---
 var latest_view: Dictionary = {}
+var last_room_state: Dictionary = {}
 var my_seat := -1
 var in_room := false
 var autoplay := false          # E2E：轮到自己自动出牌
@@ -247,6 +248,7 @@ func s_room_state(data: Dictionary) -> void:
 		_session_token = str(data["session_token"])
 	if int(data.get("my_seat", -1)) >= 0:
 		my_seat = int(data["my_seat"])
+	last_room_state = data.duplicate(true)
 	room_state.emit(data)
 
 
@@ -478,7 +480,7 @@ func _c_send(event: String, data: Dictionary) -> void:
 		errored.emit("not_connected", "未连接服务器")
 		return
 	if event == "c_hello":
-		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id())
+		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id(), _client_skin())
 		return
 	# 握手(welcome)完成前, 房间操作排队——服务器必须先知道座位归属
 	if not _welcomed:
@@ -493,6 +495,23 @@ func _flush_pending() -> void:
 	for op in _pending_ops:
 		rpc_id(1, op[0], op[1])
 	_pending_ops.clear()
+
+
+## 查询某座位当前皮肤（联机），无数据返回空串
+func skin_of_seat(seat: int) -> String:
+	if last_room_state.is_empty():
+		return ""
+	for p in last_room_state.get("players", []):
+		if int(p.get("seat", -1)) == seat:
+			return str(p.get("skin_id", "skin_default"))
+	return ""
+
+
+func _client_skin() -> String:
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null:
+		return str(gs.equipped_skin)
+	return "skin_default"
 
 
 func _client_id() -> String:

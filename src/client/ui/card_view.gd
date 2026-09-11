@@ -31,6 +31,7 @@ var face_down := false:
 		queue_redraw()
 
 var _face_sb := StyleBoxFlat.new()
+var _joker_sb := StyleBoxFlat.new()
 var _back_sb := StyleBoxFlat.new()
 var _sel_sb := StyleBoxFlat.new()
 var _font_ascii: Font = AppTheme.display_font() if false else null
@@ -46,6 +47,11 @@ func _init(p_card: int = -1) -> void:
 	_face_sb.set_corner_radius_all(7)
 	_face_sb.set_border_width_all(2)
 	_face_sb.border_color = COLOR_BORDER
+
+	_joker_sb.bg_color = Color(0, 0, 0, 0)
+	_joker_sb.set_corner_radius_all(7)
+	_joker_sb.set_border_width_all(2)
+	_joker_sb.border_color = COLOR_BORDER
 
 	_back_sb.bg_color = COLOR_BACK_BG
 	_back_sb.set_corner_radius_all(7)
@@ -97,20 +103,10 @@ func _draw_face() -> void:
 	# 左上: 点数 + 小花色
 	draw_string(_font_ascii, Vector2(7, 24), rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, ink)
 	_suit(card, Vector2(20, 36), 6, ink)
-	# 中心
+	# 中心大花色(J/Q/K 与数字牌同版式, 靠角标区分)
 	var c := size / 2.0
-	if rank == "J" or rank == "Q" or rank == "K":
-		# 人头牌: 双层描金圆环 + 大字母
-		draw_arc(c, 30.0, 0, TAU, 40, COLOR_BORDER, 1.6, true)
-		draw_arc(c, 25.0, 0, TAU, 40, COLOR_BORDER, 0.8, true)
-		draw_string(_font_ascii, c + Vector2(-11, 14), rank,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(0.20, 0.16, 0.10, 0.35))
-		draw_string(_font_ascii, c + Vector2(-13, 12), rank,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 34, ink)
-		_suit(card, c + Vector2(-5, 24), 5, ink)
-	else:
-		_suit(card, c + Vector2(2.5, 2.5), 17, Color(0.20, 0.16, 0.10, 0.35))
-		_suit(card, c, 17, ink)
+	_suit(card, c + Vector2(2.5, 2.5), 17, Color(0.20, 0.16, 0.10, 0.35))
+	_suit(card, c, 17, ink)
 	# 右下: 小点数
 	var rank_w: float = _font_ascii.get_string_size(
 			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
@@ -176,19 +172,42 @@ func _draw_club(pos: Vector2, r: float, ink: Color) -> void:
 	draw_rect(Rect2(pos + Vector2(-r * 0.1, r * 0.1), Vector2(r * 0.2, r * 0.62)), ink)
 
 
+## JOKER 花牌: 深靛夜空底, 描金放射线, 红日居中, 毛笔"王"字。
+## 大王(53)带十二道光芒, 小王(52)素面红日 —— 便于玩家区分。
 func _draw_joker() -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color("2c2440")
-	sb.set_corner_radius_all(7)
-	sb.set_border_width_all(2)
-	sb.border_color = COLOR_GOLD
-	draw_style_box(sb, Rect2(Vector2.ZERO, size))
+	var big := card == 53
+	# 深靛渐变底(竖向)
+	var strips := 10
+	var sh := size.y / strips
+	for i in strips:
+		draw_rect(Rect2(0, i * sh, size.x, sh + 1.0),
+				Color("2c2450").lerp(Color("181830"), float(i) / (strips - 1)))
+	# 和纸颗粒 + 描金边框角饰
+	Wafu.speckle(self, Rect2(Vector2(3, 3), size - Vector2(6, 6)), 16, 500 + card,
+			Color(Wafu.GOLD, 0.12))
+	draw_style_box(_joker_sb, Rect2(Vector2.ZERO, size))
+	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
+			Color(Wafu.GOLD, 0.6))
+	# 中心: 放射光芒 + 红日
 	var c := size / 2.0
-	draw_arc(c, 30.0, 0, TAU, 40, COLOR_GOLD, 1.6, true)
-	draw_string(_font_cjk, c + Vector2(-20, 14), "王",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 44, COLOR_GOLD)
-	draw_string(_font_ascii, Vector2(8, 22), "JOKER",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, COLOR_GOLD)
+	if big:
+		for i in 12:
+			var ang := TAU * i / 12.0
+			var r1 := 24.0 if i % 2 == 0 else 19.0
+			draw_line(c + Vector2.from_angle(ang) * 9.0,
+					c + Vector2.from_angle(ang) * r1,
+					Color(Wafu.GOLD, 0.75), 1.5, true)
+	draw_circle(c, 13.5, Color(Wafu.RED, 0.95))
+	# 毛笔"王"(白)
+	draw_string(_font_cjk, c + Vector2(-11, 8), "王",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, COLOR_FACE)
+	# 角标: JOKER
+	draw_string(_font_ascii, Vector2(6, 15), "JOKER",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(Wafu.GOLD, 0.85))
+	var jw: float = _font_ascii.get_string_size(
+			"JOKER", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	draw_string(_font_ascii, size - Vector2(jw + 6, 6), "JOKER",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(Wafu.GOLD, 0.85))
 
 
 func _draw_back() -> void:

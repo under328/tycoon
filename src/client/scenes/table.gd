@@ -16,6 +16,8 @@ const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 const BackdropScript = preload("res://src/client/ui/table_backdrop.gd")
 const GameEndPanelScript = preload("res://src/client/ui/game_end_panel.gd")
+const SkinsLib = preload("res://src/client/ui/skins.gd")
+const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
@@ -35,6 +37,9 @@ var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
 var _leave_confirm_at := 0
+var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
+var seat_avatars: Array = []
+var avatar_me: Control
 
 # M4 视听状态
 var _last_hand: Array = []
@@ -98,6 +103,17 @@ func _process(delta: float) -> void:
 func _new_match() -> void:
 	state = GameStateGd.new_match({}, -1)
 	selected.clear()
+	_end_shown = false
+	_prev_revolution = false
+	_field_count = -1
+	_last_hand = []
+	# 本地: 我用已装备皮肤, AI 随机皮肤
+	var ids: Array = []
+	for s in SkinsLib.SKINS:
+		ids.append(str(s["id"]))
+	_seat_skins = [Wallet.equipped_skin, "", "", ""]
+	for i in range(1, 4):
+		_seat_skins[i] = ids[randi() % ids.size()]
 	_end_shown = false
 	_prev_revolution = false
 	_field_count = -1
@@ -298,6 +314,20 @@ func _build_ui() -> void:
 	var bg := BackdropScript.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+
+	# 头像: 三个对手 + 我(左上)
+	for pos: Vector2 in [Vector2(1008, 246), Vector2(444, 20), Vector2(24, 240)]:
+		var av := AvatarScript.new()
+		av.position = pos
+		av.custom_minimum_size = Vector2(56, 56)
+		av.size = Vector2(56, 56)
+		add_child(av)
+		seat_avatars.append(av)
+	avatar_me = AvatarScript.new()
+	avatar_me.position = Vector2(16, 56)
+	avatar_me.custom_minimum_size = Vector2(52, 52)
+	avatar_me.size = Vector2(52, 52)
+	add_child(avatar_me)
 
 	info_label = _make_label(20, AppTheme.GOLD)
 	info_label.position = Vector2(20, 12)
@@ -541,6 +571,8 @@ func _refresh_view(view: Dictionary) -> void:
 	]
 
 	for seat in range(1, 4):
+		seat_avatars[seat - 1].skin_id = _skin_for(view, seat)
+	for seat in range(1, 4):
 		var lb: Label = seat_labels[seat]
 		var turn_mark := "▶ " if int(view["turn"]) == seat else ""
 		var ident := ""
@@ -595,9 +627,21 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase == "game_end" and not _end_shown \
 			and (view["identities"] as Array).size() == 4:
 		_end_shown = true
+		var reward: Dictionary = {}
+		if mode == "local":
+			var my_rank := int(view["identities"][int(view["my_seat"])])
+			reward = Wallet.grant_match_reward(my_rank + 1)
 		var panel := GameEndPanelScript.new()
-		panel.setup(view, _seat_name)
+		panel.setup(view, _seat_name, reward)
 		fx_layer.add_child(panel)
+
+
+func _skin_for(view: Dictionary, seat: int) -> String:
+	if mode == "online" and net != null:
+		var s: String = net.skin_of_seat(seat)
+		if s != "":
+			return s
+	return str(_seat_skins[seat]) if seat < _seat_skins.size() else "skin_default"
 
 
 func _seat_name(view: Dictionary, seat: int) -> String:

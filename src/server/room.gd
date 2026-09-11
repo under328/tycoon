@@ -8,6 +8,8 @@ const GameStateGd = preload("res://src/rules/game_state.gd")
 const MatchCtlGd = preload("res://src/server/match_controller.gd")
 
 const SEATS := 4
+## AI 随机皮肤池
+const BOT_SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
 
 var code := ""
 var host_seat := 0
@@ -47,22 +49,23 @@ func first_free_seat() -> int:
 
 
 ## 返回加入者的座位；满员返回 -1。
-func sit(peer: int, name: String, client_id: String = "") -> int:
+func sit(peer: int, name: String, client_id: String = "", skin_id: String = "skin_default") -> int:
 	var s := first_free_seat()
 	if s < 0:
 		return -1
 	seats[s] = {
 		"peer": peer, "name": name, "token": _gen_token(),
-		"bot": false, "online": true, "client_id": client_id,
+		"bot": false, "online": true, "client_id": client_id, "skin_id": skin_id,
 	}
 	return s
 
 
-func sit_bot() -> int:
+func sit_bot(skin_id: String = "skin_default") -> int:
 	var s := first_free_seat()
 	if s < 0:
 		return -1
-	seats[s] = {"peer": -1, "name": "AI·%d" % (s + 1), "token": "", "bot": true, "online": true}
+	seats[s] = {"peer": -1, "name": "AI·%d" % (s + 1), "token": "",
+			"bot": true, "online": true, "client_id": "", "skin_id": skin_id}
 	return s
 
 
@@ -108,6 +111,7 @@ func state_for(seat: int) -> Dictionary:
 			players.append({
 				"seat": s, "empty": false, "name": str(seat_data["name"]),
 				"is_bot": bool(seat_data["bot"]), "online": bool(seat_data["online"]),
+				"skin_id": str(seat_data.get("skin_id", "skin_default")),
 			})
 	var out := {
 		"room_code": code, "host_seat": host_seat, "players": players,
@@ -124,7 +128,7 @@ func start(now_ms: int, ai_delay_ms: int, phase_delay_ms: int) -> Dictionary:
 		return {"ok": false}
 	for s in SEATS:
 		if seats[s] == null:
-			sit_bot()
+			sit_bot(BOT_SKINS[token_rng.randi_range(0, BOT_SKINS.size() - 1)])
 	var peers := []
 	var online := []
 	for s in SEATS:

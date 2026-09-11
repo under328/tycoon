@@ -9,6 +9,8 @@ const RoomGd = preload("res://src/server/room.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
 const StatsGd = preload("res://src/server/stats.gd")
 const RulesConfigGd = preload("res://src/rules/rules_config.gd")
+## AI 随机皮肤池
+const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
 
 const DEFAULT_SETTINGS := {
 	"with_joker": true, "revolution": true, "stairs": true,
@@ -19,6 +21,7 @@ var rooms: Dictionary = {}       # code -> Room
 var peer_room: Dictionary = {}   # peer -> code
 var peer_client: Dictionary = {} # peer -> client_id（游客身份）
 var peer_chat_ms: Dictionary = {}# peer -> 上次发言/表情时间（服务端限速）
+var peer_skin: Dictionary = {}   # peer -> 皮肤 id
 var stats = null                 # StatsLib
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
@@ -32,8 +35,10 @@ func _init() -> void:
 
 # ---------------------------------------------------------------- 连接与会话
 
-func hello(peer: int, ver: int, token: String, client_id: String = "") -> Array:
+func hello(peer: int, ver: int, token: String, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
+	if skin_id != "":
+		peer_skin[peer] = skin_id
 	if ver != MsgC.PROTOCOL_VERSION:
 		out.append({"peer": peer, "event": "s_kicked",
 				"data": {"reason": "version"}})
@@ -68,8 +73,8 @@ func hello(peer: int, ver: int, token: String, client_id: String = "") -> Array:
 			peer_room.erase(int(seat_data["peer"]))
 			seat_data["peer"] = peer
 			seat_data["online"] = true
-			if client_id != "":
-				seat_data["client_id"] = client_id
+			if skin_id != "":
+				seat_data["skin_id"] = skin_id
 			if room.match_ctl != null:
 				room.match_ctl.seat_peer[seat] = peer
 				room.match_ctl.seat_online[seat] = true
@@ -115,21 +120,25 @@ func peer_gone(peer: int) -> Array:
 
 # ---------------------------------------------------------------- 房间操作
 
-func quick_match(peer: int, name: String, rules: Dictionary, client_id: String = "") -> Array:
+func quick_match(peer: int, name: String, rules: Dictionary, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
 	if client_id != "":
 		peer_client[peer] = client_id
+	if skin_id != "":
+		peer_skin[peer] = skin_id
 	for code in rooms:
 		var room = rooms[code]
 		if room.match_ctl == null and room.first_free_seat() >= 0:
-			return join_room(peer, name, code, client_id)
-	return create_room(peer, name, rules, client_id)
+			return join_room(peer, name, code, client_id, skin_id)
+	return create_room(peer, name, rules, client_id, skin_id)
 
 
-func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "") -> Array:
+func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
 	if client_id != "":
 		peer_client[peer] = client_id
+	if skin_id != "":
+		peer_skin[peer] = skin_id
 	_leave_room(peer, out)
 	var cfg := DEFAULT_SETTINGS.duplicate()
 	for k in cfg.keys():
@@ -137,17 +146,19 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 			cfg[k] = rules[k]
 	var room = RoomGd.new(_gen_code(), cfg, _rng)
 	rooms[room.code] = room
-	room.sit(peer, name, client_id)
+	room.sit(peer, name, client_id, skin_id)
 	peer_room[peer] = room.code
 	out.append({"peer": peer, "event": "s_room_state",
 			"data": room.state_for(room.seat_of_peer(peer))})
 	return out
 
 
-func join_room(peer: int, name: String, code: String, client_id: String = "") -> Array:
+func join_room(peer: int, name: String, code: String, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
 	if client_id != "":
 		peer_client[peer] = client_id
+	if skin_id != "":
+		peer_skin[peer] = skin_id
 	var room = rooms.get(code)
 	if room == null:
 		out.append({"peer": peer, "event": "s_error",
@@ -158,7 +169,7 @@ func join_room(peer: int, name: String, code: String, client_id: String = "") ->
 				"data": {"code": "in_game", "msg": "对局进行中"}})
 		return out
 	_leave_room(peer, out)
-	var seat: int = room.sit(peer, name, client_id)
+	var seat: int = room.sit(peer, name, client_id, skin_id)
 	if seat < 0:
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": "full", "msg": "房间已满"}})
@@ -267,7 +278,7 @@ func fill_bots(peer: int) -> Array:
 	if int(room.host_seat) != _seat_of(room, peer):
 		return out
 	while room.first_free_seat() >= 0:
-		room.sit_bot()
+		room.sit_bot(SKINS[randi() % SKINS.size()])
 	_bcast_room_state(out, room)
 	return out
 

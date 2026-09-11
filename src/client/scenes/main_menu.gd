@@ -8,11 +8,14 @@ signal online_game
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
 const SettingsPanelScript = preload("res://src/client/ui/settings_panel.gd")
+const ShopScript = preload("res://src/client/ui/shop.gd")
 const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 
 
 var _settings: Control
 var _tutorial_btn: Button
+var _shop: Control
+var _balance_lbl: Label
 
 
 func _ready() -> void:
@@ -68,6 +71,12 @@ func _build_title() -> void:
 	seal_char.position = Vector2(10, 4)
 	seal.add_child(seal_char)
 
+	_balance_lbl = AppTheme.make_label(18, AppTheme.WHITE)
+	_balance_lbl.text = "💰 %d   💎 %d" % [Wallet.gold, Wallet.diamonds]
+	_balance_lbl.position = Vector2(1030, 30)
+	add_child(_balance_lbl)
+	Wallet.balance_changed.connect(_refresh_balance)
+
 	var ver := _label(13, AppTheme.DIM)
 	ver.text = "v1.0.0"
 	ver.position = Vector2(16, 690)
@@ -77,9 +86,9 @@ func _build_title() -> void:
 func _build_menu() -> void:
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.position = Vector2(-170, -95)
-	box.custom_minimum_size = Vector2(340, 380)
-	box.add_theme_constant_override("separation", 16)
+	box.position = Vector2(-170, -196)
+	box.custom_minimum_size = Vector2(340, 392)
+	box.add_theme_constant_override("separation", 14)
 	add_child(box)
 
 	box.add_child(_menu_button("本地游戏", func() -> void:
@@ -88,6 +97,9 @@ func _build_menu() -> void:
 	box.add_child(_menu_button("联机游戏", func() -> void:
 		Audio.play("click")
 		online_game.emit()))
+	box.add_child(_menu_button("商  城", func() -> void:
+		Audio.play("click")
+		_open_shop()))
 	box.add_child(_menu_button("设  置", func() -> void:
 		Audio.play("click")
 		_settings.open()))
@@ -112,6 +124,23 @@ func _refresh_tutorial_badge() -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	var seen: bool = gs != null and bool(gs.tutorial_seen)
 	_tutorial_btn.text = "新手引导" if seen else "新手引导 ★"
+
+
+func _refresh_balance() -> void:
+	if _balance_lbl != null:
+		_balance_lbl.text = "💰 %d   💎 %d" % [Wallet.gold, Wallet.diamonds]
+
+
+func _open_shop() -> void:
+	if _shop != null:
+		return
+	_shop = ShopScript.new()
+	_shop.name = "Shop"
+	add_child(_shop)
+	_shop.closed.connect(func() -> void:
+		_shop.queue_free()
+		_shop = null
+		_refresh_balance())
 
 
 func _open_tutorial() -> void:

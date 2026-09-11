@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 AppMode="*res://src/autoload/app_mode.gd"
 GameSettings="*res://src/autoload/settings.gd"
+Wallet="*res://src/autoload/wallet.gd"
 Audio="*res://src/autoload/audio.gd"
 
 [display]
