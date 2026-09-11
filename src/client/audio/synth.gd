@@ -19,8 +19,8 @@ static func _to_wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 	return wav
 
 
-## 单音（正弦 + 指数衰减包络）
-static func tone(dur: float, freq: float, vol := 0.5, decay := 6.0) -> PackedFloat32Array:
+## 单音（正弦 + 可选二次泛音 + 指数衰减包络）
+static func tone(dur: float, freq: float, vol := 0.5, decay := 6.0, harm := 0.0) -> PackedFloat32Array:
 	var n := int(dur * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
@@ -29,7 +29,8 @@ static func tone(dur: float, freq: float, vol := 0.5, decay := 6.0) -> PackedFlo
 		var env := exp(-decay * t)
 		if t < 0.004:
 			env *= t / 0.004  # 防爆音
-		out[i] = sin(TAU * freq * t) * vol * env
+		var s := sin(TAU * freq * t) + harm * sin(TAU * freq * 2.0 * t)
+		out[i] = s / (1.0 + harm) * vol * env
 	return out
 
 
@@ -43,6 +44,37 @@ static func snap(dur: float, vol := 0.4, decay := 30.0) -> PackedFloat32Array:
 	for i in n:
 		var t := float(i) / RATE
 		out[i] = (rng.randf() * 2.0 - 1.0) * vol * exp(-decay * t)
+	return out
+
+
+## 太鼓(低频扫频击)
+static func drum(dur := 0.28, vol := 0.5) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := lerpf(120.0, 42.0, minf(t / (dur * 0.7), 1.0))
+		phase += TAU * f / RATE
+		var env := exp(-9.0 * t)
+		if t < 0.002:
+			env *= t / 0.002
+		out[i] = sin(phase) * vol * env
+	return out
+
+
+## 上扬扫频(革命预警)
+static func riser(dur: float, f0: float, f1: float, vol := 0.22) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / n
+		var f := lerpf(f0, f1, t * t)
+		phase += TAU * f / RATE
+		out[i] = sin(phase) * vol * (0.3 + 0.7 * t)
 	return out
 
 
@@ -91,22 +123,41 @@ static func wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 
 # ---------------------------------------------------------------- BGM
 
-## 五声音阶氛围垫（可变调式/密度）。16 秒无缝循环。
-static func _bgm_base(roots: Array, pluck_seed: int, pluck_min: float, pluck_max: float) -> AudioStreamWAV:
+## 五声音阶氛围垫（可变调式/密度）。16 秒无缝循环。drums=对局版加太鼓。
+static func _bgm_base(roots: Array, pluck_seed: int, pluck_min: float, pluck_max: float,
+		drums := false) -> AudioStreamWAV:
 	var dur := 16.0
 	var n := int(dur * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
+	var chord_len := dur / roots.size()
 	for ci in roots.size():
-		var start: float = ci * (dur / roots.size())
+		var start: float = ci * chord_len
 		for half in 2:
 			var f: float = roots[ci][half]
 			var s0 := int(start * RATE)
-			var len := int((dur / roots.size()) * RATE)
+			var len := int(chord_len * RATE)
 			for i in len:
 				var t := float(i) / RATE
-				var env := sin(PI * t / (dur / roots.size())) * 0.10
+				var env := sin(PI * t / chord_len) * 0.10
 				out[s0 + i] += sin(TAU * f * t) * env
+		if drums:
+			var b0 := int(start * RATE)
+			var bl := int(chord_len * RATE)
+			var bphase := 0.0
+			for i in bl:
+				var t := float(i) / RATE
+				var f := lerpf(110.0, 46.0, minf(t / 0.5, 1.0))
+				bphase += TAU * f / RATE
+				var env := exp(-7.0 * t)
+				if t < 0.003:
+					env *= t / 0.003
+				out[b0 + i] += sin(bphase) * 0.16 * env
+		var bass_f: float = roots[ci][0] * 0.5
+		var bs := int(start * RATE)
+		for i in int(chord_len * RATE):
+			var t2 := float(i) / RATE
+			out[bs + i] += sin(TAU * bass_f * t2) * 0.06 * sin(PI * t2 / chord_len)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = pluck_seed
 	var t := 0.4
@@ -128,7 +179,7 @@ static func bgm_koto() -> AudioStreamWAV:
 		[261.63, 392.0],   # C + G
 		[293.66, 440.0],   # D + A
 		[220.0, 329.63],
-	], 20260911, 0.5, 1.1)
+	], 20260911, 0.5, 1.1, true)
 
 
 ## 大厅 BGM: D 羽调式, 稍快更轻快

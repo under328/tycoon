@@ -6,6 +6,7 @@ extends Control
 signal picked(card: int)
 
 const CardsGd = preload("res://src/rules/cards.gd")
+const Wafu = preload("res://src/client/ui/wafu_paint.gd")
 
 const COLOR_FACE := Color("f9f4e6")        # 和纸米白
 const COLOR_BORDER := Color("caa24e")      # 描金
@@ -75,12 +76,18 @@ func _draw() -> void:
 		_draw_face()
 	if selected:
 		draw_style_box(_sel_sb, Rect2(Vector2.ZERO, size))
+		draw_style_box(_sel_sb, Rect2(Vector2(-2, -2), size + Vector2(4, 4)))
 
 
 func _draw_face() -> void:
 	draw_style_box(_face_sb, Rect2(Vector2.ZERO, size))
 	if card < 0 or card > 53:
 		return
+	# 和纸颗粒与和风角饰
+	Wafu.speckle(self, Rect2(Vector2(3, 3), size - Vector2(6, 6)), 22, 100 + card,
+			Color(0.35, 0.28, 0.12, 0.10))
+	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
+			Color(Wafu.GOLD, 0.45))
 	var ink := COLOR_BLACK
 	if CardsGd.is_red(card):
 		ink = COLOR_RED
@@ -97,10 +104,13 @@ func _draw_face() -> void:
 		# 人头牌: 双层描金圆环 + 大字母
 		draw_arc(c, 30.0, 0, TAU, 40, COLOR_BORDER, 1.6, true)
 		draw_arc(c, 25.0, 0, TAU, 40, COLOR_BORDER, 0.8, true)
+		draw_string(_font_ascii, c + Vector2(-11, 14), rank,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(0.20, 0.16, 0.10, 0.35))
 		draw_string(_font_ascii, c + Vector2(-13, 12), rank,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 34, ink)
 		_suit(card, c + Vector2(-5, 24), 5, ink)
 	else:
+		_suit(card, c + Vector2(2.5, 2.5), 17, Color(0.20, 0.16, 0.10, 0.35))
 		_suit(card, c, 17, ink)
 	# 右下: 小点数
 	var rank_w: float = _font_ascii.get_string_size(
@@ -193,3 +203,6 @@ func _draw_back() -> void:
 		c + Vector2(0, -8), c + Vector2(7, 0), c + Vector2(0, 8), c + Vector2(-7, 0),
 	]), COLOR_GOLD)
 	draw_arc(c, 36.0, 0, TAU, 40, COLOR_BACK_PAT, 1.2, true)
+	draw_rect(Rect2(5, 5, size.x - 10, size.y - 10), Color(Wafu.GOLD, 0.25), false, 1.0)
+	Wafu.speckle(self, Rect2(Vector2(6, 6), size - Vector2(12, 12)), 14, 900 + card,
+			Color(Wafu.GOLD, 0.10))

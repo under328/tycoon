@@ -14,6 +14,8 @@ const ScoringGd = preload("res://src/rules/scoring.gd")
 const ViewGd = preload("res://src/protocol/view.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
+const BackdropScript = preload("res://src/client/ui/table_backdrop.gd")
+const GameEndPanelScript = preload("res://src/client/ui/game_end_panel.gd")
 
 const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
@@ -273,8 +275,8 @@ func _on_chat_send() -> void:
 func _build_ui() -> void:
 	theme = AppTheme.build_theme()
 
-	var bg := ColorRect.new()
-	bg.color = AppTheme.BG
+	# 动态和风夜景背景(弱化, 与主菜单同源)
+	var bg := BackdropScript.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -422,6 +424,13 @@ func _make_seat_label(pos: Vector2) -> Label:
 	var lb := _make_label(17, AppTheme.WHITE)
 	lb.position = pos
 	lb.custom_minimum_size = Vector2(180, 110)
+	lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var plate := AppTheme.flat(Color(0.07, 0.07, 0.16, 0.72), Color(AppTheme.GOLD, 0.30), 10, 1)
+	plate.content_margin_left = 12
+	plate.content_margin_right = 12
+	plate.content_margin_top = 8
+	plate.content_margin_bottom = 8
+	lb.add_theme_stylebox_override("normal", plate)
 	add_child(lb)
 	return lb
 
@@ -564,8 +573,9 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase == "game_end" and not _end_shown \
 			and (view["identities"] as Array).size() == 4:
 		_end_shown = true
-		var my_rank := int(view["identities"][int(view["my_seat"])])
-		_end_overlay(view, my_rank)
+		var panel := GameEndPanelScript.new()
+		panel.setup(view, _seat_name)
+		fx_layer.add_child(panel)
 
 
 func _seat_name(view: Dictionary, seat: int) -> String:
@@ -725,44 +735,3 @@ func _revolution_fx() -> void:
 	tw.tween_callback(func() -> void:
 		flash.queue_free()
 		big.queue_free())
-
-
-func _end_overlay(view: Dictionary, my_rank: int) -> void:
-	Audio.play("win" if my_rank <= 1 else "lose")
-	var dark := ColorRect.new()
-	dark.color = Color(0, 0, 0, 0.0)
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fx_layer.add_child(dark)
-
-	var ids: Array = view["identities"]
-	var scores: Array = view["scores"]
-	var lines: Array = []
-	for s in 4:
-		lines.append("%s  %s  %+d 分（总 %d）" % [
-			_seat_name(view, s), ScoringGd.IDENTITY_NAMES[int(ids[s])],
-			int((view["last_points"] as Array)[s]), int(scores[s]),
-		])
-
-	var big := _make_label(96, AppTheme.GOLD if my_rank <= 1 else AppTheme.DIM)
-	big.text = "勝利" if my_rank <= 1 else "敗北"
-	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	big.set_anchors_preset(Control.PRESET_CENTER)
-	big.position = Vector2(-200, -150)
-	big.custom_minimum_size = Vector2(400, 130)
-	big.pivot_offset = Vector2(200, 65)
-	big.scale = Vector2(0.5, 0.5)
-	fx_layer.add_child(big)
-
-	var detail := _make_label(19, AppTheme.WHITE)
-	detail.text = "\n".join(lines)
-	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	detail.set_anchors_preset(Control.PRESET_CENTER)
-	detail.position = Vector2(-260, -10)
-	detail.custom_minimum_size = Vector2(520, 140)
-	fx_layer.add_child(detail)
-
-	var tw := create_tween()
-	tw.tween_property(dark, "color:a", 0.55, 0.4)
-	tw.parallel().tween_property(big, "scale", Vector2.ONE, 0.45)\
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

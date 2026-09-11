@@ -2,10 +2,10 @@
 ## 构成：夜空渐变 → 红日(光晕) → 远山剪影 → 青海波金云带 → 漂浮牌背 → 金尘粒子 → 描金边框。
 extends Control
 
+const Wafu = preload("res://src/client/ui/wafu_paint.gd")
+
 const COLOR_GOLD := Color("e0a83c")
-const COLOR_RED := Color("e0503c")
 const COLOR_INDIGO := Color("3a3a6e")
-const COLOR_DIM := Color("8a8ab0")
 
 var _t := 0.0
 var _grad := GradientTexture2D.new()
@@ -76,65 +76,29 @@ func _draw() -> void:
 		return
 	draw_texture_rect(_grad, Rect2(Vector2.ZERO, sz), false)
 
-	# --- 红日 + 光晕 ---
 	var sun := Vector2(sz.x * 0.76, sz.y * 0.30)
-	for i in 6:
-		draw_circle(sun, 110.0 + i * 30.0, Color(0.88, 0.31, 0.24, 0.035))
-	draw_circle(sun, 110.0, Color(0.88, 0.31, 0.24, 0.85))
-	draw_circle(sun, 110.0, Color(1, 0.6, 0.4, 0.0) if false else Color(0, 0, 0, 0))
+	Wafu.sun(self, sun, 110.0)
 
-	# --- 远山剪影（两层） ---
-	var base_y := sz.y * 0.66
-	_draw_mountains(base_y - 30.0, sz.y * 0.30, Color("101028"))
-	_draw_mountains(base_y + 10.0, sz.y * 0.22, Color("181834"))
+	Wafu.mountains(self, sz, sz.y * 0.66 - 30.0, sz.y * 0.30, Color("101028"))
+	Wafu.mountains(self, sz, sz.y * 0.66 + 10.0, sz.y * 0.22, Color("181834"))
 
-	# --- 青海波金云带（底部三行半圆） ---
-	var row_y := sz.y * 0.78
-	var step := 44.0
-	for row in 4:
-		var yy := row_y + row * step * 0.55
-		var off := (row % 2) * step * 0.5
-		var x := -step + fmod(_t * 6.0, step) - off
-		while x < sz.x + step:
-			draw_arc(Vector2(x, yy), step * 0.5, PI, TAU, 20,
-					COLOR_INDIGO.lerp(Color.BLACK, 0.25), 2.0, true)
-			if row == 1 and int((x + off) / step) % 6 == 0:
-				draw_arc(Vector2(x, yy), step * 0.5, PI, TAU, 20,
-						Color(COLOR_GOLD, 0.35), 1.4, true)
-			x += step
+	Wafu.seigaiha(self, sz, sz.y * 0.78, 4, 44.0, _t * 6.0,
+			COLOR_INDIGO.lerp(Color.BLACK, 0.25), Color(COLOR_GOLD, 0.35))
 
-	# --- 漂浮牌背 ---
 	for c in _cards:
 		var pos := Vector2(float(c["x"]) * sz.x, float(c["y"]) * sz.y) \
 				+ Vector2(0, sin(_t * float(c["bob_spd"]) + float(c["bob"])) * 14.0)
 		var s: float = c["s"]
 		draw_set_transform_matrix(Transform2D(float(c["rot"]), pos))
 		_back_sb.draw(get_canvas_item(), Rect2(Vector2(-26 * s, -36 * s), Vector2(52 * s, 72 * s)))
-		draw_arc(Vector2(0, 0), 16.0 * s, 0, TAU, 24, Color(COLOR_GOLD, 0.5), 1.2, true)
-		draw_circle(Vector2(0, 0), 4.0 * s, Color(COLOR_GOLD, 0.8))
+		Wafu.corner_ticks(self, Rect2(Vector2(-26 * s, -36 * s), Vector2(52 * s, 72 * s)),
+				8.0 * s, Color(Wafu.GOLD, 0.55))
+		draw_arc(Vector2(0, 0), 16.0 * s, 0, TAU, 24, Color(Wafu.GOLD, 0.5), 1.2, true)
+		draw_circle(Vector2(0, 0), 4.0 * s, Color(Wafu.GOLD, 0.8))
 		draw_set_transform_matrix(Transform2D())
 
-	# --- 金尘粒子 ---
 	for p in _petals:
 		draw_circle(Vector2(float(p["x"]) * sz.x, float(p["y"]) * sz.y),
-				float(p["r"]), Color(COLOR_GOLD, float(p["a"])))
+				float(p["r"]), Color(Wafu.GOLD, float(p["a"])))
 
-	# --- 描金边框 + 暗角 ---
-	var border := 2
-	draw_rect(Rect2(border, border, sz.x - border * 2, sz.y - border * 2),
-			Color(COLOR_GOLD, 0.28), false, border)
-	for i in 3:
-		var k := i * 10.0
-		draw_rect(Rect2(k, k, sz.x - k * 2, sz.y - k * 2), Color(0, 0, 0, 0.05))
-
-
-func _draw_mountains(base_y: float, h: float, ink: Color) -> void:
-	var pts := PackedVector2Array()
-	pts.append(Vector2(-20, base_y + h))
-	var peaks := [0.12, 0.3, 0.52, 0.74, 0.92]
-	var heights := [0.5, 0.9, 0.65, 1.0, 0.55]
-	for i in peaks.size():
-		pts.append(Vector2(size.x * peaks[i], base_y - h * heights[i]))
-		pts.append(Vector2(size.x * (peaks[i] + 0.09), base_y - h * 0.25))
-	pts.append(Vector2(size.x + 20, base_y + h))
-	draw_colored_polygon(pts, ink)
+	Wafu.frame(self, sz, Color(Wafu.GOLD, 0.28))

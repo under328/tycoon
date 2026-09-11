@@ -47,20 +47,23 @@ func _build_library() -> void:
 	library["pass"] = Synth.wav(Synth.tone(0.10, 235.0, 0.24, 22.0))
 	library["clear"] = Synth.wav(Synth.sweep(0.30, 340.0, 90.0, 0.28))
 	library["revolution"] = Synth.wav(Synth.concat([
-		Synth.tone(0.14, 660.0, 0.34, 8.0), Synth.tone(0.14, 524.0, 0.34, 8.0),
-		Synth.tone(0.14, 660.0, 0.34, 8.0), Synth.tone(0.28, 880.0, 0.34, 6.0),
+		Synth.riser(0.40, 170.0, 860.0, 0.20),
+		Synth.drum(0.32, 0.5),
+		Synth.concat([
+			Synth.tone(0.20, 659.25, 0.30, 8.0), Synth.tone(0.30, 880.0, 0.30, 6.0),
+		]),
 	]))
 	library["exchange"] = Synth.wav(Synth.concat([
 		Synth.tone(0.10, 587.33, 0.22, 12.0), Synth.tone(0.12, 783.99, 0.22, 12.0),
 	]))
-	library["win"] = Synth.wav(Synth.concat([
+	library["win"] = Synth.wav(Synth.mix_over(Synth.concat([
 		Synth.tone(0.13, 523.25, 0.30, 7.0), Synth.tone(0.13, 659.25, 0.30, 7.0),
 		Synth.tone(0.13, 783.99, 0.30, 7.0), Synth.tone(0.34, 1046.5, 0.32, 5.0),
-	]))
-	library["lose"] = Synth.wav(Synth.concat([
+	]), Synth.tone(0.70, 130.81, 0.18, 2.0), 0.02))
+	library["lose"] = Synth.wav(Synth.mix_over(Synth.concat([
 		Synth.tone(0.16, 440.0, 0.26, 7.0), Synth.tone(0.16, 349.23, 0.26, 7.0),
 		Synth.tone(0.30, 293.66, 0.26, 5.0),
-	]))
+	]), Synth.tone(0.62, 98.0, 0.16, 2.0), 0.02))
 	library["pop"] = Synth.wav(Synth.tone(0.06, 880.0, 0.28, 26.0))
 	library["tick"] = Synth.wav(Synth.tone(0.03, 1500.0, 0.18, 55.0))
 	library["turn"] = Synth.wav(Synth.tone(0.08, 987.77, 0.20, 16.0))
