@@ -129,6 +129,13 @@ func _ready() -> void:
 	_load_settings()
 
 
+## 打开面板: 重新读取当前设置并置顶显示
+func open() -> void:
+	_load_settings()
+	visible = true
+	move_to_front()
+
+
 func _section(text: String) -> Label:
 	var lb := AppTheme.make_label(16, AppTheme.GOLD)
 	lb.text = "── " + text
