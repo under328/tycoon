@@ -94,13 +94,6 @@ func remove_seat(seat: int) -> void:
 					break
 
 
-func peer_token(peer: int) -> String:
-	var s := seat_of_peer(peer)
-	if s >= 0:
-		return str(seats[s]["token"])
-	return ""
-
-
 ## room_state payload（token 只发给归属者）。
 func state_for(seat: int) -> Dictionary:
 	var players := []

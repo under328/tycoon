@@ -14,7 +14,7 @@ var sfx_volume := 1.0
 var client_id := ""      # 游客身份：首启随机生成，持久化
 var tutorial_seen := false  # 是否已看过新手引导
 var last_room_code := ""    # 最近加入的房间码(方便再次输入)
-var host := "127.0.0.1"     # 联机服务器地址(大厅可改, 持久化)
+var host: String = DEFAULT_HOST  # 联机服务器地址(大厅可改, 持久化)
 var host_port := 24565      # 联机服务器端口(持久化)
 
 

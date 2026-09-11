@@ -82,30 +82,9 @@ static func frame(ci: CanvasItem, size: Vector2, color: Color) -> void:
 
 
 ## 四周暗角
-static func vignette(ci: CanvasItem, size: Vector2, alpha := 0.05) -> void:
-	for i in 3:
-		var k := float(i) * 12.0
-		ci.draw_rect(Rect2(k, k, size.x - k * 2, size.y - k * 2), Color(0, 0, 0, alpha))
-
-
 # ================================================================ P5×和风 视觉语言
 
 ## 斜切平行四边形面板(P5 标志性)
-static func slash_panel(ci: CanvasItem, rect: Rect2, skew: float, fill: Color,
-		border: Color = Color(0, 0, 0, 0), border_w := 2.0) -> void:
-	var pts := PackedVector2Array([
-		rect.position + Vector2(skew, 0),
-		rect.position + Vector2(rect.size.x, 0),
-		rect.position + Vector2(rect.size.x - skew, rect.size.y),
-		rect.position + Vector2(0, rect.size.y),
-	])
-	ci.draw_colored_polygon(pts, fill)
-	if border.a > 0.0:
-		var closed := pts.duplicate()
-		closed.append(pts[0])
-		ci.draw_polyline(closed, border, border_w, true)
-
-
 ## 半调网点块(复古印刷质感)
 static func halftone(ci: CanvasItem, rect: Rect2, gap: float, dot_r: float, color: Color) -> void:
 	var y := rect.position.y
@@ -143,9 +122,3 @@ static func stripes(ci: CanvasItem, rect: Rect2, step: float, color: Color) -> v
 
 
 ## 粗斜杠(标题下的红色斩切线)
-static func slash_bar(ci: CanvasItem, pos: Vector2, w: float, h: float, color: Color) -> void:
-	var quad := PackedVector2Array([
-		pos + Vector2(h * 0.6, 0), pos + Vector2(w, 0),
-		pos + Vector2(w - h * 0.6, h), pos, 
-	])
-	ci.draw_colored_polygon(quad, color)

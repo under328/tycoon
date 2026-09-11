@@ -20,7 +20,6 @@ const FxOverlayScript = preload("res://src/client/ui/fx_overlay.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
-const SEAT_NAMES := ["你", "东家", "北家", "西家"]
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 const AI_THINK_SEC := 0.7
 

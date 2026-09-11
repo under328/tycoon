@@ -10,7 +10,6 @@ const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
 const COLOR_BG := Color(0.94, 0.94, 0.96, 0.98)
-const COLOR_PANEL_BG := Color("14142b")
 
 var _tab := "skin"
 var _balance_lbl: Label

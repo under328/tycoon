@@ -24,7 +24,7 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 		if CardsGd.is_joker(card):
 			return _mk(Type.SINGLE, CardsGd.JOKER_VALUE, 1, cards)
 		if card == 0:
-			return _mk(Type.SINGLE, 16.5, 1, cards)
+			return _mk(Type.SINGLE, SPADE3_KEY, 1, cards)
 		return _mk(Type.SINGLE, CardsGd.value(card), 1, cards)
 	var naturals := []
 	var joker_count := 0

@@ -13,7 +13,6 @@ const SkinsLib = preload("res://src/client/ui/skins.gd")
 const COLOR_FACE := Color("f9f4e6")        # 和纸米白
 const COLOR_BORDER := Color("caa24e")      # 描金
 const COLOR_BACK_BG := Color("20204a")     # 牌背深靛
-const COLOR_BACK_PAT := Color("3a3a6e")    # 牌背纹样
 const COLOR_RED := Color("c93a3a")         # 朱红（♥♦）
 const COLOR_BLACK := Color("2b2b3d")       # 墨（♠♣）
 const COLOR_GOLD := Color("e0a83c")

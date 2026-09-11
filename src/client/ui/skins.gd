@@ -37,22 +37,11 @@ const CARDS := [
 ]
 
 
-static func default_card_palette() -> Dictionary:
-	return CARDS[0]
-
-
 static func palette(card_id: String) -> Dictionary:
 	for c in CARDS:
 		if str(c["id"]) == card_id:
 			return c
 	return CARDS[0]
-
-
-static func skin_name(skin_id: String) -> String:
-	for s in SKINS:
-		if str(s["id"]) == skin_id:
-			return str(s["name"])
-	return "墨客"
 
 
 ## 程序化头像 v2: 皮肤色底盘 + 内环珠纹 + 肩部衣领 + 头部细节 + 描金外环。

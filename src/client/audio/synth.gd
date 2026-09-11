@@ -111,12 +111,6 @@ static func mix_over(base: PackedFloat32Array, layer: PackedFloat32Array, offset
 	return base
 
 
-static func silence(dur: float) -> PackedFloat32Array:
-	var out := PackedFloat32Array()
-	out.resize(int(dur * RATE))
-	return out
-
-
 static func wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 	return _to_wav(samples)
 

@@ -472,6 +472,11 @@ func exchange_return(cards: Array) -> void:
 	_c_send("c_exchange_return", {"cards": cards})
 
 
+## 房主：移除指定座位的人类玩家
+func kick_seat(seat: int) -> void:
+	_c_send("c_room_kick", {"seat": seat})
+
+
 ## 房主：修改房间规则（对局未开始时）
 func set_settings(rules: Dictionary) -> void:
 	_c_send("c_room_settings", {"rules": rules})

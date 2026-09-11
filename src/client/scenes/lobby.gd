@@ -40,6 +40,7 @@ var port_edit: LineEdit
 var connect_btn: Button
 var host_btn: Button
 var update_btn: Button
+var kick_btn: Button
 var _conn_fails := 0
 
 
@@ -233,6 +234,18 @@ func _build_ui() -> void:
 		Audio.play("click")
 		net.fill_bots())
 	add_child(fill_btn)
+
+	kick_btn = AppTheme.make_button("移除玩家", Vector2(140, 46), 17)
+	kick_btn.position = Vector2(10, 470)
+	kick_btn.visible = false
+	kick_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var target := _kickable_seat()
+		if target >= 0:
+			net.kick_seat(target)
+		else:
+			_set_status("没有可移除的玩家(仅房主可移除非自己的人类玩家)", COLOR_RED))
+	add_child(kick_btn)
 	start_btn = AppTheme.make_button("开始游戏", Vector2(140, 46), 17)
 	start_btn.position = Vector2(310, 470)
 	start_btn.pressed.connect(func() -> void:
@@ -308,6 +321,22 @@ func _build_ui() -> void:
 	connect_btn.disabled = false
 
 
+## 房主可移除的第一个人类座位(不能移除自己/机器人)
+func _kickable_seat() -> int:
+	for p in net.last_room_state.get("players", []):
+		if int(p.get("seat", -1)) == net.my_seat:
+			continue
+		if not bool(p.get("empty", true)) and not bool(p.get("is_bot", false)):
+			return int(p["seat"])
+	return -1
+
+
+## 记录房间座位用于踢人判断
+var _room_players: Array = []
+func _fill_state_seats(state: Dictionary) -> void:
+	_room_players = state.get("players", [])
+
+
 func _save_nickname() -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
@@ -370,6 +399,9 @@ func _apply_settings(settings: Dictionary) -> void:
 
 func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
+	_apply_settings(state.get("settings", {}))
+	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
+	_fill_state_seats(state)
 	var lines: Array = []
 	lines.append("房间码: %s  (发给朋友)" % _last_room_code)
 	for p in state["players"]:

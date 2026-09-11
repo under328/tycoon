@@ -12,10 +12,7 @@ const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 ## AI 随机皮肤池
 const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
 
-const DEFAULT_SETTINGS := {
-	"with_joker": true, "revolution": true, 
-	"eight_cut": true, "rounds": 3, "turn_seconds": 20,
-}
+var default_settings: Dictionary = RulesConfigGd.defaults()
 
 var rooms: Dictionary = {}       # code -> Room
 var peer_room: Dictionary = {}   # peer -> code
@@ -146,7 +143,7 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 	if skin_id != "":
 		peer_skin[peer] = skin_id
 	_leave_room(peer, out)
-	var cfg := DEFAULT_SETTINGS.duplicate()
+	var cfg := default_settings.duplicate()
 	for k in cfg.keys():
 		if rules.has(k):
 			cfg[k] = rules[k]
@@ -220,7 +217,7 @@ func set_settings(peer: int, rules: Dictionary) -> Array:
 		return out
 	if int(room.host_seat) != _seat_of(room, peer):
 		return out
-	var cfg := DEFAULT_SETTINGS.duplicate()
+	var cfg := default_settings.duplicate()
 	for k in cfg.keys():
 		if rules.has(k):
 			cfg[k] = rules[k]
@@ -474,7 +471,7 @@ func _seat_of(room, peer: int) -> int:
 func start_soak(n: int) -> void:
 	soak_rooms = n
 	for i in n:
-		var room = RoomGd.new(_gen_code(), DEFAULT_SETTINGS.duplicate(), _rng)
+		var room = RoomGd.new(_gen_code(), default_settings.duplicate(), _rng)
 		room.soak = true
 		rooms[room.code] = room
 		room.start(Time.get_ticks_msec(), ai_delay_ms, phase_delay_ms)

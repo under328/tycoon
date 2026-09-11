@@ -64,7 +64,3 @@ func _hand_total(st: Dictionary) -> int:
 	return n
 
 
-func _played_delta(before: Dictionary, after: Dictionary) -> int:
-	# 简化：终局/交换比较不适用时返回 0（守恒检查只在首轮 play 后进行）
-	var db := _hand_total(before) - _hand_total(after)
-	return maxi(db, 0)
