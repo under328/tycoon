@@ -13,6 +13,8 @@ var local_mode := true
 var online_client := false
 var port := 24565
 var address := "127.0.0.1"
+var address_from_cli := false
+var port_from_cli := false
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
 
@@ -35,10 +37,12 @@ func _ready() -> void:
 			"--port":
 				if i + 1 < args.size():
 					port = int(args[i + 1])
+					port_from_cli = true
 					i += 1
 			"--address":
 				if i + 1 < args.size():
 					address = str(args[i + 1])
+					address_from_cli = true
 					i += 1
 			"--ai-delay":
 				if i + 1 < args.size():

@@ -50,8 +50,8 @@ func _start_online() -> void:
 	if lobby == null:
 		lobby = LobbyScene.instantiate()
 		lobby.name = "Lobby"
+		lobby.setup(net)   # ★ 必须在 add_child 之前注入(_ready 依赖)
 		add_child(lobby)
-		lobby.setup(net)
 		lobby.start_game.connect(_enter_table)
 		lobby.back_to_menu.connect(_back_to_menu)
 	lobby.visible = true

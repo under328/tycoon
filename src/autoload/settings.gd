@@ -2,6 +2,9 @@ extends Node
 ## 客户端偏好持久化（autoload: GameSettings）
 
 const SAVE_PATH := "user://settings.cfg"
+## ★ 部署时修改: 官方服务器地址(内置默认, 玩家无需理解 IP/端口)
+const DEFAULT_HOST := "tycoon.example.com"
+const DEFAULT_PORT := 24565
 ## 部署时改成实际下载页地址; 版本不符的客户端会收到此提示
 const DOWNLOAD_URL := "https://tycoon.example.com/download"
 
