@@ -42,11 +42,15 @@ var connect_btn: Button
 var host_btn: Button
 var update_btn: Button
 var paste_btn: Button
+var _emoji_btns: Array = []
 var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
 var _invite_code := ""        # 当前房间的完整邀请码
 var kick_btn: Button
+var help_btn: Button
+var _room_ui: Array = []          # 仅房间内显示的控件
+var _in_room := false             # 是否处于房间内(驱动房间 UI 显隐)
 var _conn_fails := 0
 
 
@@ -136,6 +140,26 @@ func _refresh_invite(state: Dictionary) -> void:
 		return
 	var ip := host_invite_ip if host_invite_ip != "" else str(GameSettings.host)
 	_invite_code = "TC|%s|%d|%s" % [ip, int(GameSettings.host_port), code]
+
+
+## 房间内专属 UI 的显隐切换
+func _set_room_ui(v: bool) -> void:
+	for n in _room_ui:
+		n.visible = v
+	if v:
+		for b: Button in [fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
+			b.disabled = false
+
+
+func _enter_room() -> void:
+	_in_room = true
+	_set_room_ui(true)
+
+
+func _exit_room() -> void:
+	_in_room = false
+	_set_room_ui(false)
+	net.leave_room()
 
 
 func _manual_connect() -> void:
@@ -253,7 +277,7 @@ func _build_ui() -> void:
 	add_child(update_btn)
 
 	# 联机帮助(图文, 四页: 三步开房/朋友加入/主机须知/常见问题)
-	var help_btn := AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)
+	help_btn = AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)
 	help_btn.position = Vector2(990, 138)
 	help_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -294,12 +318,14 @@ func _build_ui() -> void:
 
 	# 房间面板
 	room_label = AppTheme.make_label(17, COLOR_WHITE)
+	_room_ui.append(room_label)
 	room_label.position = Vector2(150, 310)
 	room_label.custom_minimum_size = Vector2(700, 140)
 	add_child(room_label)
 
 	# 房主操作按钮
 	fill_btn = AppTheme.make_button("空位加AI", Vector2(140, 46), 17)
+	_room_ui.append(fill_btn)
 	fill_btn.position = Vector2(150, 470)
 	fill_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -307,6 +333,7 @@ func _build_ui() -> void:
 	add_child(fill_btn)
 
 	kick_btn = AppTheme.make_button("移除玩家", Vector2(140, 46), 17)
+	_room_ui.append(kick_btn)
 	kick_btn.position = Vector2(10, 470)
 	kick_btn.visible = false
 	kick_btn.pressed.connect(func() -> void:
@@ -318,16 +345,18 @@ func _build_ui() -> void:
 			_set_status("没有可移除的玩家(仅房主可移除非自己的人类玩家)", COLOR_RED))
 	add_child(kick_btn)
 	start_btn = AppTheme.make_button("开始游戏", Vector2(140, 46), 17)
+	_room_ui.append(start_btn)
 	start_btn.position = Vector2(310, 470)
 	start_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.start_game())
 	add_child(start_btn)
 	leave_btn = AppTheme.make_button("离开房间", Vector2(140, 46), 17)
+	_room_ui.append(leave_btn)
 	leave_btn.position = Vector2(470, 470)
 	leave_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		net.leave_room())
+		_exit_room())
 	add_child(leave_btn)
 	copy_btn = AppTheme.make_button("复制邀请码", Vector2(140, 46), 17)
 	copy_btn.position = Vector2(630, 470)
@@ -374,6 +403,7 @@ func _build_ui() -> void:
 			Audio.play("pop")
 			net.send_emoji(id))
 		add_child(eb)
+		_emoji_btns.append(eb)
 
 	# 状态
 	status_label = AppTheme.make_label(15, COLOR_DIM)
@@ -392,6 +422,7 @@ func _build_ui() -> void:
 	host_btn.disabled = false
 	connect_btn.disabled = false
 	paste_btn.disabled = false
+	_set_room_ui(false)
 
 
 ## 房主可移除的第一个人类座位(不能移除自己/机器人)
@@ -435,11 +466,13 @@ func _bind_net() -> void:
 		_set_status("无法连接 %s:%d（第 %d 次），自动重试中…\n确认服务器已启动、地址正确、防火墙放行"
 				% [net.address, net.port, _conn_fails], COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
+		_exit_room()
 		_set_status("与服务器断开, 自动重连中…", COLOR_RED))
 	net.errored.connect(func(code: String, msg: String) -> void:
 		if code != "not_connected":
 			_set_status("错误 %s: %s" % [code, msg], COLOR_RED))
 	net.kicked_off.connect(func(reason: String) -> void:
+		_exit_room()
 		if reason == "version":
 			_set_status("服务器版本更高, 请更新客户端", COLOR_RED)
 			update_btn.visible = true
@@ -478,6 +511,7 @@ func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
+	_enter_room()
 	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
 	_fill_state_seats(state)
 	var lines: Array = []
