@@ -1,5 +1,10 @@
 ; Engine configuration file.
-; Godot 4.x — Tycoon 大富豪
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -27,7 +32,6 @@ window/handheld/orientation=4
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 limits/opengl/max_renderable_lights=2
 limits/opengl/max_lights_per_object=1

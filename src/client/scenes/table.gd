@@ -196,7 +196,7 @@ func _on_rematch_pressed() -> void:
 
 func _on_leave_pressed() -> void:
 	Audio.play("click")
-	# 对局中离开=弃局交给 AI, 需 3 秒内二次确认
+	# 联机对局中离开=弃局交给 AI, 需 3 秒内二次确认; 本地模式直接返回
 	if mode == "online" and not _at_game_end:
 		var now := Time.get_ticks_msec()
 		if now - _leave_confirm_at > 3000:
@@ -558,7 +558,8 @@ func _refresh_view(view: Dictionary) -> void:
 	btn_pass.visible = my_turn and not lead.is_empty()
 	btn_next.visible = mode == "local" and phase == "round_end"
 	btn_rematch.visible = mode == "local" and phase == "game_end"
-	btn_leave.visible = mode == "online"
+	btn_leave.visible = true
+	btn_leave.text = "返回大厅" if mode == "online" else "返回菜单"
 
 	# 终局演出（一次性）
 	if phase == "game_end" and not _end_shown \

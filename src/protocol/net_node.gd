@@ -369,7 +369,8 @@ func drop_connection() -> void:
 
 
 func leave_room() -> void:
-	_c_send("c_room_leave", {})
+	if _is_connected():
+		_c_send("c_room_leave", {})
 	_session_token = ""
 	in_room = false
 	my_seat = -1
