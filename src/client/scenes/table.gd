@@ -53,7 +53,7 @@ var _turn_remain := -1.0
 var _last_turn_seat := -99
 
 var info_label: Label
-var self_label: Label
+var self_label: RichTextLabel
 var status_label: Label
 var error_label: Label
 var timer_label: Label
@@ -397,6 +397,7 @@ func _build_ui() -> void:
 	info_label = _make_label(20, AppTheme.GOLD)
 	info_label.position = Vector2(20, 12)
 	add_child(info_label)
+	_add_text_shadow(info_label)
 
 	timer_label = _make_label(22, AppTheme.WHITE)
 	timer_label.position = Vector2(1180, 12)
@@ -463,6 +464,7 @@ func _build_ui() -> void:
 	status_label.position = Vector2(320, 496)
 	status_label.custom_minimum_size = Vector2(640, 56)
 	add_child(status_label)
+	_add_text_shadow(status_label)
 
 	error_label = _make_label(16, AppTheme.RED)
 	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -551,19 +553,32 @@ func _build_ui() -> void:
 	add_child(fx_layer)
 
 
-func _make_seat_label(pos: Vector2) -> Label:
-	var lb := _make_label(17, AppTheme.WHITE)
+func _make_seat_label(pos: Vector2) -> RichTextLabel:
+	var lb := RichTextLabel.new()
+	lb.bbcode_enabled = true
+	lb.scroll_active = false
 	lb.position = pos
 	lb.custom_minimum_size = Vector2(180, 110)
+	lb.size = Vector2(180, 110)
+	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lb.add_theme_font_size_override("normal_font_size", 16)
+	lb.add_theme_font_size_override("bold_font_size", 17)
 	lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	var plate := AppTheme.flat(Color(0.07, 0.07, 0.16, 0.72), Color(AppTheme.GOLD, 0.30), 10, 1)
 	plate.content_margin_left = 12
 	plate.content_margin_right = 12
-	plate.content_margin_top = 8
-	plate.content_margin_bottom = 8
+	plate.content_margin_top = 10
+	plate.content_margin_bottom = 10
 	lb.add_theme_stylebox_override("normal", plate)
 	add_child(lb)
 	return lb
+
+
+## 对局文字加细描边阴影, 深色桌面上更清晰
+func _add_text_shadow(lb: Label) -> void:
+	lb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	lb.add_theme_constant_override("shadow_offset_x", 1)
+	lb.add_theme_constant_override("shadow_offset_y", 1)
 
 
 func _make_label(size: int, color: Color) -> Label:
@@ -653,7 +668,7 @@ func _refresh_view(view: Dictionary) -> void:
 	for i in 3:
 		var seat := (my + i + 1) % 4
 		seat_avatars[i].skin_id = _skin_for(view, seat)
-		var lb: Label = seat_labels[i + 1]
+		var lb: RichTextLabel = seat_labels[i + 1]
 		lb.text = _seat_info_text(view, seat)
 	if self_label != null:
 		self_label.text = _seat_info_text(view, my)
@@ -781,18 +796,26 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 
 
 ## 座位信息区文本: 名字 / 剩牌与积分 / 身份（出完才显示）
+## 座位信息区(富文本): [身份]昵称 在前, 第二行 剩牌与积分
 func _seat_info_text(view: Dictionary, seat: int) -> String:
-	var turn_mark := "▶ " if int(view["turn"]) == seat else ""
-	var scores: Array = view["scores"]
-	var score_line := "积分"
-	if scores.size() == 4:
-		score_line = "积分 %+d" % int(scores[seat])
+	var gold := AppTheme.GOLD.to_html(false)
+	var dim := AppTheme.DIM.to_html(false)
+	var white := AppTheme.WHITE.to_html(false)
+	var green := AppTheme.GREEN.to_html(false)
+	var red := AppTheme.RED.to_html(false)
+	var turn_mark := "[color=#%s]▶ [/color]" % gold if int(view["turn"]) == seat else ""
+	# 当前身份(上局结算结果, 换牌与一落千丈的依据); 首局未定不显示
+	var ids: Array = view["identities"]
+	var id_colors := [gold, white, dim, red]
 	var ident := ""
-	if (view["identities"] as Array).size() == 4 \
-			and (view["finished"] as Array).has(seat):
-		ident = "\n[%s]" % ScoringGd.IDENTITY_NAMES[int(view["identities"][seat])]
-	return "%s%s\n剩 %d 张 · %s%s" % [
-		turn_mark, _seat_name(view, seat), int(view["counts"][seat]), score_line, ident,
+	if ids.size() == 4:
+		var idn := int(ids[seat])
+		ident = "[color=#%s]【%s】[/color]" % [id_colors[idn], ScoringGd.IDENTITY_NAMES[idn]]
+	var sc := int(view["scores"][seat]) if (view["scores"] as Array).size() == 4 else 0
+	var sc_col := green if sc > 0 else (red if sc < 0 else white)
+	return "%s%s[color=#%s]%s[/color]\n[color=#%s]剩 %d 张 ·[/color] [color=#%s]积分 %+d[/color]" % [
+		turn_mark, ident, white, _seat_name(view, seat),
+		dim, int(view["counts"][seat]), sc_col, sc,
 	]
 
 
