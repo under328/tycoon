@@ -10,7 +10,7 @@ enum Type { SINGLE, PAIR, TRIPLE, QUAD }
 const TYPE_NAMES := ["单张", "对子", "三条", "四条"]
 
 ## ♠3 单出时的 key: 比 JOKER(16) 大但比 4(4) 小
-const SPADE3_KEY := 3.5
+const SPADE3_KEY := 16.5
 
 
 ## 识别一组牌；非法返回 {}。

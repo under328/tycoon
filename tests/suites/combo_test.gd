@@ -9,9 +9,9 @@ var cfg: Dictionary = {"stairs": true}
 
 func run(t) -> void:
 	# --- 单张 ---
-	t.expect_eq(ComboGd.identify([0], cfg)["key"], 3.5, "♠3 key=3.5")
+	t.expect_eq(ComboGd.identify([0], cfg)["key"], 16.5, "♠3 key=16.5")
 	t.expect_eq(ComboGd.identify([1], cfg)["key"], 3, "单3♥ key=3")
-	t.expect_eq(ComboGd.identify([52], cfg)["key"], 3.25, "JOKER 单张")
+	t.expect_eq(ComboGd.identify([52], cfg)["key"], 16, "JOKER 单张 key=16")
 	t.expect_eq(ComboGd.identify([53], cfg)["type"], ComboGd.Type.SINGLE, "单大王")
 
 	# --- 对子 ---

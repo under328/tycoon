@@ -88,9 +88,13 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 	# 出完牌结算必须先于 8 切（最后一张恰好是 8 时同样算出完）
 	if hand.is_empty():
 		return _finish_player(st, seat)
-	# 8 切
-	if bool(st["cfg"]["eight_cut"]) \
-			and int(combo["type"]) == ComboGd.Type.SINGLE and int(combo["key"]) == 8:
+	# 8 切: 打出的牌组中包含任意 8 → 清桌续领（基础规则，不可关闭）
+	var has_8 := false
+	for c in cards:
+		if CardsGd.value(c) == 8:
+			has_8 = true
+			break
+	if has_8 and not hand.is_empty():
 		st["field"].clear()
 		st["lead"] = {}
 		st["turn"] = seat
@@ -130,13 +134,22 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 		return _ok(st)
 	st["round"] = next_round
 	_deal_round(st, next_round)
-	# 强制交换（上一局身份）：乞丐→大富豪 2 张，平民→富豪 1 张
+	# 强制交换（上一局身份）：大贫民→大富豪 2 张，贫民→富豪 1 张
+	# 强者返还等量牌（任意牌）给弱者，确保各 13 张
 	var ids: Array = st["identities"]
 	var beggar := _seat_with_identity(ids, 3)
+	var millionaire := _seat_with_identity(ids, 0)
+	var commoner := _seat_with_identity(ids, 2)
+	var rich := _seat_with_identity(ids, 1)
 	st["exchange"] = [
-		_give(st, beggar, _seat_with_identity(ids, 0), 2),
-		_give(st, _seat_with_identity(ids, 2), _seat_with_identity(ids, 1), 1),
+		_give(st, beggar, millionaire, 2),
+		_give(st, commoner, rich, 1),
 	]
+	# 强者返还等量最弱牌
+	var ret1 := _return_cards(st, millionaire, beggar, 2)
+	var ret2 := _return_cards(st, rich, commoner, 1)
+	st["exchange"].append(ret1)
+	st["exchange"].append(ret2)
 	st["revolution"] = false
 	st["quads"] = 0
 	st["finish_order"] = []
@@ -247,6 +260,19 @@ static func _give(st: Dictionary, from_seat: int, to_seat: int, count: int) -> D
 	var hand: Array = st["hands"][from_seat]
 	CardsGd.sort_cards(hand)
 	var cards: Array = hand.slice(hand.size() - count)
+	for c in cards:
+		hand.erase(c)
+	for c in cards:
+		st["hands"][to_seat].append(c)
+	CardsGd.sort_cards(st["hands"][to_seat])
+	return {"from": from_seat, "to": to_seat, "cards": cards, "count": count}
+
+
+## 强者返还等量最弱牌给弱者（换牌的"回礼"环节）。
+static func _return_cards(st: Dictionary, from_seat: int, to_seat: int, count: int) -> Dictionary:
+	var hand: Array = st["hands"][from_seat]
+	CardsGd.sort_cards(hand)
+	var cards: Array = hand.slice(0, count)  # 最弱的 count 张
 	for c in cards:
 		hand.erase(c)
 	for c in cards:

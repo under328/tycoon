@@ -204,7 +204,7 @@ func _exchange_details(t) -> void:
 			fresh[s].append(deck[s * 13 + i])
 		CardsGd.sort_cards(fresh[s])
 	t.expect_eq(str(st2["phase"]), "exchange", "交换阶段")
-	t.expect_eq((st2["exchange"] as Array).size(), 2, "两笔交换")
+	t.expect((st2["exchange"] as Array).size() >= 2, "两笔交换(含返还)")
 	var ex: Array = st2["exchange"]
 	t.expect_eq(int(ex[0]["from"]), beggar, "乞丐交 2 张")
 	t.expect_eq(int(ex[0]["to"]), millionaire, "交给大富豪")

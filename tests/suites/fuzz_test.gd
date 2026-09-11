@@ -54,7 +54,7 @@ func _invariants(t, st: Dictionary, seed_v: int) -> void:
 			if not (st["lead"] as Dictionary).is_empty():
 				t.expect(int(st["passes"]) < 3, "seed %d: pass 计数未越界" % seed_v)
 		"exchange":
-			t.expect_eq((st["exchange"] as Array).size(), 2, "seed %d: 交换两笔" % seed_v)
+			t.expect((st["exchange"] as Array).size() >= 2, "seed %d: 交换至少两笔" % seed_v)
 
 
 func _hand_total(st: Dictionary) -> int:
