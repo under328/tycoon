@@ -22,9 +22,9 @@ static func identify(cards: Array, cfg: Dictionary) -> Dictionary:
 	if n == 1:
 		var card: int = cards[0]
 		if CardsGd.is_joker(card):
-			return _mk(Type.SINGLE, 3.25, 1, cards)
+			return _mk(Type.SINGLE, CardsGd.JOKER_VALUE, 1, cards)
 		if card == 0:
-			return _mk(Type.SINGLE, 3.5, 1, cards)
+			return _mk(Type.SINGLE, 16.5, 1, cards)
 		return _mk(Type.SINGLE, CardsGd.value(card), 1, cards)
 	var naturals := []
 	var joker_count := 0
@@ -59,8 +59,8 @@ static func beats(next: Dictionary, prev: Dictionary, revolution: bool) -> bool:
 	if int(next["type"]) != int(prev["type"]) or int(next["len"]) != int(prev["len"]):
 		return false
 	if revolution:
-		return int(next["key"]) < int(prev["key"])
-	return int(next["key"]) > int(prev["key"])
+		return next["key"] < prev["key"]
+	return next["key"] > prev["key"]
 
 
 static func type_name(combo: Dictionary) -> String:
