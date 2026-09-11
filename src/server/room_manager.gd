@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS := {
 var rooms: Dictionary = {}       # code -> Room
 var peer_room: Dictionary = {}   # peer -> code
 var peer_client: Dictionary = {} # peer -> client_id（游客身份）
+var peer_chat_ms: Dictionary = {}# peer -> 上次发言/表情时间（服务端限速）
 var stats = null                 # StatsLib
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
@@ -39,6 +40,24 @@ func hello(peer: int, ver: int, token: String, client_id: String = "") -> Array:
 		return out
 	if client_id != "":
 		peer_client[peer] = client_id
+	# 已在房间的 peer(如 quick_match 先于 hello 到达): 直接回报正确座位
+	var known_code = peer_room.get(peer, "")
+	if known_code != "":
+		var known = rooms.get(known_code)
+		if known != null:
+			var s0: int = known.seat_of_peer(peer)
+			if s0 >= 0:
+				var sd: Dictionary = known.seats[s0]
+				sd["online"] = true
+				if known.match_ctl != null:
+					known.match_ctl.seat_online[s0] = true
+				out.append({"peer": peer, "event": "s_welcome",
+						"data": {"seat": s0, "protocol_ok": true}})
+				out.append({"peer": peer, "event": "s_room_state",
+						"data": known.state_for(s0)})
+				if known.match_ctl != null:
+					out.append(_view_msg(known, s0))
+				return out
 	if token != "":
 		var found: Dictionary = _room_by_token(token)
 		if not found.is_empty():
@@ -71,6 +90,7 @@ func peer_gone(peer: int) -> Array:
 	var out := []
 	var code = peer_room.get(peer, "")
 	peer_client.erase(peer)
+	peer_chat_ms.erase(peer)
 	if code == "":
 		return out
 	peer_room.erase(peer)
@@ -156,9 +176,11 @@ func leave(peer: int) -> Array:
 	return out
 
 
-## 快捷表情：广播给房内所有在线人类（大厅和对局中都可发）。
-func emoji(peer: int, id: int) -> Array:
+## 快捷表情：广播给房内所有在线人类（大厅和对局中都可发）。限速 500ms。
+func emoji(peer: int, id: int, now_ms: int = -1) -> Array:
 	var out := []
+	if not _chat_ok(peer, now_ms):
+		return out
 	var room = _room_of(peer)
 	if room == null:
 		return out
@@ -186,9 +208,11 @@ func set_settings(peer: int, rules: Dictionary) -> Array:
 	return out
 
 
-## 房内文本聊天（限长 80 字，广播给全房在线人类）。
-func chat(peer: int, text: String) -> Array:
+## 房内文本聊天（限长 80 字，广播给全房在线人类）。限速 500ms。
+func chat(peer: int, text: String, now_ms: int = -1) -> Array:
 	var out := []
+	if not _chat_ok(peer, now_ms):
+		return out
 	var room = _room_of(peer)
 	if room == null:
 		return out
@@ -200,6 +224,17 @@ func chat(peer: int, text: String) -> Array:
 		return out
 	_bcast_event(out, room, "s_chat", {"seat": seat, "text": text})
 	return out
+
+
+## 聊天/表情共用限速：同一玩家 500ms 内只处理一条。
+func _chat_ok(peer: int, now_ms: int) -> bool:
+	if now_ms < 0:
+		now_ms = Time.get_ticks_msec()
+	var last = int(peer_chat_ms.get(peer, -100000))
+	if now_ms - last < 500:
+		return false
+	peer_chat_ms[peer] = now_ms
+	return true
 
 
 ## 查询自己的战绩。

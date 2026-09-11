@@ -111,7 +111,7 @@ func state_for(seat: int) -> Dictionary:
 			})
 	var out := {
 		"room_code": code, "host_seat": host_seat, "players": players,
-		"settings": settings.duplicate(),
+		"settings": settings.duplicate(), "my_seat": seat,
 	}
 	if seat >= 0 and seats[seat] != null:
 		out["session_token"] = str(seats[seat]["token"])

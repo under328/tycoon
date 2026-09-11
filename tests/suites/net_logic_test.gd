@@ -13,6 +13,23 @@ func run(t) -> void:
 	_disconnect_and_rejoin(t)
 	_turn_timeout(t)
 	_m3_features(t)
+	_chat_rate_limit(t)
+
+
+## 聊天/表情服务端限速: 500ms 内第二条被丢弃。
+func _chat_rate_limit(t) -> void:
+	var m = _mgr()
+	m.create_room(300, "丁", {}, "cid-D")
+	var out: Array = m.chat(300, "第一条", 1000)
+	t.expect_eq(_count(out, "s_chat"), 1, "首条聊天广播")
+	out = m.chat(300, "第二条", 1100)
+	t.expect_eq(_count(out, "s_chat"), 0, "500ms 内第二条被丢弃")
+	out = m.chat(300, "第三条", 1600)
+	t.expect_eq(_count(out, "s_chat"), 1, "超时限速后恢复")
+	out = m.emoji(300, 2, 1700)
+	t.expect_eq(_count(out, "s_emoji"), 0, "表情与聊天共享限速")
+	out = m.emoji(300, 2, 2300)
+	t.expect_eq(_count(out, "s_emoji"), 1, "限速窗口后表情恢复")
 
 
 func _mgr():

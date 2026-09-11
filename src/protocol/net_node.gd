@@ -41,6 +41,8 @@ var _want_connection := false
 var _retry_timer := 0.0
 var _autoplay_armed := false
 var _had_view := false
+var _welcomed := false
+var _pending_ops: Array = []   # 握手完成前缓存的房间操作
 
 
 func setup(p_is_server: bool) -> void:
@@ -226,14 +228,14 @@ func c_game_pass(_data: Dictionary) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func s_welcome(data: Dictionary) -> void:
-	if is_server:
-		return
 	my_seat = int(data.get("seat", -1))
 	if my_seat >= 0:
 		in_room = true
 		if _had_view:
 			rejoined.emit()
+	_welcomed = true
 	welcomed.emit(my_seat)
+	_flush_pending()
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -243,6 +245,8 @@ func s_room_state(data: Dictionary) -> void:
 	in_room = true
 	if data.has("session_token"):
 		_session_token = str(data["session_token"])
+	if int(data.get("my_seat", -1)) >= 0:
+		my_seat = int(data["my_seat"])
 	room_state.emit(data)
 
 
@@ -463,6 +467,7 @@ func _on_conn_failed() -> void:
 
 func _on_server_disconnected() -> void:
 	latest_view = {}
+	_welcomed = false
 	if auto_reconnect and _want_connection:
 		_retry_timer = 2.0
 	server_disconnected.emit()
@@ -474,8 +479,20 @@ func _c_send(event: String, data: Dictionary) -> void:
 		return
 	if event == "c_hello":
 		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id())
-	else:
-		rpc_id(1, event, data)
+		return
+	# 握手(welcome)完成前, 房间操作排队——服务器必须先知道座位归属
+	if not _welcomed:
+		_pending_ops.append([event, data])
+		if _pending_ops.size() > 20:
+			_pending_ops.pop_front()
+		return
+	rpc_id(1, event, data)
+
+
+func _flush_pending() -> void:
+	for op in _pending_ops:
+		rpc_id(1, op[0], op[1])
+	_pending_ops.clear()
 
 
 func _client_id() -> String:
