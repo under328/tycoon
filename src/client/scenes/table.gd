@@ -40,6 +40,7 @@ var _prev_tick := -1
 var _leave_confirm_at := 0
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var seat_avatars: Array = []
+var _opp_hands: Array = []
 var avatar_me: Control
 
 # M4 视听状态
@@ -366,6 +367,19 @@ func _build_ui() -> void:
 	seat_labels.append(_make_seat_label(Vector2(500, 14)))
 	seat_labels.append(_make_seat_label(Vector2(20, 300)))
 
+	# 对手手牌(重叠牌背): 右=下家(竖列), 上=对家(横排), 左=上家(竖列)
+	for info: Dictionary in [
+		{"pos": Vector2(1130, 108), "vert": true},
+		{"pos": Vector2(700, 44), "vert": false},
+		{"pos": Vector2(30, 50), "vert": true},
+	]:
+		var fan := Control.new()
+		fan.position = info["pos"]
+		fan.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fan.set_meta("vert", info["vert"])
+		add_child(fan)
+		_opp_hands.append(fan)
+
 	# 牌桌中央: 桌面区
 	var field_panel := Panel.new()
 	var field_sb := StyleBoxFlat.new()
@@ -591,6 +605,7 @@ func _refresh_view(view: Dictionary) -> void:
 	if self_label != null:
 		self_label.text = _seat_info_text(view, my)
 	avatar_me.skin_id = _skin_for(view, my)
+	_refresh_opp_hands(view)
 
 	_refresh_field(view)
 	_refresh_hand(view)
@@ -676,6 +691,27 @@ func _seat_name(view: Dictionary, seat: int) -> String:
 	var rel := (seat - my + 4) % 4
 	var names := ["", "下家", "对家", "上家"]
 	return names[rel]
+
+
+## 对手手牌: 重叠牌背(斗地主式), 数量跟随该座位剩牌数
+func _refresh_opp_hands(view: Dictionary) -> void:
+	var my := int(view["my_seat"])
+	var counts: Array = view["counts"]
+	for i in 3:
+		var box: Control = _opp_hands[i]
+		var n := int(counts[(my + i + 1) % 4])
+		var vert: bool = bool(box.get_meta("vert"))
+		for child in box.get_children():
+			child.queue_free()
+		box.visible = n > 0
+		for k in n:
+			var cv := CardViewScript.new(-1)
+			cv.face_down = true
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cv.custom_minimum_size = Vector2(40, 56)
+			cv.size = Vector2(40, 56)
+			cv.position = Vector2(0, k * 11) if vert else Vector2(k * 12, 0)
+			box.add_child(cv)
 
 
 ## 座位信息区文本: 名字 / 剩牌与积分 / 身份（出完才显示）

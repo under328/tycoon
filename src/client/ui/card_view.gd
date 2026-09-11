@@ -241,12 +241,13 @@ func _draw_back() -> void:
 	_refresh_palette()
 	draw_style_box(_back_sb, Rect2(Vector2.ZERO, size))
 	var c := size / 2.0
-	# 和风云纹: 三道金弧 + 中央菱形
+	var s := size.y / 100.0  # 纹样随牌面尺寸缩放(对手牌背为小尺寸)
 	for i in 3:
-		draw_arc(c + Vector2(0, -18 + i * 18), 26.0, PI * 1.15, PI * 1.85, 24,
+		draw_arc(c + Vector2(0, (-18 + i * 18) * s), 26.0 * s, PI * 1.15, PI * 1.85, 24,
 				COLOR_BACK_PAT, 2.0, true)
 	draw_colored_polygon(PackedVector2Array([
-		c + Vector2(0, -8), c + Vector2(7, 0), c + Vector2(0, 8), c + Vector2(-7, 0),
+		c + Vector2(0, -8 * s), c + Vector2(7 * s, 0),
+		c + Vector2(0, 8 * s), c + Vector2(-7 * s, 0),
 	]), COLOR_GOLD)
 	draw_arc(c, 36.0, 0, TAU, 40, COLOR_BACK_PAT, 1.2, true)
 	draw_rect(Rect2(5, 5, size.x - 10, size.y - 10), Color(Wafu.GOLD, 0.25), false, 1.0)
