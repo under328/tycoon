@@ -50,6 +50,7 @@ func _init(p_card: int = -1) -> void:
 	card = p_card
 	custom_minimum_size = Vector2(72, 100)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	clip_contents = true  # 牌背纹样/放射线严格限制在牌面内
 
 	_face_sb.bg_color = COLOR_FACE
 	_face_sb.set_corner_radius_all(7)
@@ -109,7 +110,6 @@ func _draw() -> void:
 		_draw_face()
 	if selected:
 		draw_style_box(_sel_sb, Rect2(Vector2.ZERO, size))
-		draw_style_box(_sel_sb, Rect2(Vector2(-2, -2), size + Vector2(4, 4)))
 
 
 func _draw_face() -> void:
