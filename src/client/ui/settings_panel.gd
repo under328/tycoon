@@ -1,6 +1,6 @@
-## 设置面板组件（计划 Settings 场景的组件化）: 昵称 + 音乐/音效音量，自动保存。
-## 用法: add_child(SettingsPanelScript.new()); 面板.open() 显示, closed 信号通知关闭。
-extends PanelContainer
+## 设置面板（模态居中弹窗）: 昵称 + 音乐/音效音量，自动保存。
+## 用法: add_child(SettingsPanelScript.new()); 需要时调用 open()；closed 信号通知关闭。
+extends Control
 
 signal closed
 
@@ -12,13 +12,31 @@ var _sfx_slider: HSlider
 
 
 func _ready() -> void:
-	add_theme_stylebox_override("panel", AppTheme.flat(
+	# 全屏模态层: 居中显示 + 背景压暗 + 拦截外部点击
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	position = Vector2.ZERO
+	size = get_viewport().get_visible_rect().size
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", AppTheme.flat(
 			AppTheme.PANEL, AppTheme.GOLD, 14, 2))
-	custom_minimum_size = Vector2(440, 340)
+	center.add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
-	add_child(box)
+	panel.add_child(box)
 
 	var title := AppTheme.make_label(22, AppTheme.GOLD)
 	title.text = "设  置"
@@ -41,19 +59,30 @@ func _ready() -> void:
 	_sfx_slider = _volume_row(box, "音效", _on_sfx_changed)
 
 	var tip := AppTheme.make_label(13, AppTheme.DIM)
-	tip.text = "设置会自动保存"
+	tip.text = "设置会自动保存 (ESC 关闭)"
 	box.add_child(tip)
 
 	var close := AppTheme.make_button("关 闭", Vector2(140, 42), 17)
 	close.pressed.connect(func() -> void:
 		Audio.play("click")
-		visible = false
-		closed.emit())
-	var center := CenterContainer.new()
-	center.add_child(close)
-	box.add_child(center)
+		_close())
+	var cc := CenterContainer.new()
+	cc.add_child(close)
+	box.add_child(cc)
 
 	visible = false
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and event is InputEventKey and event.pressed \
+			and event.keycode == KEY_ESCAPE:
+		_close()
+
+
+func _close() -> void:
+	Audio.play("click")
+	visible = false
+	closed.emit()
 
 
 ## 打开并刷新控件值（昵称/音量读自存档）。
