@@ -63,11 +63,5 @@ static func beats(next: Dictionary, prev: Dictionary, revolution: bool) -> bool:
 	return next["key"] > prev["key"]
 
 
-static func type_name(combo: Dictionary) -> String:
-	if combo.is_empty():
-		return "—"
-	return TYPE_NAMES[int(combo["type"])]
-
-
 static func _mk(t: int, key: float, len: int, cards: Array) -> Dictionary:
 	return {"type": t, "key": key, "len": len, "cards": cards.duplicate()}

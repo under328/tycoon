@@ -57,10 +57,3 @@ func _invariants(t, st: Dictionary, seed_v: int) -> void:
 			t.expect((st["exchange"] as Array).size() >= 2, "seed %d: 交换至少两笔" % seed_v)
 
 
-func _hand_total(st: Dictionary) -> int:
-	var n := 0
-	for h in st["hands"]:
-		n += (h as Array).size()
-	return n
-
-

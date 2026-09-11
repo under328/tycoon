@@ -852,17 +852,6 @@ func _refresh_field(view: Dictionary) -> void:
 			Audio.play("play_card")
 
 
-func _seat_dir(view: Dictionary, seat: int) -> Vector2:
-	# 相对方位: 下家→右侧飞入, 对家→上方, 上家→左侧
-	match (seat - int(view["my_seat"]) + 4) % 4:
-		1:
-			return Vector2(180, 0)
-		2:
-			return Vector2(0, -140)
-		_:
-			return Vector2(-180, 0)
-
-
 func _make_card(card_id: int, w: float, h: float, is_selected: bool, clickable := true) -> Control:
 	var cv := CardViewScript.new(card_id)
 	cv.custom_minimum_size = Vector2(w, h)

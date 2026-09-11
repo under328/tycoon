@@ -76,8 +76,3 @@ static func sort_cards(cards: Array) -> void:
 	cards.sort()
 
 
-static func labels(cards: Array) -> String:
-	var parts := []
-	for c in cards:
-		parts.append(label(c))
-	return " ".join(parts)

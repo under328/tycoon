@@ -5,7 +5,6 @@ extends RefCounted
 
 const BG := Color("14142b")              # 深靛底
 const PANEL := Color(0.10, 0.10, 0.22, 0.92)
-const PANEL_SOLID := Color("22224a")     # 面板靛
 const GOLD := Color("e0a83c")            # 霓虹金
 const RED := Color("e0503c")             # 朱红
 const WHITE := Color("f0f0f0")
