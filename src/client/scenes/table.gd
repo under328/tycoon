@@ -39,6 +39,10 @@ var _prev_tick := -1
 var _leave_confirm_at := 0
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
+var self_panel: Control
+var rules_btn: Button
+var ops_row: Control
+var _seat_panels: Array = []       # 对手信息面板
 var _opp_hands: Array = []
 var avatar_me: Control
 
@@ -64,6 +68,8 @@ var seat_labels: Array = []
 var hand_box: Control
 var _hand_cards: Array = []     # 手牌卡牌控件(按手牌顺序)
 var field_box: HFlowContainer
+var field_panel: Panel
+var chat_btn: Button
 var field_hint: Label
 var fx_layer: Control
 var btn_play: Button
@@ -106,6 +112,8 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------- 驱动（本地）
 
 func _new_match() -> void:
+	resized.connect(_relayout)
+	_relayout.call_deferred()
 	for child in fx_layer.get_children():
 		child.queue_free()  # 关闭上一场的结算面板/特效
 	state = GameStateGd.new_match({}, -1)
@@ -404,7 +412,7 @@ func _build_ui() -> void:
 
 	# 头像: 三个对手 + 我(左上)
 	# 自己的信息面板(手牌左侧): 头像内嵌 + 彩色信息
-	var self_panel := PanelContainer.new()
+	self_panel = PanelContainer.new()
 	var sp_sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92), Color(AppTheme.GOLD, 0.6), 12, 2)
 	sp_sb.content_margin_left = 10
 	sp_sb.content_margin_right = 12
@@ -440,7 +448,7 @@ func _build_ui() -> void:
 	timer_label.visible = mode == "online"
 	add_child(timer_label)
 
-	var rules_btn := _button("规则")
+	rules_btn = _button("规则")
 	rules_btn.position = Vector2(1076, 10)
 	rules_btn.custom_minimum_size = Vector2(72, 32)
 	rules_btn.add_theme_font_size_override("font_size", 15)
@@ -451,9 +459,11 @@ func _build_ui() -> void:
 	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
-	seat_labels.append(_make_seat_panel(Vector2(996, 296)))   # 下家(右)
-	seat_labels.append(_make_seat_panel(Vector2(420, 8)))     # 对家(上)
-	seat_labels.append(_make_seat_panel(Vector2(16, 296)))    # 上家(左)
+	for i in 3:
+		var pr := _make_seat_panel(i)
+		_seat_panels.append(pr[0])
+		seat_labels.append(pr[1])
+		_opp_avatars.append(pr[2])
 
 	# 对手手牌(重叠牌背): 右=下家(竖列), 上=对家(横排), 左=上家(竖列)
 	for info: Dictionary in [
@@ -470,7 +480,7 @@ func _build_ui() -> void:
 		_opp_hands.append(fan)
 
 	# 牌桌中央: 桌面区
-	var field_panel := Panel.new()
+	field_panel = Panel.new()
 	var field_sb := StyleBoxFlat.new()
 	field_sb.bg_color = Color(0.09, 0.09, 0.20, 0.94)
 	field_sb.set_corner_radius_all(14)
@@ -514,11 +524,11 @@ func _build_ui() -> void:
 	hand_box.size = Vector2(1010, 104)
 	add_child(hand_box)
 
-	var row := HBoxContainer.new()
-	row.position = Vector2(826, 662)
-	row.custom_minimum_size = Vector2(408, 44)
-	row.add_theme_constant_override("separation", 10)
-	add_child(row)
+	ops_row = HBoxContainer.new()
+	ops_row.position = Vector2(826, 662)
+	ops_row.custom_minimum_size = Vector2(408, 44)
+	ops_row.add_theme_constant_override("separation", 10)
+	add_child(ops_row)
 
 	btn_play = _button("出牌")
 	btn_play.pressed.connect(_on_play_pressed)
@@ -533,7 +543,7 @@ func _build_ui() -> void:
 	btn_leave = _button("返回大厅")
 	btn_leave.pressed.connect(_on_leave_pressed)
 	for b: Button in [btn_play, btn_hint, btn_pass, btn_next, btn_rematch, btn_leave]:
-		row.add_child(b)
+		ops_row.add_child(b)
 
 	# 快捷表情（仅联机模式）
 	for i in EMOJIS.size():
@@ -571,7 +581,7 @@ func _build_ui() -> void:
 	chat_edit.add_theme_font_size_override("font_size", 15)
 	chat_edit.text_submitted.connect(func(_t: String) -> void: _on_chat_send())
 	add_child(chat_edit)
-	var chat_btn := _button("发送")
+	chat_btn = _button("发送")
 	chat_btn.position = Vector2(792, 666)
 	chat_btn.custom_minimum_size = Vector2(60, 36)
 	chat_btn.add_theme_font_size_override("font_size", 15)
@@ -590,7 +600,12 @@ func _build_ui() -> void:
 
 
 ## 对手信息面板: 头像内嵌 + 彩色信息(与自己面板同款样式)
-func _make_seat_panel(pos: Vector2) -> RichTextLabel:
+## 对手座位基准位置(1280x720): 下家(右)/对家(上)/上家(左), _relayout 按屏幕重锚
+const SEAT_PANEL_POS := [Vector2(996, 296), Vector2(420, 8), Vector2(16, 296)]
+
+
+func _make_seat_panel(idx: int) -> Array:
+	var pos: Vector2 = SEAT_PANEL_POS[idx]
 	var panel := PanelContainer.new()
 	var sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92), Color(AppTheme.GOLD, 0.6), 12, 2)
 	sb.content_margin_left = 8
@@ -618,7 +633,7 @@ func _make_seat_panel(pos: Vector2) -> RichTextLabel:
 	lb.custom_minimum_size = Vector2(140, 48)
 	lb.add_theme_font_size_override("normal_font_size", 14)
 	row.add_child(lb)
-	return lb
+	return [panel, lb, av]
 
 
 ## 对局文字加细描边阴影, 深色桌面上更清晰
@@ -691,6 +706,39 @@ func _show_emoji(seat: int, id: int) -> void:
 
 
 # ---------------------------------------------------------------- 刷新
+
+## 响应式重排: 以设计基准 1280x720 为最小布局, 按实际可用区
+## 重新锚定各区域 — 宽屏铺满全宽, 高屏上下扩展, 安全区由根偏移吸收。
+func _relayout() -> void:
+	var w: float = size.x
+	var h: float = size.y
+	if w < 100.0 or h < 100.0:
+		return
+	# 顶部
+	info_label.position = Vector2(20, 12)
+	timer_label.position = Vector2(w - 100, 12)
+	rules_btn.position = Vector2(w - 204, 10)
+	# 对家(上中) + 其牌背扇
+	_seat_panels[1].position = Vector2(w / 2.0 - 230, 8)
+	_opp_hands[1].position = Vector2(w / 2.0 + 60, 44)
+	# 上家(左) 与 下家(右)
+	_seat_panels[2].position = Vector2(16, h * 0.41)
+	_opp_hands[2].position = Vector2(30, 50)
+	_seat_panels[0].position = Vector2(w - 284, h * 0.41)
+	_opp_hands[0].position = Vector2(w - 150, 108)
+	# 中央出牌区(水平居中, 垂直随高度)
+	field_panel.position = Vector2((w - 640) / 2.0, 204 + (h - 720) * 0.5)
+	# 底部: 自己面板 / 手牌 / 状态 / 错误 / 操作行
+	self_panel.position = Vector2(16, h - 164)
+	hand_box.position = Vector2(w - 1014, h - 168)
+	status_label.position = Vector2((w - 640) / 2.0, h - 224)
+	error_label.position = Vector2((w - 640) / 2.0, h - 250)
+	ops_row.position = Vector2(w - 454, h - 58)
+	# 联机聊天(仅联机创建)
+	chat_log.position = Vector2(16, h - 258)
+	chat_edit.position = Vector2(w - 840, h - 58)
+	chat_btn.position = Vector2(w - 488, h - 58)
+
 
 func _refresh() -> void:
 	if mode == "online":
