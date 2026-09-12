@@ -31,6 +31,7 @@ var state: Dictionary = {}
 var selected: Array = []
 var advancing := false
 var auto_pilot := false       # 本地托管中: AI 代打玩家座位(返回菜单后继续)
+var _advance_gen := 0         # 驱动循环代际: 重启循环时使旧协程失效
 var _at_game_end := false
 var _emoji_cd := 0.0
 var _chat_cd := 0.0
@@ -109,6 +110,12 @@ func _process(delta: float) -> void:
 				Audio.play("tick")
 
 
+## ESC / 安卓返回键 = 返回菜单(联机对局中沿用 3 秒二次确认的弃局语义)
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		_on_leave_pressed()
+
+
 # ---------------------------------------------------------------- 驱动（本地）
 
 func _new_match() -> void:
@@ -136,12 +143,16 @@ func _new_match() -> void:
 
 
 ## 驱动循环：AI 依次行动 / 阶段过渡，停在人需要操作处。
+## 代际计数: 离开对局会重启新循环, 挂起中的旧协程恢复后凭 gen 失配自灭,
+## 否则旧+新两个循环会同时驱动 AI(双出牌/非法动作)。
 func _advance() -> void:
 	if mode == "online":
 		return
 	if advancing:
 		return
 	advancing = true
+	_advance_gen += 1
+	var gen := _advance_gen
 	var guard := 0
 	while true:
 		guard += 1
@@ -154,8 +165,8 @@ func _advance() -> void:
 				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
-			if not is_inside_tree():
-				return  # 牌桌已被释放(离开对局), 不再驱动
+			if gen != _advance_gen or not is_inside_tree():
+				return
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
 			var r := _local_apply(action)
 			if not bool(r["ok"]):
@@ -170,7 +181,7 @@ func _advance() -> void:
 			if not er.is_empty():
 				break  # 等玩家选牌
 			await get_tree().create_timer(AI_THINK_SEC).timeout
-			if not is_inside_tree():
+			if gen != _advance_gen or not is_inside_tree():
 				return
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
 			var r2 := GameStateGd.apply(state, action)
@@ -183,7 +194,7 @@ func _advance() -> void:
 			# 最后一局: 短暂展示本局结果后自动进入全场结算(面板自动弹出)
 			if int(state["round"]) + 1 >= int(state["cfg"]["rounds"]):
 				await get_tree().create_timer(1.4).timeout
-				if not is_inside_tree():
+				if gen != _advance_gen or not is_inside_tree():
 					return
 				var r := GameStateGd.apply(state, {"t": "next_round"})
 				if bool(r["ok"]):
@@ -193,7 +204,8 @@ func _advance() -> void:
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
-	advancing = false
+	if gen == _advance_gen:
+		advancing = false
 
 
 ## 当前待返还的换牌任务(本地=state, 联机=latest_view)
@@ -786,8 +798,10 @@ func _refresh_view(view: Dictionary) -> void:
 		_prev_revolution = rev
 		if rev:
 			_spawn_fx("revolution")
+			Audio.play_bgm("table_rev")  # 革命: 切小调急板
 		elif phase == "play":
 			_spawn_fx("anti_revolution")
+			Audio.play_bgm("table")  # 革命解除: 切回大调
 
 	# 阶段切换: 交换过场 / 一落千丈(上局大富豪本轮垫底)
 	if phase != _prev_phase:
@@ -1048,6 +1062,8 @@ func _refresh_hand(view: Dictionary) -> void:
 	for child in hand_box.get_children():
 		child.queue_free()
 	_hand_cards.clear()
+	# 手牌已变化: 清掉已不在手中的陈旧选牌(避免把不存在的牌发给服务器)
+	selected = selected.filter(func(c: int) -> bool: return hand.has(c))
 	var i := 0
 	for c in hand:
 		var card_id: int = c
