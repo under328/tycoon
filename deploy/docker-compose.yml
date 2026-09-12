@@ -1,12 +1,12 @@
 services:
   tycoon:
-    build: .
-    container_name: tycoon-server
-    ports:
-      - "24565:24565/udp"
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+	build: .
+	container_name: tycoon-server
+	ports:
+	  - "24565:24565/udp"
+	restart: unless-stopped
+	logging:
+	  driver: json-file
+	  options:
+		max-size: "10m"
+		max-file: "3"

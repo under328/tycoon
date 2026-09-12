@@ -74,5 +74,3 @@ static func shuffle(cards: Array, rng: RandomNumberGenerator) -> void:
 
 static func sort_cards(cards: Array) -> void:
 	cards.sort()
-
-

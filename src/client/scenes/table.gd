@@ -388,11 +388,32 @@ func _build_ui() -> void:
 		av.size = Vector2(56, 56)
 		add_child(av)
 		seat_avatars.append(av)
+	# 自己的信息面板(手牌左侧): 头像内嵌 + 彩色信息
+	var self_panel := PanelContainer.new()
+	var sp_sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92), Color(AppTheme.GOLD, 0.6), 12, 2)
+	sp_sb.content_margin_left = 10
+	sp_sb.content_margin_right = 12
+	sp_sb.content_margin_top = 8
+	sp_sb.content_margin_bottom = 8
+	self_panel.add_theme_stylebox_override("panel", sp_sb)
+	self_panel.position = Vector2(16, 556)
+	self_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(self_panel)
+	var sp_row := HBoxContainer.new()
+	sp_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sp_row.add_theme_constant_override("separation", 10)
+	self_panel.add_child(sp_row)
 	avatar_me = AvatarScript.new()
-	avatar_me.position = Vector2(16, 546)
-	avatar_me.custom_minimum_size = Vector2(52, 52)
-	avatar_me.size = Vector2(52, 52)
-	add_child(avatar_me)
+	avatar_me.custom_minimum_size = Vector2(64, 64)
+	avatar_me.size = Vector2(64, 64)
+	sp_row.add_child(avatar_me)
+	self_label = RichTextLabel.new()
+	self_label.bbcode_enabled = true
+	self_label.scroll_active = false
+	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	self_label.custom_minimum_size = Vector2(150, 64)
+	self_label.add_theme_font_size_override("normal_font_size", 15)
+	sp_row.add_child(self_label)
 
 	info_label = _make_label(20, AppTheme.GOLD)
 	info_label.position = Vector2(20, 12)
@@ -415,7 +436,6 @@ func _build_ui() -> void:
 	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
-	self_label = _make_seat_label(Vector2(74, 516))
 	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
 	seat_labels.append(_make_seat_label(Vector2(500, 14)))
 	seat_labels.append(_make_seat_label(Vector2(20, 300)))
