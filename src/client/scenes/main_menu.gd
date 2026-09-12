@@ -38,42 +38,48 @@ func _ready() -> void:
 
 
 func _build_title() -> void:
-	# P5 式巨型行书标题: 倾斜 + 白描边 + 红色斩切线 + 朱印
-	var title := AppTheme.make_label(150, Color("f2c14e"))
+	# 巨型行书标题 + 阴影
+	var title := AppTheme.make_label(170, Color("f2c14e"))
 	title.add_theme_font_override("font", AppTheme.title_font())
 	title.text = "大富豪"
-	title.position = Vector2(600, 46)
+	title.position = Vector2(580, 28)
 	title.rotation = -0.06
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	title.add_theme_constant_override("shadow_offset_x", 5)
+	title.add_theme_constant_override("shadow_offset_y", 5)
 	add_child(title)
 
-	var sub := AppTheme.make_label(24, AppTheme.DIM)
-	sub.add_theme_font_override("font", AppTheme.display_font())
-	sub.text = "T  Y  C  O  O  N"
-	sub.position = Vector2(672, 240)
-	sub.rotation = -0.06
-	add_child(sub)
-
+	# 红色斩切线
 	var bar := ColorRect.new()
-	bar.color = AppTheme.RED
-	bar.position = Vector2(648, 268)
-	bar.size = Vector2(360, 14)
+	bar.color = Color(AppTheme.RED, 0.85)
+	bar.position = Vector2(570, 178)
+	bar.size = Vector2(420, 10)
 	bar.rotation = -0.06
 	add_child(bar)
 
+	# 英文副标
+	var sub := AppTheme.make_label(22, AppTheme.DIM)
+	sub.add_theme_font_override("font", AppTheme.display_font())
+	sub.text = "T  Y  C  O  O  N"
+	sub.position = Vector2(652, 216)
+	sub.rotation = -0.06
+	add_child(sub)
+
+	# 朱印
 	var seal := ColorRect.new()
-	seal.color = AppTheme.RED
-	seal.custom_minimum_size = Vector2(64, 64)
-	seal.size = Vector2(64, 64)
-	seal.position = Vector2(1010, 84)
+	seal.color = Color(AppTheme.RED, 0.9)
+	seal.custom_minimum_size = Vector2(56, 56)
+	seal.size = Vector2(56, 56)
+	seal.position = Vector2(1030, 72)
 	seal.rotation = 0.10
 	add_child(seal)
-	var seal_char := AppTheme.make_label(44, AppTheme.WHITE)
+	var seal_char := AppTheme.make_label(38, AppTheme.WHITE)
 	seal_char.add_theme_font_override("font", AppTheme.title_font())
 	seal_char.text = "富"
-	seal_char.position = Vector2(12, 2)
+	seal_char.position = Vector2(10, 2)
 	seal.add_child(seal_char)
 
-	# 余额徽章(斜切)
+	# 余额徽章
 	var badge := PanelContainer.new()
 	badge.add_theme_stylebox_override("panel", AppTheme.flat(
 			Color(0.08, 0.08, 0.18, 0.9), Color(AppTheme.GOLD, 0.6), 4, 0))
@@ -84,6 +90,7 @@ func _build_title() -> void:
 	_balance_lbl.text = "💰 %d   💎 %d" % [Wallet.gold, Wallet.diamonds]
 	badge.add_child(_balance_lbl)
 
+	# 版本号
 	var ver := AppTheme.make_label(13, AppTheme.DIM)
 	ver.text = "v1.0.0"
 	ver.position = Vector2(16, 690)
