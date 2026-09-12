@@ -105,6 +105,8 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------- 驱动（本地）
 
 func _new_match() -> void:
+	for child in fx_layer.get_children():
+		child.queue_free()  # 关闭上一场的结算面板/特效
 	state = GameStateGd.new_match({}, -1)
 	selected.clear()
 	_end_shown = false
@@ -780,6 +782,8 @@ func _refresh_view(view: Dictionary) -> void:
 			var pts := int(view["scores"][seat_me])
 			var stake_n := int(view["rules"].get("stakes", 1))
 			reward = Wallet.grant_match_reward(pts, my_rank, stake_n)
+			reward["wallet_gold"] = Wallet.gold
+			reward["wallet_diamonds"] = Wallet.diamonds
 		var panel := GameEndPanelScript.new()
 		panel.setup(view, func(s: int) -> String: return _seat_name(view, s), reward)
 		fx_layer.add_child(panel)
