@@ -11,6 +11,8 @@ const StatsGd = preload("res://src/server/stats.gd")
 const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 ## AI 随机皮肤池
 const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
+## 房间总数上限: 空房不会自动销毁(等待房主回房), 防异常客户端刷爆内存
+const MAX_ROOMS := 200
 
 var default_settings: Dictionary = RulesConfigGd.defaults()
 
@@ -137,6 +139,10 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 	if _in_live_match(peer):
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": "in_game", "msg": "对局进行中"}})
+		return out
+	if rooms.size() >= MAX_ROOMS:
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "room_limit", "msg": "服务器房间已满, 请稍后再试"}})
 		return out
 	if client_id != "":
 		peer_client[peer] = client_id

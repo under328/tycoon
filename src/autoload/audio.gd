@@ -22,6 +22,16 @@ func _ready() -> void:
 	play_bgm("lobby")
 
 
+func _notification(what: int) -> void:
+	# 移动端切后台/桌面失焦时静音, 回前台恢复(避免后台出声被系统限制或打扰)
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			_set_bus_volume("BGM", 0.0)
+			_set_bus_volume("SFX", 0.0)
+		NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_APPLICATION_FOCUS_IN:
+			apply_volumes()
+
+
 func _setup_buses() -> void:
 	for bus_name in ["BGM", "SFX"]:
 		if AudioServer.get_bus_index(bus_name) == -1:

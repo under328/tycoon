@@ -507,10 +507,15 @@ func _client_process(delta: float) -> void:
 	if _want_connection and not _is_connected():
 		_retry_timer -= delta
 		if _retry_timer <= 0.0:
-			_retry_timer = 2.0
+			_arm_retry()
 			connect_to(address, port)
 	if autoplay:
 		_autoplay_tick()
+
+
+## 重连退避: 2s 起步、每次失败 ×1.6、封顶 10s(连不上的服务器不刷包, 省电省流量)
+func _arm_retry() -> void:
+	_retry_timer = minf(2.0 * pow(1.6, float(_fail_count)), 10.0)
 
 
 func _is_connected() -> bool:
@@ -535,7 +540,7 @@ func _on_server_disconnected() -> void:
 	latest_view = {}
 	_welcomed = false
 	if auto_reconnect and _want_connection:
-		_retry_timer = 2.0
+		_arm_retry()
 	server_disconnected.emit()
 
 

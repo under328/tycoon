@@ -139,8 +139,10 @@ static func parse_invite(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	var parts := t.split("|")
 	if parts.size() == 4 and parts[0] == "TC" and parts[1] != "":
-		var port := int(parts[2]) if parts[2] != "" else 24565
-		if port <= 0:
+		var port := 24565
+		if parts[2] != "":
+			port = int(parts[2]) if parts[2].is_valid_int() else 0
+		if port < 1 or port > 65535:
 			return {}
 		return {"ip": parts[1], "port": port, "code": parts[3]}
 	return {}
@@ -220,9 +222,13 @@ func hide_host_panel() -> void:
 
 func _manual_connect() -> void:
 	var host := host_edit.text.strip_edges()
-	var port := int(port_edit.text.strip_edges()) if port_edit.text.strip_edges() != "" else GameSettings.DEFAULT_PORT
+	var port_text := port_edit.text.strip_edges()
+	var port := int(port_text) if port_text.is_valid_int() else 0
 	if host == "":
 		_set_status("请输入服务器地址", COLOR_RED)
+		return
+	if port < 1 or port > 65535:
+		_set_status("端口需为 1-65535 的数字", COLOR_RED)
 		return
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
@@ -304,6 +310,9 @@ func _build_ui() -> void:
 	code_edit.custom_minimum_size = Vector2(200, 44)
 	code_edit.size = Vector2(200, 44)
 	code_edit.placeholder_text = "或输入房间码"
+	var gs4 := get_node_or_null("/root/GameSettings")
+	if gs4 != null and str(gs4.last_room_code) != "":
+		code_edit.text = str(gs4.last_room_code)  # 预填最近房间码, 方便回房
 	code_edit.add_theme_font_size_override("font_size", 18)
 	add_child(code_edit)
 	join_btn = AppTheme.make_button("加入", Vector2(62, 44), 18)
@@ -589,12 +598,6 @@ func _kickable_seat() -> int:
 	return -1
 
 
-## 记录房间座位用于踢人判断
-var _room_players: Array = []
-func _fill_state_seats(state: Dictionary) -> void:
-	_room_players = state.get("players", [])
-
-
 func _save_nickname() -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
@@ -672,12 +675,15 @@ func _apply_settings(settings: Dictionary) -> void:
 
 func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null and str(gs.last_room_code) != _last_room_code:
+		gs.last_room_code = _last_room_code  # 记住最近房间码, 下次进大厅预填
+		gs.save_settings()
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	_enter_room()
 	hide_host_panel()
 	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
-	_fill_state_seats(state)
 	var lines: Array = []
 	if host_invite_ip != "":
 		lines.append("服务器IP: %s  (发朋友)" % host_invite_ip)

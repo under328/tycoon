@@ -27,7 +27,6 @@ var page := 0
 var _title: Label
 var _body: Label
 var _fig: Control
-var _page_lbl: Label
 var _prev_btn: Button
 var _next_btn: Button
 var _close_lbl: Label
@@ -143,7 +142,6 @@ func _show(p: int) -> void:
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_dots[p].size = Vector2(12, 12)
-	_page_lbl = null
 	_build_fig(int(PAGES[p][2]))
 
 

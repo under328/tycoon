@@ -14,6 +14,22 @@ func run(t) -> void:
 	_turn_timeout(t)
 	_m3_features(t)
 	_chat_rate_limit(t)
+	_room_limit(t)
+
+
+## 房间总数上限: 建满 MAX_ROOMS 后建房返回 s_error(room_limit), 防异常客户端刷房。
+func _room_limit(t) -> void:
+	var m = _mgr()
+	var peer := 1000
+	while m.rooms.size() < RoomManagerGd.MAX_ROOMS:
+		var out: Array = m.create_room(peer, "p%d" % peer, {}, "cid-%d" % peer)
+		t.expect(_count(out, "s_room_state") == 1, "上限内建房成功 peer=%d" % peer)
+		peer += 1
+	t.expect_eq(m.rooms.size(), RoomManagerGd.MAX_ROOMS, "房间数达到上限")
+	var over: Array = m.create_room(peer, "溢出", {}, "cid-over")
+	t.expect_eq(_count(over, "s_error"), 1, "超限建房被拒绝")
+	t.expect(over.size() > 0 and str(over[0]["data"]["code"]) == "room_limit",
+			"错误码为 room_limit")
 
 
 ## 聊天/表情服务端限速: 500ms 内第二条被丢弃。
