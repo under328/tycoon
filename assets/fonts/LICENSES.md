@@ -2,7 +2,8 @@
 
 | 字体 | 角色 | 授权 |
 |---|---|---|
-| ZhiMangXing.ttf 志莽行书 | 主标题/勝利敗北大字 | SIL OFL 1.1 |
-| ZCOOL.ttf 站酷庆科黄油体 | 按钮/HUD/卡面点数 | SIL OFL 1.1 |
+| WenKaiMedium.ttf 霞鹜文楷 Medium | 主标题/按钮/HUD/卡面点数 | SIL OFL 1.1 |
+| WenKaiRegular.ttf 霞鹜文楷 Regular | 正文/聊天/说明 | SIL OFL 1.1 |
 | ZCOOLKuaiLe.ttf 站酷快乐体 | 点缀文案/分类标签 | SIL OFL 1.1 |
-| NotoSansSC.ttf 思源黑体(可变) | 正文/聊天/说明 | SIL OFL 1.1 |
+
+> 霞鹜文楷 作者: lxgw (https://github.com/lxgw/LxgwWenKai)

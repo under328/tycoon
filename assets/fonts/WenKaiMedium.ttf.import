@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://5m0s7wh3aipm"
-path="res://.godot/imported/ZhiMangXing.ttf-1f2631237e9fb5b866efe89a3e9b007f.fontdata"
+uid="uid://pakok032wxi2"
+path="res://.godot/imported/WenKaiMedium.ttf-97c710ca062b8e1d0c876aa5b8516114.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/ZhiMangXing.ttf"
-dest_files=["res://.godot/imported/ZhiMangXing.ttf-1f2631237e9fb5b866efe89a3e9b007f.fontdata"]
+source_file="res://assets/fonts/WenKaiMedium.ttf"
+dest_files=["res://.godot/imported/WenKaiMedium.ttf-97c710ca062b8e1d0c876aa5b8516114.fontdata"]
 
 [params]
 

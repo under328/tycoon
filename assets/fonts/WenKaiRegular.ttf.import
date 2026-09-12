@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://bbpvacsu3qaqt"
-path="res://.godot/imported/NotoSansSC.ttf-53e7d2951cb723449d16fcecb813db38.fontdata"
+uid="uid://0iubm7d27mjk"
+path="res://.godot/imported/WenKaiRegular.ttf-8d418d5e0f75431190d25d2946812d74.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/NotoSansSC.ttf"
-dest_files=["res://.godot/imported/NotoSansSC.ttf-53e7d2951cb723449d16fcecb813db38.fontdata"]
+source_file="res://assets/fonts/WenKaiRegular.ttf"
+dest_files=["res://.godot/imported/WenKaiRegular.ttf-8d418d5e0f75431190d25d2946812d74.fontdata"]
 
 [params]
 
