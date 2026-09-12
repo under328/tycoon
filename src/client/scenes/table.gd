@@ -118,6 +118,7 @@ func _new_match() -> void:
 		child.queue_free()  # 关闭上一场的结算面板/特效
 	state = GameStateGd.new_match({}, -1)
 	selected.clear()
+	# 重置视听状态(上场的革命/阶段/桌面/手牌缓存全部作废)
 	_end_shown = false
 	_prev_revolution = false
 	_prev_phase = ""
@@ -131,12 +132,6 @@ func _new_match() -> void:
 	_seat_skins = [Wallet.equipped_skin, "", "", ""]
 	for i in range(1, 4):
 		_seat_skins[i] = ids[randi() % ids.size()]
-	_end_shown = false
-	_prev_revolution = false
-	_prev_phase = ""
-	_last_round_ids = []
-	_field_count = -1
-	_last_hand = []
 	_advance()
 
 
@@ -159,6 +154,8 @@ func _advance() -> void:
 				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
+			if not is_inside_tree():
+				return  # 牌桌已被释放(离开对局), 不再驱动
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
 			var r := _local_apply(action)
 			if not bool(r["ok"]):
@@ -173,6 +170,8 @@ func _advance() -> void:
 			if not er.is_empty():
 				break  # 等玩家选牌
 			await get_tree().create_timer(AI_THINK_SEC).timeout
+			if not is_inside_tree():
+				return
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
 			var r2 := GameStateGd.apply(state, action)
 			if not bool(r2["ok"]):
@@ -279,7 +278,8 @@ func _on_hint_pressed() -> void:
 		view = net.latest_view
 	elif not state.is_empty():
 		view = ViewGd.build(state, 0)
-	if view.is_empty() or str(view["phase"]) != "play" 			or int(view["turn"]) != int(view["my_seat"]):
+	if view.is_empty() or str(view["phase"]) != "play" \
+			or int(view["turn"]) != int(view["my_seat"]):
 		return
 	var action := BotPlayerGd.decide_from_view(view)
 	if str(action.get("t")) == "play":
@@ -625,7 +625,6 @@ func _make_seat_panel(idx: int) -> Array:
 	av.custom_minimum_size = Vector2(44, 44)
 	av.size = Vector2(44, 44)
 	row.add_child(av)
-	_opp_avatars.append(av)
 	var lb := RichTextLabel.new()
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
@@ -689,11 +688,16 @@ func _show_emoji(seat: int, id: int) -> void:
 	var view: Dictionary = {}
 	if mode == "online" and net != null:
 		view = net.latest_view
-	var pos := Vector2(560, 470)  # 自己的表情出现在手牌上方
-	if seat != int(view.get("my_seat", 0)):
-		var rel := (seat - int(view.get("my_seat", 0)) + 4) % 4
-		var positions := [Vector2.ZERO, Vector2(1010, 300), Vector2(430, 14), Vector2(160, 300)]
-		pos = positions[rel]
+	var my := int(view.get("my_seat", 0))
+	# 表情从对应座位面板上方飘出(面板已随 _relayout 自适应)
+	var pos := self_panel.position + Vector2(240, -90)
+	if seat != my:
+		var rel := (seat - my + 4) % 4
+		if rel >= 1 and rel <= 3:
+			var sp: Control = _seat_panels[rel - 1]
+			pos = sp.position + Vector2(sp.size.x * 0.5, -64.0)
+			if pos.y < 12.0:  # 对家面板贴顶 → 表情放面板下方
+				pos.y = sp.position.y + sp.size.y + 12.0
 	var lb := Label.new()
 	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
 	lb.add_theme_font_size_override("font_size", 42)
@@ -738,6 +742,9 @@ func _relayout() -> void:
 	chat_log.position = Vector2(16, h - 258)
 	chat_edit.position = Vector2(w - 840, h - 58)
 	chat_btn.position = Vector2(w - 488, h - 58)
+	# 快捷表情(联机): 与聊天/操作行同排贴底
+	for i in _emoji_btns.size():
+		_emoji_btns[i].position = Vector2(16 + i * 52, h - 58)
 
 
 func _refresh() -> void:
@@ -870,9 +877,29 @@ func _seat_name(view: Dictionary, seat: int) -> String:
 	var my := int(view.get("my_seat", 0))
 	if seat == my:
 		return "你"
+	var real := _real_name(seat)
+	if real != "":
+		return real  # 联机: 显示真实昵称(座位面板位置已表达方位)
 	var rel := (seat - my + 4) % 4
 	var names := ["", "下家", "对家", "上家"]
 	return names[rel]
+
+
+## 联机房间的真实昵称(截断 6 字); 本地模式/机器人返回 ""(回退方位称呼)
+func _real_name(seat: int) -> String:
+	if mode != "online" or net == null:
+		return ""
+	for p in (net.last_room_state as Dictionary).get("players", []):
+		if int(p.get("seat", -1)) != seat or bool(p.get("is_bot", false)) \
+				or bool(p.get("empty", false)):
+			continue
+		var n := str(p.get("name", "")).strip_edges()
+		if n == "":
+			return ""
+		if n.length() > 6:
+			n = n.substr(0, 6) + "…"
+		return n
+	return ""
 
 
 ## 对手手牌: 重叠牌背(斗地主式), 数量跟随该座位剩牌数

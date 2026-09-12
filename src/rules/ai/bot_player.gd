@@ -66,7 +66,8 @@ static func _prefer_lead(a: Dictionary, b: Dictionary, revolution: bool) -> bool
 	# 牌数多者优先（先跑为敬）；同数取当前点序下更弱者（反转时 key 大者更弱）
 	if int(a["len"]) != int(b["len"]):
 		return int(a["len"]) > int(b["len"])
-	return ComboGd.eff_key(float(a["key"]), revolution) 			< ComboGd.eff_key(float(b["key"]), revolution)
+	return ComboGd.eff_key(float(a["key"]), revolution) \
+			< ComboGd.eff_key(float(b["key"]), revolution)
 
 
 static func _joker_count(combo: Dictionary) -> int:

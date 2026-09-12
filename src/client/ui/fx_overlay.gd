@@ -16,8 +16,6 @@ var _slashes: Array = []
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	position = Vector2.ZERO
-	size = get_viewport().get_visible_rect().size
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 42

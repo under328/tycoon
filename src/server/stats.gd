@@ -25,9 +25,16 @@ func load_from_disk() -> void:
 
 
 func save_to_disk() -> void:
-	var f := FileAccess.open(save_path, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(data, "  "))
+	# 原子写入(tmp→rename): 崩溃/断电不会损坏战绩存档(损坏会导致全员战绩清零)
+	var tmp := save_path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify(data, "  "))
+	f.close()
+	DirAccess.rename_absolute(
+			ProjectSettings.globalize_path(tmp),
+			ProjectSettings.globalize_path(save_path))
 
 
 func get_entry(cid: String) -> Dictionary:
