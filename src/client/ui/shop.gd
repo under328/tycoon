@@ -8,6 +8,7 @@ const P5Header = preload("res://src/client/ui/p5_header.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 const COLOR_BG := Color(0.94, 0.94, 0.96, 0.98)
 
@@ -17,6 +18,8 @@ var _toast: Label
 var _grid: GridContainer
 var _tab_skin_btn: Button
 var _tab_card_btn: Button
+var _back_btn: Button
+var _scroll: ScrollContainer
 
 
 
@@ -42,12 +45,12 @@ func _ready() -> void:
 	_balance_lbl.position = Vector2(980, 30)
 	add_child(_balance_lbl)
 
-	var back := AppTheme.make_button("返 回", Vector2(100, 42), 17)
-	back.position = Vector2(1150, 24)
-	back.pressed.connect(func() -> void:
+	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
+	_back_btn.position = Vector2(1150, 24)
+	_back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close())
-	add_child(back)
+	add_child(_back_btn)
 
 	# 分类页签
 	_tab_skin_btn = AppTheme.make_button("人 物 皮 肤", Vector2(200, 46), 18)
@@ -62,15 +65,15 @@ func _ready() -> void:
 	add_child(_tab_card_btn)
 
 	# 商品网格
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(40, 170)
-	scroll.custom_minimum_size = Vector2(1200, 484)
-	add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.position = Vector2(40, 170)
+	_scroll.custom_minimum_size = Vector2(1200, 484)
+	add_child(_scroll)
 	_grid = GridContainer.new()
 	_grid.columns = 3
 	_grid.add_theme_constant_override("h_separation", 18)
 	_grid.add_theme_constant_override("v_separation", 18)
-	scroll.add_child(_grid)
+	_scroll.add_child(_grid)
 
 	_toast = AppTheme.make_label(16, AppTheme.RED)
 	_toast.position = Vector2(40, 660)
@@ -78,7 +81,21 @@ func _ready() -> void:
 	add_child(_toast)
 
 	Wallet.balance_changed.connect(_refresh)
+	Responsive.watch(self, _relayout)
 	_set_tab("skin")
+
+
+## 多设备自适应: 余额/返回锚右上, 商品区随窗口伸缩, 提示行贴底缘。
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	_balance_lbl.position = Vector2(w - _balance_lbl.size.x - 176.0, 30)
+	_back_btn.position = Vector2(w - _back_btn.size.x - 30.0, 24)
+	_scroll.position = Vector2(40, 170)
+	_scroll.size = Vector2(w - 80.0, h - 236.0)
+	_toast.position = Vector2(40, h - 60)
 
 
 func _set_tab(tab: String) -> void:

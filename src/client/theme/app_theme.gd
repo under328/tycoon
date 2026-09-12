@@ -23,6 +23,8 @@ static var _accent_font: FontFile
 static var _body_font: FontFile
 static var _theme: Theme
 
+const Responsive = preload("res://src/client/theme/responsive.gd")
+
 
 ## 志莽行书（主标题/勝利敗北/朱印）
 static func title_font() -> FontFile:
@@ -132,7 +134,10 @@ static func make_button(text: String, min_size := Vector2(96, 44), font_size := 
 	var b := Button.new()
 	b.text = text
 	b.name = text
-	b.custom_minimum_size = min_size
-	b.size = min_size
+	var ms := min_size
+	if Responsive.is_touch() and ms.y < 44.0:
+		ms.y = 44.0  # 触屏设备热区下限(手机/平板手指可按)
+	b.custom_minimum_size = ms
+	b.size = ms
 	b.add_theme_font_size_override("font_size", font_size)
 	return b

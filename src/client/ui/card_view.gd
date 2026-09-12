@@ -88,7 +88,9 @@ func _ready() -> void:
 
 ## 当前装备卡面皮肤的调色板(跟随商城更换)
 func _refresh_palette() -> void:
-	var w := get_node_or_null("/root/Wallet")
+	var w: Node = null
+	if is_inside_tree():
+		w = get_node_or_null("/root/Wallet")
 	var cid := "card_washi"
 	if palette_id != "":
 		cid = palette_id

@@ -8,6 +8,7 @@ signal host_requested
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
 const LobbyHelpScript = preload("res://src/client/ui/lobby_help.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 
@@ -53,9 +54,17 @@ var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
 var _invite_code := ""        # 当前房间的完整邀请码
 var kick_btn: Button
 var help_btn: Button
+var back_btn: Button
+var title_lbl: Label
+var nick_lbl: Label
+var server_lbl: Label
+var rules_lbl: Label
+var stakes_lbl: Label
+var rounds_lbl: Label
 var _room_ui: Array = []          # 仅房间内显示的控件
 var _in_room := false             # 是否处于房间内(驱动房间 UI 显隐)
 var _conn_fails := 0
+var _placed: Array = []           # 自适应锚定表: [控件, 基准坐标, 模式, 高度分配比]
 
 
 func setup(p_net: Node) -> void:
@@ -76,8 +85,33 @@ func _ready() -> void:
 		net.setup(false)
 		add_child(net)
 	_build_ui()
+	Responsive.watch(self, _relayout)
 	_bind_net()
 	_auto_connect()
+
+
+## 多设备自适应(1280x720 设计基准, 见 responsive.gd):
+## PC 任意窗形 / 手机横屏(多余宽度) / 平板横屏(多余高度) 统一重排。
+func _reg(n: Control, mode: String, dy_frac := 0.0) -> void:
+	_placed.append([n, n.position, mode, dy_frac])
+
+
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	var extra := maxf(w - 1280.0, 0.0)
+	var eh := maxf(h - 720.0, 0.0)
+	var shift := extra * 0.45
+	for e: Array in _placed:
+		var ctrl: Control = e[0]
+		var dx := 0.0
+		if str(e[2]) == "center":
+			dx = shift
+		elif str(e[2]) == "right":
+			dx = extra
+		ctrl.position = Vector2(e[1]) + Vector2(dx, float(e[3]) * eh)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -211,23 +245,23 @@ func _build_ui() -> void:
 	add_child(bg)
 
 	# 返回主菜单按钮
-	var back_btn := create_and_place("← 主菜单", Vector2(20, 16), Vector2(110, 36), 15)
+	back_btn = create_and_place("← 主菜单", Vector2(20, 16), Vector2(110, 36), 15)
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.leave_room()
 		back_to_menu.emit())
 
 	# 标题
-	var title := AppTheme.make_label(28, COLOR_GOLD)
-	title.text = "联机对战"
-	title.position = Vector2(150, 22)
-	add_child(title)
+	title_lbl = AppTheme.make_label(28, COLOR_GOLD)
+	title_lbl.text = "联机对战"
+	title_lbl.position = Vector2(150, 22)
+	add_child(title_lbl)
 
 	# 昵称
-	var c1 := AppTheme.make_label(15, COLOR_WHITE)
-	c1.text = "昵称"
-	c1.position = Vector2(150, 70)
-	add_child(c1)
+	nick_lbl = AppTheme.make_label(15, COLOR_WHITE)
+	nick_lbl.text = "昵称"
+	nick_lbl.position = Vector2(150, 70)
+	add_child(nick_lbl)
 	nickname_edit = LineEdit.new()
 	nickname_edit.position = Vector2(200, 66)
 	nickname_edit.custom_minimum_size = Vector2(220, 36)
@@ -309,9 +343,9 @@ func _build_ui() -> void:
 	add_child(help_btn)
 
 	# 服务器地址区(右上)
-	var c2 := AppTheme.section_label("服务器")
-	c2.position = Vector2(830, 66)
-	add_child(c2)
+	server_lbl = AppTheme.section_label("服务器")
+	server_lbl.position = Vector2(830, 66)
+	add_child(server_lbl)
 	host_edit = LineEdit.new()
 	host_edit.position = Vector2(830, 94)
 	host_edit.custom_minimum_size = Vector2(200, 36)
@@ -380,6 +414,7 @@ func _build_ui() -> void:
 		_exit_room())
 	add_child(leave_btn)
 	copy_btn = AppTheme.make_button("复制邀请码", Vector2(140, 46), 17)
+	_room_ui.append(copy_btn)
 	copy_btn.position = Vector2(630, 470)
 	copy_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -391,15 +426,15 @@ func _build_ui() -> void:
 	add_child(copy_btn)
 
 	# 规则设置
-	var c4 := AppTheme.section_label("规则设置")
-	c4.position = Vector2(830, 310)
-	add_child(c4)
-	_room_ui.append(c4)
+	rules_lbl = AppTheme.section_label("规则设置")
+	rules_lbl.position = Vector2(830, 310)
+	add_child(rules_lbl)
+	_room_ui.append(rules_lbl)
 	chk_joker = _check("带王", Vector2(830, 340))
 	_room_ui.append(chk_joker)
 	chk_revolution = _check("革命", Vector2(830, 380))
 	_room_ui.append(chk_revolution)
-	var stakes_lbl := AppTheme.make_label(15, COLOR_WHITE)
+	stakes_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	stakes_lbl.text = "输赢"
 	stakes_lbl.position = Vector2(830, 414)
 	add_child(stakes_lbl)
@@ -412,7 +447,7 @@ func _build_ui() -> void:
 	stakes_option.custom_minimum_size = Vector2(90, 34)
 	add_child(stakes_option)
 	_room_ui.append(stakes_option)
-	var rounds_lbl := AppTheme.make_label(15, COLOR_WHITE)
+	rounds_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 460)
 	add_child(rounds_lbl)
@@ -484,10 +519,12 @@ func _build_ui() -> void:
 	host_ip_value = AppTheme.make_label(20, COLOR_WHITE)
 	host_ip_value.text = "-"
 	host_ip_value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	host_ip_value.custom_minimum_size = Vector2(328, 0)  # 自动换行必须有宽度约束, 否则容器测高爆炸
 	hp_box.add_child(host_ip_value)
 	var hp_hint := AppTheme.make_label(14, COLOR_DIM)
 	hp_hint.text = "把上面的 IP 发给朋友\n朋友在右上【服务器】填 IP 点【连接】\n再输房间码【加入】"
 	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hp_hint.custom_minimum_size = Vector2(328, 0)
 	hp_box.add_child(hp_hint)
 	var hp_dl := AppTheme.make_button("⬇ 下载 Tailscale", Vector2(220, 38), 15)
 	hp_dl.visible = false
@@ -496,6 +533,43 @@ func _build_ui() -> void:
 		OS.shell_open("https://tailscale.com/download"))
 	hp_box.add_child(hp_dl)
 	host_dl_btn = hp_dl
+
+	# 自适应锚定注册(基准坐标 = 创建时的 position; 模式含义见 _reg/_relayout)
+	_reg(back_btn, "left")
+	_reg(update_btn, "left")
+	_reg(host_panel, "left", 0.1)
+	_reg(status_label, "left", 0.1)
+	_reg(stats_label, "left", 0.15)
+	_reg(title_lbl, "center")
+	_reg(nick_lbl, "center")
+	_reg(nickname_edit, "center")
+	_reg(quick_btn, "center")
+	_reg(create_btn, "center")
+	_reg(paste_btn, "center")
+	_reg(host_btn, "center")
+	_reg(code_edit, "center")
+	_reg(join_btn, "center")
+	_reg(room_label, "center", 0.2)
+	_reg(server_lbl, "right")
+	_reg(host_edit, "right")
+	_reg(port_edit, "right")
+	_reg(connect_btn, "right")
+	_reg(help_btn, "right")
+	_reg(rules_lbl, "right")
+	_reg(chk_joker, "right")
+	_reg(chk_revolution, "right")
+	_reg(stakes_lbl, "right")
+	_reg(stakes_option, "right")
+	_reg(rounds_lbl, "right")
+	_reg(rounds_option, "right")
+	_reg(save_settings_btn, "right")
+	for i in _emoji_btns.size():
+		_reg(_emoji_btns[i], "right", 1.0)  # 表情栏贴底缘(平板加高时跟随)
+	_reg(fill_btn, "center", 0.45)
+	_reg(kick_btn, "center", 0.45)
+	_reg(start_btn, "center", 0.45)
+	_reg(leave_btn, "center", 0.45)
+	_reg(copy_btn, "center", 0.45)
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
 		b.disabled = true

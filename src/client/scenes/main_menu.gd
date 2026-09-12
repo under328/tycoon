@@ -12,12 +12,17 @@ const ShopScript = preload("res://src/client/ui/shop.gd")
 const TutorialScript = preload("res://src/client/scenes/tutorial.gd")
 const SlashItem = preload("res://src/client/ui/slash_menu_item.gd")
 const Wafu = preload("res://src/client/ui/wafu_paint.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 
 var _settings: Control
 var _tutorial_item: Control
 var _shop: Control
 var _balance_lbl: Label
+var _title_group: Control   # 标题/斩切线/副标/朱印 组容器(内部坐标固定, 整体锚定)
+var _badge: PanelContainer
+var _ver_lbl: Label
+var _hint_lbl: Label
 
 
 func _ready() -> void:
@@ -34,67 +39,92 @@ func _ready() -> void:
 	_build_title()
 	_build_menu()
 	_build_settings()
+	Responsive.watch(self, _relayout)
 	Audio.play_bgm("lobby")
 
 
+## 多设备自适应(1280x720 设计基准): 标题组锚右半区居中,
+## 余额徽章锚右上, 版本号左下, 底部提示居中——手机(宽余)/平板(高余)/PC 通吃。
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	var tx := clampf(w * 0.45, 500.0, w - 540.0)
+	if _title_group != null:
+		_title_group.position = Vector2(tx, 28)
+	if _badge != null:
+		_badge.position = Vector2(w - _badge.size.x - 28.0, 30)
+	if _ver_lbl != null:
+		_ver_lbl.position = Vector2(16, h - 30)
+	if _hint_lbl != null:
+		_hint_lbl.position = Vector2((w - _hint_lbl.size.x) / 2.0, h - 36)
+
+
 func _build_title() -> void:
-	# 巨型行书标题 + 阴影
+	# 巨型行书标题组: 内部坐标固定, _relayout 整体锚定到右半区(设计基准 x=576)
+	_title_group = Control.new()
+	_title_group.position = Vector2(576, 28)
+	_title_group.custom_minimum_size = Vector2(520, 240)
+	_title_group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_title_group)
+
 	var title := AppTheme.make_label(170, Color("f2c14e"))
 	title.add_theme_font_override("font", AppTheme.title_font())
 	title.text = "大富豪"
-	title.position = Vector2(580, 28)
+	title.position = Vector2(4, 0)
 	title.rotation = -0.06
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
 	title.add_theme_constant_override("shadow_offset_x", 5)
 	title.add_theme_constant_override("shadow_offset_y", 5)
-	add_child(title)
+	_title_group.add_child(title)
 
 	# 红色斩切线
 	var bar := ColorRect.new()
 	bar.color = Color(AppTheme.RED, 0.85)
-	bar.position = Vector2(570, 178)
+	bar.position = Vector2(-6, 150)
 	bar.size = Vector2(420, 10)
 	bar.rotation = -0.06
-	add_child(bar)
+	_title_group.add_child(bar)
 
 	# 英文副标
 	var sub := AppTheme.make_label(22, AppTheme.DIM)
 	sub.add_theme_font_override("font", AppTheme.display_font())
 	sub.text = "T  Y  C  O  O  N"
-	sub.position = Vector2(652, 216)
+	sub.position = Vector2(76, 188)
 	sub.rotation = -0.06
-	add_child(sub)
+	_title_group.add_child(sub)
 
 	# 朱印
 	var seal := ColorRect.new()
 	seal.color = Color(AppTheme.RED, 0.9)
 	seal.custom_minimum_size = Vector2(56, 56)
 	seal.size = Vector2(56, 56)
-	seal.position = Vector2(1030, 72)
+	seal.position = Vector2(454, 44)
 	seal.rotation = 0.10
-	add_child(seal)
+	_title_group.add_child(seal)
 	var seal_char := AppTheme.make_label(38, AppTheme.WHITE)
 	seal_char.add_theme_font_override("font", AppTheme.title_font())
 	seal_char.text = "富"
 	seal_char.position = Vector2(10, 2)
 	seal.add_child(seal_char)
 
-	# 余额徽章
-	var badge := PanelContainer.new()
-	badge.add_theme_stylebox_override("panel", AppTheme.flat(
+	# 余额徽章(锚右上)
+	_badge = PanelContainer.new()
+	_badge.add_theme_stylebox_override("panel", AppTheme.flat(
 			Color(0.08, 0.08, 0.18, 0.9), Color(AppTheme.GOLD, 0.6), 4, 0))
-	badge.position = Vector2(1040, 30)
-	badge.rotation = -0.03
-	add_child(badge)
+	_badge.position = Vector2(1040, 30)
+	_badge.rotation = -0.03
+	add_child(_badge)
 	_balance_lbl = AppTheme.make_label(19, AppTheme.WHITE)
 	_balance_lbl.text = "💰 %d   💎 %d" % [Wallet.gold, Wallet.diamonds]
-	badge.add_child(_balance_lbl)
+	_badge.add_child(_balance_lbl)
 
-	# 版本号
-	var ver := AppTheme.make_label(13, AppTheme.DIM)
-	ver.text = "v1.0.0"
-	ver.position = Vector2(16, 690)
-	add_child(ver)
+	# 版本号(锚左下)
+	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
+	_ver_lbl.text = "v1.0.0"
+	_ver_lbl.position = Vector2(16, 690)
+	add_child(_ver_lbl)
 
 
 func _build_menu() -> void:
@@ -125,11 +155,11 @@ func _build_menu() -> void:
 			_tutorial_item = item
 		add_child(item)
 
-	var hint := AppTheme.make_label(14, AppTheme.DIM)
-	hint.add_theme_font_override("font", AppTheme.accent_font())
-	hint.text = "和朋友开一局: 联机游戏 → 创建房间 → 把房间码发给朋友"
-	hint.position = Vector2(400, 700)
-	add_child(hint)
+	_hint_lbl = AppTheme.make_label(14, AppTheme.DIM)
+	_hint_lbl.add_theme_font_override("font", AppTheme.accent_font())
+	_hint_lbl.text = "和朋友开一局: 联机游戏 → 创建房间 → 把房间码发给朋友"
+	_hint_lbl.position = Vector2(400, 700)
+	add_child(_hint_lbl)
 
 
 func _tutorial_badge() -> String:

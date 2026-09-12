@@ -37,6 +37,16 @@ godot --path . --client
 （离线期间 AI 托管）；打完自动回房间，房主可再来一局；服务器按游客 ID 记录
 场数/胜场/累计积分（`user://stats.json`）。规则细节见 [docs/规则规格.md](docs/规则规格.md)。
 
+## 多设备自适应
+
+PC / 手机 / 平板横屏统一适配（`src/client/theme/responsive.gd`）：工程用
+`canvas_items + expand` 拉伸（设计分辨率 1280×720），逻辑视口恒有宽≥1280、高≥720——
+4:3 平板 = 1280×960（多高度）、20:9 手机 = 1600×720（多宽度）。各界面按几何锚定
+重排：左栏固定、中栏随多余宽度漂移、右栏锚右缘、底部内容贴底缘；手机横屏翻转时
+刘海安全区自动重算；触屏设备按钮热区下限 44px。布局断言：
+`godot --headless --path . --script tests/adaptive_layout_test.gd`；
+多分辨率截图：`godot --path . --script tools/adaptive_capture.gd`（输出到 `builds/`）。
+
 ## 构建发布
 
 ### Windows

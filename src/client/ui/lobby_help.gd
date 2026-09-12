@@ -5,6 +5,7 @@ extends Control
 signal closed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 # 每页: [标题, 正文(bbcode), 图示编号]
 const PAGES := [
@@ -23,6 +24,9 @@ var _title: Label
 var _body: RichTextLabel
 var _fig: Control
 var _dots: Array = []
+var _prev_btn: Button
+var _next_btn: Button
+var _close_lbl: Label
 
 
 func _ready() -> void:
@@ -76,6 +80,7 @@ func _ready() -> void:
 		if page > 0:
 			_show(page - 1))
 	add_child(prev)
+	_prev_btn = prev
 	var next := AppTheme.nav_button("下一页 ▶", Vector2(760, 646))
 	next.pressed.connect(func() -> void:
 		if page < PAGES.size() - 1:
@@ -83,6 +88,7 @@ func _ready() -> void:
 		else:
 			_close())
 	add_child(next)
+	_next_btn = next
 
 	var close := _label(16, AppTheme.DIM)
 	close.text = "关闭 ✕"
@@ -92,8 +98,29 @@ func _ready() -> void:
 		if ev is InputEventMouseButton and ev.pressed:
 			_close())
 	add_child(close)
+	_close_lbl = close
 
 	_show(0)
+	Responsive.watch(self, _relayout)
+
+
+## 多设备自适应: 内容列(960 宽)水平居中, 平板加高时整块下移居中, 关闭锚右上。
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	var cx := (w - 960.0) / 2.0
+	var dy := maxf(h - 720.0, 0.0) * 0.4
+	_title.custom_minimum_size = Vector2(w, 46)
+	_title.size = Vector2(w, 46)
+	_body.position = Vector2(cx, 120 + dy)
+	_fig.position = Vector2(cx, 300 + dy)
+	for i in _dots.size():
+		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0, 610 + dy)
+	_prev_btn.position = Vector2(w / 2.0 - 300.0, 646 + dy)
+	_next_btn.position = Vector2(w / 2.0 + 120.0, 646 + dy)
+	_close_lbl.position = Vector2(w - 110.0, 24)
 
 
 func _close() -> void:

@@ -14,6 +14,7 @@ var lobby = null
 var table = null
 var net = null
 var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
+var _fit_target: Control = null # 最近一次做过安全区适配的可见场景
 
 
 func _ready() -> void:
@@ -28,10 +29,17 @@ func _ready() -> void:
 	add_child(menu)
 	_fit_safe_area(menu)
 	_apply_display_prefs()
+	get_viewport().size_changed.connect(_refit_safe_area)
 	menu.local_game.connect(_start_local)
 	menu.online_game.connect(_start_online)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
+
+
+## 窗口尺寸/设备旋转变化后重算安全区(手机横屏翻转时刘海换边)
+func _refit_safe_area() -> void:
+	if _fit_target != null and is_instance_valid(_fit_target) and _fit_target.visible:
+		_fit_safe_area(_fit_target)
 
 
 ## 启动时应用持久化的显示偏好(用户在设置里保存过的才生效)
@@ -47,6 +55,7 @@ func _apply_display_prefs() -> void:
 
 ## 刘海/圆角安全区: 把场景根整体移进系统安全区(桌面为全屏, 无变化)。
 func _fit_safe_area(c: Control) -> void:
+	_fit_target = c
 	var canvas := get_viewport().get_visible_rect().size
 	var wsize := Vector2(DisplayServer.window_get_size())
 	if canvas.x <= 0.0 or canvas.y <= 0.0 or wsize.x <= 0.0 or wsize.y <= 0.0:
@@ -72,7 +81,9 @@ func _fit_safe_area(c: Control) -> void:
 func _start_local() -> void:
 	menu.visible = false
 	# 上一场本地局仍在进行(托管中) → 直接继续
-	if table != null and table.mode == "local" 			and not table.state.is_empty() 			and str(table.state["phase"]) != "game_end":
+	if table != null and table.mode == "local" \
+			and not table.state.is_empty() \
+			and str(table.state["phase"]) != "game_end":
 		table.auto_pilot = false  # 重新接管自己的座位
 		table.visible = true
 		table._refresh()
@@ -163,6 +174,7 @@ func _leave_table() -> void:
 		table = null
 	if lobby != null:
 		lobby.visible = true
+		_fit_safe_area(lobby)
 
 
 func _back_to_menu() -> void:
@@ -177,3 +189,4 @@ func _back_to_menu() -> void:
 		lobby.visible = false
 	if menu != null:
 		menu.visible = true
+		_fit_safe_area(menu)
