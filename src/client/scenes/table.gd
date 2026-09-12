@@ -37,7 +37,7 @@ var _emoji_btns: Array = []
 var _prev_tick := -1
 var _leave_confirm_at := 0
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
-var seat_avatars: Array = []
+var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
 var _opp_hands: Array = []
 var avatar_me: Control
 
@@ -381,13 +381,6 @@ func _build_ui() -> void:
 	add_child(bg)
 
 	# 头像: 三个对手 + 我(左上)
-	for pos: Vector2 in [Vector2(1008, 246), Vector2(444, 20), Vector2(24, 240)]:
-		var av := AvatarScript.new()
-		av.position = pos
-		av.custom_minimum_size = Vector2(56, 56)
-		av.size = Vector2(56, 56)
-		add_child(av)
-		seat_avatars.append(av)
 	# 自己的信息面板(手牌左侧): 头像内嵌 + 彩色信息
 	var self_panel := PanelContainer.new()
 	var sp_sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92), Color(AppTheme.GOLD, 0.6), 12, 2)
@@ -404,14 +397,14 @@ func _build_ui() -> void:
 	sp_row.add_theme_constant_override("separation", 10)
 	self_panel.add_child(sp_row)
 	avatar_me = AvatarScript.new()
-	avatar_me.custom_minimum_size = Vector2(64, 64)
-	avatar_me.size = Vector2(64, 64)
+	avatar_me.custom_minimum_size = Vector2(52, 52)
+	avatar_me.size = Vector2(52, 52)
 	sp_row.add_child(avatar_me)
 	self_label = RichTextLabel.new()
 	self_label.bbcode_enabled = true
 	self_label.scroll_active = false
 	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	self_label.custom_minimum_size = Vector2(150, 64)
+	self_label.custom_minimum_size = Vector2(140, 52)
 	self_label.add_theme_font_size_override("normal_font_size", 15)
 	sp_row.add_child(self_label)
 
@@ -436,9 +429,9 @@ func _build_ui() -> void:
 	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
-	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
-	seat_labels.append(_make_seat_label(Vector2(500, 14)))
-	seat_labels.append(_make_seat_label(Vector2(20, 300)))
+	seat_labels.append(_make_seat_panel(Vector2(996, 296)))   # 下家(右)
+	seat_labels.append(_make_seat_panel(Vector2(420, 8)))     # 对家(上)
+	seat_labels.append(_make_seat_panel(Vector2(16, 296)))    # 上家(左)
 
 	# 对手手牌(重叠牌背): 右=下家(竖列), 上=对家(横排), 左=上家(竖列)
 	for info: Dictionary in [
@@ -493,8 +486,8 @@ func _build_ui() -> void:
 	add_child(error_label)
 
 	hand_box = HFlowContainer.new()
-	hand_box.position = Vector2(260, 552)
-	hand_box.custom_minimum_size = Vector2(940, 104)
+	hand_box.position = Vector2(258, 552)
+	hand_box.custom_minimum_size = Vector2(1010, 104)
 	hand_box.add_theme_constant_override("h_separation", 6)
 	add_child(hand_box)
 
@@ -573,24 +566,35 @@ func _build_ui() -> void:
 	add_child(fx_layer)
 
 
-func _make_seat_label(pos: Vector2) -> RichTextLabel:
+## 对手信息面板: 头像内嵌 + 彩色信息(与自己面板同款样式)
+func _make_seat_panel(pos: Vector2) -> RichTextLabel:
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92), Color(AppTheme.GOLD, 0.6), 12, 2)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = pos
+	panel.custom_minimum_size = Vector2(0, 0)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(panel)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+	var av := AvatarScript.new()
+	av.custom_minimum_size = Vector2(44, 44)
+	av.size = Vector2(44, 44)
+	row.add_child(av)
+	_opp_avatars.append(av)
 	var lb := RichTextLabel.new()
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
-	lb.position = pos
-	lb.custom_minimum_size = Vector2(180, 110)
-	lb.size = Vector2(180, 110)
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.add_theme_font_size_override("normal_font_size", 16)
-	lb.add_theme_font_size_override("bold_font_size", 17)
-	lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var plate := AppTheme.flat(Color(0.07, 0.07, 0.16, 0.72), Color(AppTheme.GOLD, 0.30), 10, 1)
-	plate.content_margin_left = 12
-	plate.content_margin_right = 12
-	plate.content_margin_top = 10
-	plate.content_margin_bottom = 10
-	lb.add_theme_stylebox_override("normal", plate)
-	add_child(lb)
+	lb.custom_minimum_size = Vector2(140, 48)
+	lb.add_theme_font_size_override("normal_font_size", 14)
+	row.add_child(lb)
 	return lb
 
 
@@ -687,7 +691,7 @@ func _refresh_view(view: Dictionary) -> void:
 	# 对手按相对方位入座: 右=下家, 上=对家, 左=上家
 	for i in 3:
 		var seat := (my + i + 1) % 4
-		seat_avatars[i].skin_id = _skin_for(view, seat)
+		_opp_avatars[i].skin_id = _skin_for(view, seat)
 		var lb: RichTextLabel = seat_labels[i + 1]
 		lb.text = _seat_info_text(view, seat)
 	if self_label != null:
