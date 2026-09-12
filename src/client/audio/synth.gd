@@ -275,38 +275,41 @@ static func bgm_lobby() -> AudioStreamWAV:
 	return render_track(8, 102, ev)
 
 
-## 对局 BGM: A 羽调式 92BPM(古筝拨弦主奏 + 太鼓弱拍)
+## 对局 BGM: G 大调 116BPM 欢快(笛主旋律 + 拨弦琶音 + 弹跳低音 + 反拍军鼓)
 static func bgm_koto() -> AudioStreamWAV:
-	var A4 := 440.0
-	var C5 := 523.25
-	var D5 := 587.33
-	var E5 := 659.26
-	var G5 := 783.99
 	var ev := []
+	var ev2 := []
+	# G 大调欢快跳跃音型
 	var mel := [
-		[0, 1, A4], [1, 1, C5], [2, 2, D5],
-		[4, 2, E5], [6, 2, D5],
-		[8, 1, C5], [9, 1, D5], [10, 2, E5],
-		[12, 3, D5], [15, 1, A4],
-		[16, 2, G5], [18, 2, E5],
-		[20, 1, D5], [21, 1, C5], [22, 2, D5],
-		[24, 2, A4], [26, 2, C5],
-		[28, 4, D5],
+		[0,.5,783.99],[.5,.5,987.77],[1,1,1174.66],[1.5,.5,880],
+		[2,1,783.99],[3,.5,659.26],[4,1,587.33],[4.5,.5,659.26],
+		[5,1,783.99],[5.5,.5,880],[6,1,1174.66],[6.5,1,1567.98],
+		[7,.5,1318.51],[7.5,.5,1174.66],[8,1,987.77],[8.5,.5,880],
+		[9,1,783.99],[9.5,.5,659.26],[10,1,587.33],[10.5,.5,493.88],
+		[11,1,587.33],[11.5,.5,493.88],[12,1,440],[12.5,.5,392],
 	]
-	for m in mel:
-		ev.append(_n(float(m[0]), float(m[1]), "pluck", float(m[2]), 0.2))
-	var bass_roots := [110.0, 130.81, 146.83, 164.81]
-	for bi in 8:
-		ev.append(_n(bi * 4, 4, "bass", float(bass_roots[bi % 4]), 0.14))
-		if bi % 2 == 0:
-			ev.append(_n(bi * 4, 1, "taiko", 0.0, 0.28))
-		else:
-			ev.append(_n(bi * 4 + 2, 1, "snare", 0.0, 0.09))
-	ev.append(_n(0, 1, "kane", 523.25, 0.14))
-	return render_track(8, 92, ev)
+	var t := 0.0
+	for n in mel:
+		ev.append(_n(t, float(n[1]), "flute", float(n[2]), 0.16))
+		t += float(n[1])
+	var chord_roots := [196.0, 164.81, 130.81, 146.83]
+	var chord_arps := [
+		[392, 493.88, 587.33, 493.88],
+		[329.63, 392, 493.88, 392],
+		[261.63, 329.63, 392, 329.63],
+		[293.66, 369.99, 440, 369.99],
+	]
+	for rep in 2:
+		for bi in 4:
+			var t0: float = rep * 12 + bi * 4
+			var arp: Array = chord_arps[bi]
+			ev.append(_n(t0, 4, "bass", float(chord_roots[bi]), 0.15))
+			for e8 in 8:
+				ev.append(_n(t0 + e8 * 0.5, 0.45, "pluck", float(arp[e8]), 0.09))
+			ev.append(_n(t0, 1, "taiko", 0, 0.25))
+			ev.append(_n(t0 + 2, 1, "snare", 0, 0.10))
+	return render_track(8, 116, ev)
 
-
-## 革命变奏 BGM: A 小调 138BPM(太鼓强拍群 + 激进低音拨弦 riff + 笛刺)
 static func bgm_koto_rev() -> AudioStreamWAV:
 	var ev := []
 	var riff := [[110.0, 0.5], [110.0, 0.5], [130.81, 0.5], [164.81, 0.5],
