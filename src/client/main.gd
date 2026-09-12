@@ -71,6 +71,18 @@ func _fit_safe_area(c: Control) -> void:
 
 func _start_local() -> void:
 	menu.visible = false
+	# 上一场本地局仍在进行(托管中) → 直接继续
+	if table != null and table.mode == "local" 			and not table.state.is_empty() 			and str(table.state["phase"]) != "game_end":
+		table.auto_pilot = false  # 重新接管自己的座位
+		table.visible = true
+		table._refresh()
+		table._advance()  # 恢复驱动(轮到玩家时等待操作)
+		table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)  # 重连一次性信号
+		return
+	# 旧场已结束 → 清掉再新开
+	if table != null:
+		table.queue_free()
+		table = null
 	table = TableScene.instantiate()
 	table.name = "Table"
 	table.mode = "local"
@@ -159,8 +171,12 @@ func _leave_table() -> void:
 
 func _back_to_menu() -> void:
 	if table != null:
-		table.queue_free()
-		table = null
+		# 本地局托管中(返回菜单自动托管) → 保留牌桌, 重新进入可继续
+		if table.mode == "local" and table.auto_pilot:
+			table.visible = false
+		else:
+			table.queue_free()
+			table = null
 	if lobby != null:
 		lobby.visible = false
 	if menu != null:

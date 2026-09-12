@@ -30,6 +30,7 @@ var net: Node = null
 var state: Dictionary = {}
 var selected: Array = []
 var advancing := false
+var auto_pilot := false       # 本地托管中: AI 代打玩家座位(返回菜单后继续)
 var _at_game_end := false
 var _emoji_cd := 0.0
 var _chat_cd := 0.0
@@ -146,8 +147,8 @@ func _advance() -> void:
 			break
 		var phase: String = state["phase"]
 		if phase == "play":
-			if int(state["turn"]) == 0:
-				break  # 等玩家操作
+			if int(state["turn"]) == 0 and not auto_pilot:
+				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
@@ -312,6 +313,12 @@ func _on_leave_pressed() -> void:
 			return
 	if net != null:
 		net.leave_room()
+	# 本地模式中途返回菜单: 托管继续(牌桌保留), 重新进入可继续本局
+	if mode == "local" and not state.is_empty() \
+			and str(state["phase"]) != "game_end":
+		auto_pilot = true
+		advancing = false
+		_advance()
 	finished.emit()
 
 
