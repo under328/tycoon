@@ -448,11 +448,17 @@ func _build_ui() -> void:
 	status_label.position = Vector2(40, 260)
 	status_label.custom_minimum_size = Vector2(360, 80)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	status_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(status_label)
 
 	stats_label = AppTheme.make_label(15, COLOR_DIM)
 	stats_label.position = Vector2(40, 350)
 	stats_label.custom_minimum_size = Vector2(360, 40)
+	stats_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	stats_label.add_theme_constant_override("shadow_offset_x", 1)
+	stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(stats_label)
 
 	# 主机信息卡(本机开房后显示: Tailscale IP + 加入指引)

@@ -305,7 +305,7 @@ static func bgm_koto() -> AudioStreamWAV:
 			var arp: Array = chord_arps[bi]
 			ev.append(_n(t0, 4, "bass", float(chord_roots[bi]), 0.15))
 			for e8 in 8:
-				ev.append(_n(t0 + e8 * 0.5, 0.45, "pluck", float(arp[e8]), 0.09))
+				ev.append(_n(t0 + e8 * 0.5, 0.45, "pluck", float(arp[e8 % arp.size()]), 0.09))
 			ev.append(_n(t0, 1, "taiko", 0, 0.25))
 			ev.append(_n(t0 + 2, 1, "snare", 0, 0.10))
 	return render_track(8, 116, ev)
