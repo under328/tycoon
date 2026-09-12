@@ -125,11 +125,7 @@ func _start_host() -> void:
 	var ts := _tailscale_ips()
 	lobby.host_invite_ip = "" if ts.is_empty() else str(ts[0])
 	lobby.auto_create_room = true  # 连上后自动创建房间, 房主直接复制邀请码
-	if ts.is_empty():
-		lobby.show_status("本机服务器已启动（端口 %d）\n未检测到 Tailscale IP。\n请先在所有设备上安装并登录 Tailscale（tailscale.com，免费），再重新点击本机开房。" % port,
-				Color("ff6b6b"))
-	else:
-		lobby.show_status("本机服务器已启动, 正在自动创建房间…\n你的 Tailscale IP: %s\n房间建好后点【复制邀请码】发给朋友即可" % str(ts[0]))
+	lobby.show_host_panel(str(ts[0]))
 
 
 func _stop_host() -> void:

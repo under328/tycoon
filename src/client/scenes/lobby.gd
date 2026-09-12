@@ -44,6 +44,8 @@ var host_btn: Button
 var update_btn: Button
 var paste_btn: Button
 var _emoji_btns: Array = []
+var host_panel: PanelContainer
+var host_ip_value: Label
 var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
@@ -160,7 +162,24 @@ func _enter_room() -> void:
 func _exit_room() -> void:
 	_in_room = false
 	_set_room_ui(false)
-	net.leave_room()
+	if net != null:
+		net.leave_room()
+	show_status("", COLOR_GOLD)
+
+
+## 本机开房信息卡(替代多行状态文字)
+func show_host_panel(ip: String) -> void:
+	host_panel.visible = true
+	status_label.visible = false
+	stats_label.visible = false
+	host_ip_value.text = ip if ip != "" else "未检测到
+(请安装并登录 Tailscale)"
+
+
+func hide_host_panel() -> void:
+	host_panel.visible = false
+	status_label.visible = true
+	stats_label.visible = true
 
 
 func _manual_connect() -> void:
@@ -422,6 +441,7 @@ func _build_ui() -> void:
 			net.send_emoji(id))
 		add_child(eb)
 		_emoji_btns.append(eb)
+		_room_ui.append(eb)
 
 	# 状态
 	status_label = AppTheme.make_label(15, COLOR_DIM)
@@ -434,6 +454,33 @@ func _build_ui() -> void:
 	stats_label.position = Vector2(40, 350)
 	stats_label.custom_minimum_size = Vector2(360, 40)
 	add_child(stats_label)
+
+	# 主机信息卡(本机开房后显示: Tailscale IP + 加入指引)
+	host_panel = PanelContainer.new()
+	var hp_sb := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.96), Color(AppTheme.GOLD, 0.55), 12, 2)
+	hp_sb.content_margin_left = 16
+	hp_sb.content_margin_right = 16
+	hp_sb.content_margin_top = 12
+	hp_sb.content_margin_bottom = 12
+	host_panel.add_theme_stylebox_override("panel", hp_sb)
+	host_panel.position = Vector2(40, 240)
+	host_panel.custom_minimum_size = Vector2(360, 0)
+	host_panel.visible = false
+	add_child(host_panel)
+	var hp_box := VBoxContainer.new()
+	hp_box.add_theme_constant_override("separation", 8)
+	host_panel.add_child(hp_box)
+	var hp_title := AppTheme.make_label(18, AppTheme.GOLD)
+	hp_title.text = "本机服务器已启动"
+	hp_box.add_child(hp_title)
+	host_ip_value = AppTheme.make_label(20, COLOR_WHITE)
+	host_ip_value.text = "-"
+	host_ip_value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hp_box.add_child(host_ip_value)
+	var hp_hint := AppTheme.make_label(14, COLOR_DIM)
+	hp_hint.text = "把上面的 IP 发给朋友\n朋友在右上【服务器】填 IP 点【连接】\n再输房间码【加入】"
+	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hp_box.add_child(hp_hint)
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
@@ -535,9 +582,12 @@ func _on_room_state(state: Dictionary) -> void:
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	_enter_room()
+	hide_host_panel()
 	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
 	_fill_state_seats(state)
 	var lines: Array = []
+	if host_invite_ip != "":
+		lines.append("服务器IP: %s  (发朋友)" % host_invite_ip)
 	lines.append("房间码: %s  (发给朋友)" % _last_room_code)
 	for p in state["players"]:
 		if bool(p.get("empty", false)):
