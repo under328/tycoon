@@ -62,7 +62,7 @@ var chat_edit: LineEdit
 var seat_labels: Array = []
 var hand_box: Control
 var _hand_cards: Array = []     # 手牌卡牌控件(按手牌顺序)
-var field_box: HBoxContainer
+var field_box: HFlowContainer
 var field_hint: Label
 var fx_layer: Control
 var btn_play: Button
@@ -470,8 +470,8 @@ func _build_ui() -> void:
 	field_sb.set_border_width_all(2)
 	field_sb.border_color = Color(AppTheme.GOLD, 0.50)
 	field_panel.add_theme_stylebox_override("panel", field_sb)
-	field_panel.position = Vector2(320, 216)
-	field_panel.custom_minimum_size = Vector2(640, 214)
+	field_panel.position = Vector2(320, 204)
+	field_panel.custom_minimum_size = Vector2(640, 248)
 	add_child(field_panel)
 
 	field_hint = _make_label(16, AppTheme.DIM)
@@ -480,11 +480,13 @@ func _build_ui() -> void:
 	field_hint.custom_minimum_size = Vector2(600, 24)
 	field_panel.add_child(field_hint)
 
-	field_box = HBoxContainer.new()
-	field_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	field_box.position = Vector2(20, 36)
-	field_box.custom_minimum_size = Vector2(600, 130)
-	field_box.add_theme_constant_override("separation", 8)
+	# 出牌条目流式排布: 牌多时自动折两行, 不超出出牌区
+	field_box = HFlowContainer.new()
+	field_box.alignment = FlowContainer.ALIGNMENT_CENTER
+	field_box.position = Vector2(20, 40)
+	field_box.custom_minimum_size = Vector2(600, 196)
+	field_box.add_theme_constant_override("h_separation", 16)
+	field_box.add_theme_constant_override("v_separation", 8)
 	field_panel.add_child(field_box)
 
 	status_label = _make_label(18, AppTheme.DIM)
@@ -906,7 +908,7 @@ func _refresh_field(view: Dictionary) -> void:
 		var hz := HBoxContainer.new()
 		hz.add_theme_constant_override("separation", 4)
 		for c in entry["combo"]["cards"]:
-			hz.add_child(_make_card(int(c), 48, 66, false, false))
+			hz.add_child(_make_card(int(c), 56, 78, false, false))
 		holder.add_child(hz)
 		field_box.add_child(holder)
 		if i == field.size() - 1 and grew:
