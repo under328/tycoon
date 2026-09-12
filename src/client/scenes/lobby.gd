@@ -46,6 +46,7 @@ var paste_btn: Button
 var _emoji_btns: Array = []
 var host_panel: PanelContainer
 var host_ip_value: Label
+var host_dl_btn: Button      # 未检测到 Tailscale 时显示的下载入口
 var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
@@ -164,6 +165,7 @@ func _exit_room() -> void:
 	_set_room_ui(false)
 	if net != null:
 		net.leave_room()
+	hide_host_panel()
 	show_status("", COLOR_GOLD)
 
 
@@ -172,8 +174,8 @@ func show_host_panel(ip: String) -> void:
 	host_panel.visible = true
 	status_label.visible = false
 	stats_label.visible = false
-	host_ip_value.text = ip if ip != "" else "未检测到
-(请安装并登录 Tailscale)"
+	host_ip_value.text = ip if ip != "" else "未检测到 Tailscale\n(请安装并登录 Tailscale)"
+	host_dl_btn.visible = ip == ""
 
 
 func hide_host_panel() -> void:
@@ -487,6 +489,13 @@ func _build_ui() -> void:
 	hp_hint.text = "把上面的 IP 发给朋友\n朋友在右上【服务器】填 IP 点【连接】\n再输房间码【加入】"
 	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hp_box.add_child(hp_hint)
+	var hp_dl := AppTheme.make_button("⬇ 下载 Tailscale", Vector2(220, 38), 15)
+	hp_dl.visible = false
+	hp_dl.pressed.connect(func() -> void:
+		Audio.play("click")
+		OS.shell_open("https://tailscale.com/download"))
+	hp_box.add_child(hp_dl)
+	host_dl_btn = hp_dl
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
@@ -526,6 +535,10 @@ func _bind_net() -> void:
 		update_btn.visible = false
 		_conn_fails = 0
 		_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
+		if _auto_join_code != "":
+			var join_code := _auto_join_code
+			_auto_join_code = ""
+			net.join_room(join_code)  # 粘贴邀请码: 连上后自动进房
 		if auto_create_room:
 			auto_create_room = false
 			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房

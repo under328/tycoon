@@ -125,7 +125,7 @@ func _start_host() -> void:
 	var ts := _tailscale_ips()
 	lobby.host_invite_ip = "" if ts.is_empty() else str(ts[0])
 	lobby.auto_create_room = true  # 连上后自动创建房间, 房主直接复制邀请码
-	lobby.show_host_panel(str(ts[0]))
+	lobby.show_host_panel(lobby.host_invite_ip)
 
 
 func _stop_host() -> void:

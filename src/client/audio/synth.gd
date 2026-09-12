@@ -278,7 +278,6 @@ static func bgm_lobby() -> AudioStreamWAV:
 ## 对局 BGM: G 大调 116BPM 欢快(笛主旋律 + 拨弦琶音 + 弹跳低音 + 反拍军鼓)
 static func bgm_koto() -> AudioStreamWAV:
 	var ev := []
-	var ev2 := []
 	# G 大调欢快跳跃音型
 	var mel := [
 		[0,.5,783.99],[.5,.5,987.77],[1,1,1174.66],[1.5,.5,880],
