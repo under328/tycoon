@@ -60,7 +60,8 @@ var timer_label: Label
 var chat_log: Label
 var chat_edit: LineEdit
 var seat_labels: Array = []
-var hand_box: HFlowContainer
+var hand_box: Control
+var _hand_cards: Array = []     # 手牌卡牌控件(按手牌顺序)
 var field_box: HBoxContainer
 var field_hint: Label
 var fx_layer: Control
@@ -485,10 +486,9 @@ func _build_ui() -> void:
 	error_label.custom_minimum_size = Vector2(640, 26)
 	add_child(error_label)
 
-	hand_box = HFlowContainer.new()
+	hand_box = Control.new()
 	hand_box.position = Vector2(258, 552)
-	hand_box.custom_minimum_size = Vector2(1010, 104)
-	hand_box.add_theme_constant_override("h_separation", 6)
+	hand_box.size = Vector2(1010, 104)
 	add_child(hand_box)
 
 	var row := HBoxContainer.new()
@@ -926,6 +926,7 @@ func _on_hand_card_picked(card: int) -> void:
 			var is_sel := selected.has(child.card)
 			child.selected = is_sel
 			_apply_hand_card_state(child, is_sel)
+	_layout_hand()
 
 
 ## 手牌：卡牌控件化；仅在手牌实际变化时重建并播放发牌动画。
@@ -938,24 +939,44 @@ func _refresh_hand(view: Dictionary) -> void:
 			if idx < hand.size():
 				_apply_hand_card_state(child, selected.has(int(hand[idx])))
 			idx += 1
+		_layout_hand()
 		return
 	_last_hand = hand.duplicate()
 	for child in hand_box.get_children():
 		child.queue_free()
+	_hand_cards.clear()
 	var i := 0
 	for c in hand:
 		var card_id: int = c
 		var is_sel := selected.has(card_id)
 		var cv := _make_card(card_id, 72, 100, is_sel)
 		hand_box.add_child(cv)
+		_hand_cards.append(cv)
 		_apply_hand_card_state(cv, is_sel)
 		cv.modulate.a = 0.0
 		var tw := cv.create_tween()  # 绑定卡牌节点: 重建释放时自动终止
 		tw.tween_interval(0.02 * i)
 		tw.tween_property(cv, "modulate:a", 1.0, 0.12)
 		i += 1
+	_layout_hand()
 	if i > 0:
 		Audio.play("deal")
+
+
+## 手牌排布: 排得下就等距, 排不下适当重叠(右牌压左牌, 露出左上点数)。
+func _layout_hand() -> void:
+	var n := _hand_cards.size()
+	if n == 0:
+		return
+	var cw: float = _hand_cards[0].size.x
+	var avail: float = hand_box.size.x if hand_box.size.x > 10.0 else 1010.0
+	var step: float = cw + 6.0
+	if n > 1 and step * (n - 1) + cw > avail:
+		step = maxf((avail - cw) / float(n - 1), 34.0)
+	for i in n:
+		var cv: Control = _hand_cards[i]
+		var lift := -14.0 if selected.has(cv.card) else 0.0
+		cv.position = Vector2(float(i) * step, lift)
 
 
 ## 手牌选中态视觉: 选中的上浮放大全亮, 未选中的微压暗
