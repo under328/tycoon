@@ -107,13 +107,18 @@ static func section_label(text: String, size := 15) -> Label:
 	return lb
 
 
-## 带阴影的文字(深色桌面/背景上更清晰)
-static func make_shadow_label(size: int, color: Color) -> Label:
-	var lb := make_label(size, color)
-	lb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
-	lb.add_theme_constant_override("shadow_offset_x", 1)
-	lb.add_theme_constant_override("shadow_offset_y", 1)
-	return lb
+## 翻页式面板的导航按钮(教程/帮助共用)
+static func nav_button(text: String, pos: Vector2, size := Vector2(180, 46)) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.position = pos
+	b.custom_minimum_size = size
+	b.add_theme_font_size_override("font_size", 18)
+	var sb := flat(Color(0.10, 0.10, 0.22, 0.9), Color(GOLD, 0.5), 8, 1)
+	b.add_theme_stylebox_override("normal", sb)
+	var hv := flat(Color(0.13, 0.12, 0.28, 0.95), GOLD, 8, 1)
+	b.add_theme_stylebox_override("hover", hv)
+	return b
 
 
 static func make_label(size: int, color: Color) -> Label:

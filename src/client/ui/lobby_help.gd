@@ -71,12 +71,12 @@ func _ready() -> void:
 		add_child(dot)
 		_dots.append(dot)
 
-	var prev := _nav_button("◀ 上一页", Vector2(340, 646))
+	var prev := AppTheme.nav_button("◀ 上一页", Vector2(340, 646))
 	prev.pressed.connect(func() -> void:
 		if page > 0:
 			_show(page - 1))
 	add_child(prev)
-	var next := _nav_button("下一页 ▶", Vector2(760, 646))
+	var next := AppTheme.nav_button("下一页 ▶", Vector2(760, 646))
 	next.pressed.connect(func() -> void:
 		if page < PAGES.size() - 1:
 			_show(page + 1)
@@ -190,22 +190,6 @@ func _build_fig(kind: int) -> void:
 					AppTheme.DIM, 15)
 
 
-func _nav_button(text: String, pos: Vector2) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.position = pos
-	b.custom_minimum_size = Vector2(180, 46)
-	b.add_theme_font_size_override("font_size", 18)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.10, 0.22, 0.9)
-	sb.set_corner_radius_all(8)
-	sb.set_border_width_all(1)
-	sb.border_color = Color(AppTheme.GOLD, 0.5)
-	b.add_theme_stylebox_override("normal", sb)
-	var hv := sb.duplicate()
-	hv.border_color = AppTheme.GOLD
-	b.add_theme_stylebox_override("hover", hv)
-	return b
 
 
 func _label(size: int, color: Color) -> Label:

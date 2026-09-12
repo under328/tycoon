@@ -82,6 +82,10 @@ func _init(p_card: int = -1) -> void:
 	_refresh_palette()
 
 
+func _ready() -> void:
+	_refresh_palette()  # 入树后解析 Wallet 装备卡面(_init 阶段尚不可达)
+
+
 ## 当前装备卡面皮肤的调色板(跟随商城更换)
 func _refresh_palette() -> void:
 	var w := get_node_or_null("/root/Wallet")
@@ -121,7 +125,6 @@ func _draw() -> void:
 
 
 func _draw_face() -> void:
-	_refresh_palette()
 	draw_style_box(_face_sb, Rect2(Vector2.ZERO, size))
 	if card < 0 or card > 53:
 		return
@@ -477,7 +480,6 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 
 ## 主题牌背: 和纸=青海波+樱花 / 墨玉=远山月夜 / 绯红=市松纹+焰芯 / 苍海=层浪落日。
 func _draw_back() -> void:
-	_refresh_palette()
 	draw_style_box(_back_sb, Rect2(Vector2.ZERO, size))
 	var motif := str(_pal.get("motif", "washi"))
 	var border_c: Color = _pal["border"]

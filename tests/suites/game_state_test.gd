@@ -13,6 +13,7 @@ func run(t) -> void:
 	_new_match_basics(t)
 	_pass_and_clear(t)
 	_revolution(t)
+	_eight_cut_last_card(t)
 	_joker_last_ban(t)
 	_fall_from_grace(t)
 	_full_match_flow(t)

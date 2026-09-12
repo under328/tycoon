@@ -20,12 +20,6 @@ var _tab_card_btn: Button
 
 
 
-func create_and_place(text: String, pos: Vector2, min_size: Vector2, font_size: int) -> Button:
-	var b := AppTheme.make_button(text, min_size, font_size)
-	b.position = pos
-	add_child(b)
-	return b
-
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	position = Vector2.ZERO

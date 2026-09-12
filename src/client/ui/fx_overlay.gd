@@ -10,7 +10,6 @@ const DUR := 1.6
 
 var _t := 0.0
 var _fx_type := ""
-var _fx_seat := ""
 
 var _slashes: Array = []
 
@@ -30,7 +29,6 @@ func _ready() -> void:
 static func create(type: String, seat: String = "") -> Control:
 	var fx = load("res://src/client/ui/fx_overlay.gd").new()
 	fx._fx_type = type
-	fx._fx_seat = seat
 	return fx
 
 

@@ -118,56 +118,6 @@ static func wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 # ---------------------------------------------------------------- BGM
 
 ## 五声音阶氛围垫（可变调式/密度）。16 秒无缝循环。drums=对局版加太鼓。
-static func _bgm_base(roots: Array, pluck_seed: int, pluck_min: float, pluck_max: float,
-		drums := false) -> AudioStreamWAV:
-	var dur := 16.0
-	var n := int(dur * RATE)
-	var out := PackedFloat32Array()
-	out.resize(n)
-	var chord_len := dur / roots.size()
-	for ci in roots.size():
-		var start: float = ci * chord_len
-		for half in 2:
-			var f: float = roots[ci][half]
-			var s0 := int(start * RATE)
-			var len := int(chord_len * RATE)
-			for i in len:
-				var t := float(i) / RATE
-				var env := sin(PI * t / chord_len) * 0.10
-				out[s0 + i] += sin(TAU * f * t) * env
-		if drums:
-			var b0 := int(start * RATE)
-			var bl := int(chord_len * RATE)
-			var bphase := 0.0
-			for i in bl:
-				var t := float(i) / RATE
-				var f := lerpf(110.0, 46.0, minf(t / 0.5, 1.0))
-				bphase += TAU * f / RATE
-				var env := exp(-7.0 * t)
-				if t < 0.003:
-					env *= t / 0.003
-				out[b0 + i] += sin(bphase) * 0.16 * env
-		var bass_f: float = roots[ci][0] * 0.5
-		var bs := int(start * RATE)
-		for i in int(chord_len * RATE):
-			var t2 := float(i) / RATE
-			out[bs + i] += sin(TAU * bass_f * t2) * 0.06 * sin(PI * t2 / chord_len)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = pluck_seed
-	var t := 0.4
-	while t < dur - 0.5:
-		var f: float = roots[rng.randi_range(0, roots.size() - 1)][rng.randi_range(0, 1)]
-		# 拨弦音高在其邻域五度内跳动
-		f *= [0.5, 0.75, 1.0, 1.5][rng.randi_range(0, 3)]
-		var vol := rng.randf_range(0.10, 0.18)
-		var pluck := tone(0.9, f, vol, 5.0)
-		out = mix_over(out, pluck, t)  # PackedArray 值语义, 必须接返回值
-		t += rng.randf_range(pluck_min, pluck_max)
-	return _to_wav(out)
-
-
-
-
 # ================================================================ 音乐升级 2.0
 
 ## 拨弦(古筝/琵琶): 基频+二三谐波, 快攻快衰
@@ -278,10 +228,6 @@ static func render_track(bars: int, bpm: float, events: Array, loop := true) -> 
 		wav.loop_end = out.size()
 	return wav
 
-
-## 五声音阶频率表(宫调式音级 0-4 → 频率)
-static func penta(root: float) -> Array:
-	return [root, root * 9.0 / 8.0, root * 81.0 / 64.0, root * 3.0 / 2.0, root * 27.0 / 16.0]
 
 ## 音符事件辅助
 static func _n(t: float, len: float, kind: String, f: float, v: float) -> Dictionary:
