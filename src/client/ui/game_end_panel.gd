@@ -27,10 +27,19 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
+	# 半透明底板: 文字与背景隔离
+	var backdrop := PanelContainer.new()
+	var bd_sb := AppTheme.flat(Color(0.04, 0.04, 0.10, 0.78), Color(AppTheme.GOLD, 0.35), 16, 1)
+	bd_sb.content_margin_left = 60
+	bd_sb.content_margin_right = 60
+	bd_sb.content_margin_top = 30
+	bd_sb.content_margin_bottom = 34
+	backdrop.add_theme_stylebox_override("panel", bd_sb)
+	center.add_child(backdrop)
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 22)
-	center.add_child(box)
+	backdrop.add_child(box)
 
 	var big := AppTheme.make_label(96, AppTheme.GOLD if my_rank <= 1 else AppTheme.DIM)
 	big.add_theme_font_override("font", AppTheme.title_font())

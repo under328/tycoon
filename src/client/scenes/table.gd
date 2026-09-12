@@ -170,7 +170,19 @@ func _advance() -> void:
 				push_error("local table: 换牌返还非法 %s" % str(r2["error"]))
 				break
 			state = r2["state"]
-		elif phase == "round_end" or phase == "game_end":
+		elif phase == "round_end":
+			_refresh()
+			# 最后一局: 短暂展示本局结果后自动进入全场结算(面板自动弹出)
+			if int(state["round"]) + 1 >= int(state["cfg"]["rounds"]):
+				await get_tree().create_timer(1.4).timeout
+				if not is_inside_tree():
+					return
+				var r := GameStateGd.apply(state, {"t": "next_round"})
+				if bool(r["ok"]):
+					state = r["state"]
+			else:
+				break  # 非末局等待玩家点下一局
+		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
 	advancing = false
