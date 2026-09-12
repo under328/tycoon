@@ -775,10 +775,13 @@ func _refresh_view(view: Dictionary) -> void:
 		Audio.play("result")
 		var reward: Dictionary = {}
 		if mode == "local":
-			var my_rank := int(view["identities"][int(view["my_seat"])])
-			reward = Wallet.grant_match_reward(my_rank + 1)
+			var seat_me := int(view["my_seat"])
+			var my_rank := int(view["identities"][seat_me]) + 1  # 1=大富豪…4=大贫民
+			var pts := int(view["scores"][seat_me])
+			var stake_n := int(view["rules"].get("stakes", 1))
+			reward = Wallet.grant_match_reward(pts, my_rank, stake_n)
 		var panel := GameEndPanelScript.new()
-		panel.setup(view, _seat_name, reward)
+		panel.setup(view, func(s: int) -> String: return _seat_name(view, s), reward)
 		fx_layer.add_child(panel)
 
 

@@ -11,9 +11,7 @@ const SAVE_PATH := "user://wallet.cfg"
 const AUTOSAVE_SEC := 10.0
 
 ## 本地对局奖励(按最终名次 1..4): [金币, 钻石]
-const MATCH_REWARDS := [
-	[300, 6], [180, 4], [120, 3], [60, 2],
-]
+const GOLD_PER_POINT := 2        # 1 积分 = 2 金币(再乘输赢倍率)
 
 var gold := 500       # 默认 500 金币
 var diamonds := 0     # 默认 0 钻石
@@ -122,17 +120,24 @@ func save_wallet() -> void:
 
 
 ## 本地对局结算发放(名次 1..4)。返回 {gold, diamonds}。
-func grant_match_reward(rank: int) -> Dictionary:
-	var idx := clampi(rank - 1, 0, MATCH_REWARDS.size() - 1)
-	var reward: Array = MATCH_REWARDS[idx]
-	gold += int(reward[0])
-	diamonds += int(reward[1])
+## 场次结算: 金币 = 总积分 × 2 × 输赢倍率(可为负, 钱包下限 0);
+## 钻石按最终身份: 大富豪 +2, 富豪 +1, 其余 +0。rank 1=大富豪…4=大贫民。
+func grant_match_reward(points: int, rank: int, stakes: int = 1) -> Dictionary:
+	var gold_delta := points * GOLD_PER_POINT * clampi(stakes, 1, 3)
+	var dia_delta := 0
+	match clampi(rank - 1, 0, 3):
+		0:
+			dia_delta = 2
+		1:
+			dia_delta = 1
+	gold = maxi(gold + gold_delta, 0)
+	diamonds += dia_delta
 	local_matches += 1
 	if rank == 1:
 		local_wins += 1
 	_mark_dirty()
 	balance_changed.emit()
-	return {"gold": int(reward[0]), "diamonds": int(reward[1])}
+	return {"gold": gold_delta, "diamonds": dia_delta, "points": points, "stakes": stakes}
 
 
 ## 购买: 成功扣钻石并加入拥有, 返回 true。

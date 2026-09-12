@@ -12,6 +12,7 @@ static func defaults() -> Dictionary:
 		"rounds": 3,
 		"turn_seconds": 20,
 		"exchange_seconds": 15,
+		"stakes": 1,
 	}
 
 
@@ -25,4 +26,5 @@ static func normalize(cfg: Dictionary) -> Dictionary:
 	out["rounds"] = clampi(int(out["rounds"]), 1, 5)
 	out["turn_seconds"] = clampi(int(out["turn_seconds"]), 5, 120)
 	out["exchange_seconds"] = clampi(int(out["exchange_seconds"]), 5, 60)
+	out["stakes"] = clampi(int(out["stakes"]), 1, 3)
 	return out

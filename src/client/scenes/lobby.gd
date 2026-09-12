@@ -35,6 +35,7 @@ var stats_label: Label
 var chk_joker: CheckButton
 var chk_revolution: CheckButton
 var rounds_option: OptionButton
+var stakes_option: OptionButton
 var _last_room_code := ""
 var host_edit: LineEdit
 var port_edit: LineEdit
@@ -372,12 +373,29 @@ func _build_ui() -> void:
 	var c4 := AppTheme.section_label("规则设置")
 	c4.position = Vector2(830, 310)
 	add_child(c4)
+	_room_ui.append(c4)
 	chk_joker = _check("带王", Vector2(830, 340))
+	_room_ui.append(chk_joker)
 	chk_revolution = _check("革命", Vector2(830, 380))
+	_room_ui.append(chk_revolution)
+	var stakes_lbl := AppTheme.make_label(15, COLOR_WHITE)
+	stakes_lbl.text = "输赢"
+	stakes_lbl.position = Vector2(830, 414)
+	add_child(stakes_lbl)
+	_room_ui.append(stakes_lbl)
+	stakes_option = OptionButton.new()
+	for item: Array in [["小 ×1", 1], ["中 ×2", 2], ["大 ×3", 3]]:
+		stakes_option.add_item(str(item[0]), int(item[1]))
+	stakes_option.select(0)
+	stakes_option.position = Vector2(880, 410)
+	stakes_option.custom_minimum_size = Vector2(90, 34)
+	add_child(stakes_option)
+	_room_ui.append(stakes_option)
 	var rounds_lbl := AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 460)
 	add_child(rounds_lbl)
+	_room_ui.append(rounds_lbl)
 	rounds_option = OptionButton.new()
 	for r: int in [1, 3, 5]:
 		rounds_option.add_item(str(r) + " 局", r)
@@ -385,8 +403,10 @@ func _build_ui() -> void:
 	rounds_option.position = Vector2(880, 456)
 	rounds_option.custom_minimum_size = Vector2(90, 34)
 	add_child(rounds_option)
+	_room_ui.append(rounds_option)
 	save_settings_btn = AppTheme.make_button("保存设置", Vector2(140, 38), 15)
 	save_settings_btn.position = Vector2(830, 496)
+	_room_ui.append(save_settings_btn)
 	save_settings_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.set_settings(_gather_rules()))
@@ -493,12 +513,17 @@ func _gather_rules() -> Dictionary:
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
 		"rounds": rounds_option.get_selected_id(),
+		"stakes": stakes_option.get_selected_id(),
 	}
 
 
 func _apply_settings(settings: Dictionary) -> void:
 	chk_joker.set_pressed_no_signal(bool(settings.get("with_joker", true)))
 	chk_revolution.set_pressed_no_signal(bool(settings.get("revolution", true)))
+	var st := clampi(int(settings.get("stakes", 1)), 1, 3)
+	for i in stakes_option.item_count:
+		if int(stakes_option.get_item_id(i)) == st:
+			stakes_option.select(i)
 	var rounds := int(settings.get("rounds", 3))
 	for i in rounds_option.item_count:
 		if int(rounds_option.get_item_id(i)) == rounds:
