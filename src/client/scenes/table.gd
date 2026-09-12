@@ -389,7 +389,7 @@ func _build_ui() -> void:
 		add_child(av)
 		seat_avatars.append(av)
 	avatar_me = AvatarScript.new()
-	avatar_me.position = Vector2(16, 56)
+	avatar_me.position = Vector2(16, 546)
 	avatar_me.custom_minimum_size = Vector2(52, 52)
 	avatar_me.size = Vector2(52, 52)
 	add_child(avatar_me)
@@ -415,7 +415,7 @@ func _build_ui() -> void:
 	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
-	self_label = _make_seat_label(Vector2(76, 56))
+	self_label = _make_seat_label(Vector2(74, 516))
 	seat_labels.append(_make_seat_label(Vector2(1064, 300)))
 	seat_labels.append(_make_seat_label(Vector2(500, 14)))
 	seat_labels.append(_make_seat_label(Vector2(20, 300)))
@@ -473,8 +473,8 @@ func _build_ui() -> void:
 	add_child(error_label)
 
 	hand_box = HFlowContainer.new()
-	hand_box.position = Vector2(16, 552)
-	hand_box.custom_minimum_size = Vector2(1248, 104)
+	hand_box.position = Vector2(260, 552)
+	hand_box.custom_minimum_size = Vector2(940, 104)
 	hand_box.add_theme_constant_override("h_separation", 6)
 	add_child(hand_box)
 
