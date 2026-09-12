@@ -12,6 +12,22 @@ const ScoringGd = preload("res://src/rules/scoring.gd")
 const SEATS := 4
 const HAND_SIZE := 13
 
+## 错误码 → 玩家可读的中文提示
+const ERROR_MSG := {
+	"not_playing": "当前不在出牌阶段",
+	"not_your_turn": "还没轮到你出牌",
+	"card_not_in_hand": "手牌中不存在所选的牌",
+	"invalid_combo": "不是有效的牌型组合",
+	"joker_last_ban": "最后一张是王，不能单出获胜",
+	"must_include_diamond3": "首手必须包含 ♦3",
+	"cannot_beat": "压不过上家的牌",
+	"cannot_pass_on_lead": "你是领出者，必须出牌",
+	"not_round_end": "当前不在回合结束阶段",
+	"not_exchange": "当前不在换牌阶段",
+	"wrong_card_count": "返还牌数不正确",
+	"unknown_action": "未知操作",
+}
+
 
 ## 开新一场对局。seed_v<0 时随机。第 1 局直接进入 play：
 ## 持 ♦3 者先出且首手必含 ♦3；♦3 为死牌时随机首出、无限制。
@@ -322,3 +338,8 @@ static func _ok(st: Dictionary) -> Dictionary:
 static func _fail(st: Dictionary, code: String) -> Dictionary:
 	st["error"] = code
 	return {"ok": false, "error": code, "state": st}
+
+
+## 错误码 → 玩家可读中文
+static func error_msg(code: String) -> String:
+	return ERROR_MSG.get(code, code)

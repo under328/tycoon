@@ -231,7 +231,7 @@ func _human_apply(action: Dictionary) -> void:
 		Audio.play("pass")
 	var r := GameStateGd.apply(state, action)
 	if not bool(r["ok"]):
-		_flash_error(str(r["error"]))
+		_flash_error(GameStateGd.error_msg(str(r["error"])))
 		return
 	_detect_local_eight_cut(action, r["state"])
 	state = r["state"]
@@ -346,8 +346,8 @@ func _bind_net() -> void:
 					Audio.play("turn")
 		_refresh())
 	net.game_event.connect(_on_game_event)
-	net.errored.connect(func(code: String, _msg: String) -> void:
-		_flash_error(code))
+	net.errored.connect(func(code: String, msg: String) -> void:
+		_flash_error(GameStateGd.error_msg(code) if msg == "" else msg))
 	net.server_disconnected.connect(func() -> void:
 		status_label.text = "连接断开，自动重连中…"
 		status_label.add_theme_color_override("font_color", AppTheme.RED))
