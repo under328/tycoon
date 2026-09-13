@@ -142,17 +142,17 @@ func _handle_android_back() -> void:
 	get_tree().quit()  # 首页按返回 = 退出应用
 
 
-func _start_local() -> void:
+func _start_local(mode: String = "normal") -> void:
 	# 上一场本地局仍在后台托管进行中 → 弹窗让玩家选: 回局继续 / 开新局
 	if table != null and table.mode == "local" \
 			and not table.state.is_empty() \
 			and str(table.state["phase"]) != "game_end":
 		_show_resume_dialog()
 		return
-	_launch_new_local()
+	_launch_new_local(mode == "rogue")
 
 
-func _launch_new_local() -> void:
+func _launch_new_local(rogue: bool = false) -> void:
 	if table != null:
 		table.queue_free()
 		table = null
@@ -160,6 +160,7 @@ func _launch_new_local() -> void:
 	table = TableScene.instantiate()
 	table.name = "Table"
 	table.mode = "local"
+	table.rogue = rogue  # add_child 前置: _ready 即开新局
 	add_child(table)
 	_fit_safe_area(table)
 	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)
@@ -212,7 +213,7 @@ func _show_resume_dialog() -> void:
 	new_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close_resume_dialog()
-		_launch_new_local())
+		_launch_new_local(mode == "rogue"))
 	row.add_child(new_btn)
 	var cancel := AppTheme.make_button("取消", Vector2(96, 46), 15)
 	cancel.pressed.connect(func() -> void:
@@ -236,7 +237,7 @@ func _close_resume_dialog() -> void:
 func _resume_local_game() -> void:
 	_close_resume_dialog()
 	if table == null or not is_instance_valid(table):
-		_launch_new_local()
+		_launch_new_local(mode == "rogue")
 		return
 	table.auto_pilot = false  # 重新接管自己的座位
 	table.advancing = false   # 后台驱动循环由代际机制自动让位

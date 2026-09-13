@@ -1,0 +1,244 @@
+## 肉鸽模式规则说明: 翻页式图文(玩法流程 / 命运卡图鉴×2)。
+## 图示区用面板/连线拼出命运卡卡面与流程图 — 与 lobby_help 同一工艺。
+extends Control
+
+signal closed
+
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const GameStateGd = preload("res://src/rules/game_state.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
+
+# 每页: [标题, 正文(bbcode), 图示编号]
+const PAGES := [
+	["肉鸽模式 · 玩法",
+		"规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n"
+		+ "区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。\n"
+		+ "命运卡来自固定图鉴(共 6 种, 见后两页), 抽到哪张全凭运气——随机性与可玩性由此而来。", 0],
+	["命运卡图鉴 · 上", "三张改变牌局的命运卡:", 1],
+	["命运卡图鉴 · 下", "三张改变节奏的命运卡:", 2],
+]
+
+var page := 0
+var _title: Label
+var _body: RichTextLabel
+var _fig: Control
+var _dots: Array = []
+var _prev_btn: Button
+var _next_btn: Button
+var _close_lbl: Label
+
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+
+	var frame := ReferenceRect.new()
+	frame.border_color = Color(AppTheme.GOLD, 0.55)
+	frame.border_width = 2.0
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.editor_only = false
+	add_child(frame)
+
+	_title = _label(32, AppTheme.GOLD)
+	_title.position = Vector2(0, 46)
+	_title.custom_minimum_size = Vector2(size.x, 46)
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_title)
+
+	_body = RichTextLabel.new()
+	_body.bbcode_enabled = true
+	_body.scroll_active = false
+	_body.position = Vector2(160, 120)
+	_body.custom_minimum_size = Vector2(960, 150)
+	_body.size = Vector2(960, 150)
+	_body.add_theme_font_size_override("normal_font_size", 18)
+	add_child(_body)
+
+	_fig = Control.new()
+	_fig.position = Vector2(160, 300)
+	_fig.custom_minimum_size = Vector2(960, 280)
+	add_child(_fig)
+
+	for i in PAGES.size():
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(12, 12)
+		dot.size = Vector2(12, 12)
+		dot.position = Vector2(size.x / 2.0 - PAGES.size() * 11 + i * 22, 610)
+		add_child(dot)
+		_dots.append(dot)
+
+	var prev := AppTheme.nav_button("◀ 上一页", Vector2(340, 646))
+	prev.pressed.connect(func() -> void:
+		if page > 0:
+			_show(page - 1))
+	add_child(prev)
+	_prev_btn = prev
+	var next := AppTheme.nav_button("下一页 ▶", Vector2(760, 646))
+	next.pressed.connect(func() -> void:
+		if page < PAGES.size() - 1:
+			_show(page + 1)
+		else:
+			_close())
+	add_child(next)
+	_next_btn = next
+
+	var close := _label(16, AppTheme.DIM)
+	close.text = "关闭 ✕"
+	close.position = Vector2(size.x - 110, 24)
+	close.mouse_filter = Control.MOUSE_FILTER_STOP
+	close.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_close())
+	add_child(close)
+	_close_lbl = close
+
+	_show(0)
+	Responsive.watch(self, _relayout)
+
+
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	var cx := (w - 960.0) / 2.0
+	var dy := maxf(h - 720.0, 0.0) * 0.4
+	var sq := h < 660.0
+	_title.custom_minimum_size = Vector2(w, 46)
+	_title.size = Vector2(w, 46)
+	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
+	_body.size = Vector2(960, (150.0 if not sq else 132.0))
+	_fig.position = Vector2(cx, (218.0 if sq else 300.0) + dy)
+	_fig.size = Vector2(960, (210.0 if sq else 280.0))
+	for i in _dots.size():
+		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
+				(h - 132.0 if sq else 610.0) + dy)
+	_prev_btn.position = Vector2(w / 2.0 - 300.0, (h - 78.0 if sq else 646.0) + dy)
+	_next_btn.position = Vector2(w / 2.0 + 120.0, (h - 78.0 if sq else 646.0) + dy)
+	_close_lbl.position = Vector2(w - 110.0, 24)
+
+
+func _close() -> void:
+	closed.emit()
+	queue_free()
+
+
+func _show(p: int) -> void:
+	page = p
+	_title.text = PAGES[p][0]
+	_body.text = PAGES[p][1]
+	for i in _dots.size():
+		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
+	_build_fig(int(PAGES[p][2]))
+
+
+func _clear_fig() -> void:
+	for c in _fig.get_children():
+		c.queue_free()
+
+
+## 命运卡卡面: 竖直小卡(金框) = 字符章 + 名 + 短句
+func _card(pos: Vector2, meta: Dictionary) -> void:
+	var card := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.10, 0.10, 0.24, 0.96), Color(AppTheme.GOLD, 0.8), 10, 2)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = pos
+	card.custom_minimum_size = Vector2(280, 190)
+	_fig.add_child(card)
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 6)
+	card.add_child(v)
+	var glyph := _label(40, AppTheme.GOLD)
+	glyph.add_theme_font_override("font", AppTheme.title_font())
+	glyph.text = str(meta["glyph"])
+	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(glyph)
+	var nm := _label(20, AppTheme.WHITE)
+	nm.text = str(meta["name"])
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(nm)
+	var ds := _label(13, AppTheme.DIM)
+	ds.text = str(meta["desc"])
+	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ds.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(ds)
+
+
+func _line(a: Vector2, b: Vector2, color := AppTheme.GOLD) -> void:
+	var ln := Line2D.new()
+	ln.points = PackedVector2Array([a, b])
+	ln.width = 2.5
+	ln.default_color = color
+	_fig.add_child(ln)
+
+
+func _text(text: String, pos: Vector2, color := AppTheme.DIM, fsize := 15) -> void:
+	var lb := _label(fsize, color)
+	lb.text = text
+	lb.position = pos
+	_fig.add_child(lb)
+
+
+func _mod(id: String) -> Dictionary:
+	for m in GameStateGd.ROGUE_MODS:
+		if str(m["id"]) == id:
+			return m
+	return {}
+
+
+func _build_fig(kind: int) -> void:
+	_clear_fig()
+	match kind:
+		0:  # 玩法流程: 抽卡 → 对局 → 结算 → 循环
+			var steps := [
+				["抽命运卡", AppTheme.GOLD], ["本局对局(普通规则)", AppTheme.WHITE],
+				["结算(积分×命运卡)", AppTheme.GREEN], ["下一局 · 再抽", AppTheme.GOLD],
+			]
+			for i in steps.size():
+				var col := i % 2
+				var row := i / 2
+				var panel := PanelContainer.new()
+				var sb := AppTheme.flat(Color(0.13, 0.13, 0.28), steps[i][1], 8, 1)
+				panel.add_theme_stylebox_override("panel", sb)
+				panel.position = Vector2(180 + col * 420, 30 + row * 120)
+				panel.custom_minimum_size = Vector2(280, 74)
+				_fig.add_child(panel)
+				var lb := _label(19, steps[i][1])
+				lb.text = str(steps[i][0])
+				lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				panel.add_child(lb)
+			_line(Vector2(460, 67), Vector2(600, 67))
+			_line(Vector2(460, 187), Vector2(600, 187))
+			_line(Vector2(320, 104), Vector2(320, 187))   # 左列下行
+			_line(Vector2(740, 187), Vector2(740, 104))   # 右列回环
+			_text("每局必定抽一张; 6 种命运卡见后两页", Vector2(240, 250),
+					AppTheme.GOLD, 16)
+		1:
+			_card(Vector2(20, 20), _mod("joker_x2"))
+			_card(Vector2(340, 20), _mod("revolution_start"))
+			_card(Vector2(660, 20), _mod("short_hands"))
+			_text("王的数量与革命状态, 直接改变压制策略", Vector2(240, 235),
+					AppTheme.GOLD, 15)
+		2:
+			_card(Vector2(20, 20), _mod("chaos_exchange"))
+			_card(Vector2(340, 20), _mod("joker_rage"))
+			_card(Vector2(660, 20), _mod("double_stakes"))
+			_text("结算奖励(金币/钻石/首胜)与普通模式完全一致", Vector2(240, 235),
+					AppTheme.GOLD, 15)
+
+
+func _label(size: int, color: Color) -> Label:
+	var lb := Label.new()
+	lb.add_theme_font_size_override("font_size", size)
+	lb.add_theme_color_override("font_color", color)
+	return lb

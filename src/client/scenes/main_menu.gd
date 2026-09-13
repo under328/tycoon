@@ -3,7 +3,7 @@ extends Control
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 
-signal local_game
+signal local_game(mode: String)
 signal online_game
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
@@ -24,6 +24,7 @@ var _balance: Control          # CurrencyText 金额行
 var _title_group: Control   # 标题/斩切线/副标/朱印 组容器(内部坐标固定, 整体锚定)
 var _badge: PanelContainer
 var _rank_lbl: Label
+var _mode_dlg: Control = null   # 模式选择弹窗
 var _ver_lbl: Label
 var _hint_lbl: Label
 var _fan: Control             # 右下卡扇(展示已装备卡面)
@@ -160,7 +161,7 @@ func _build_title() -> void:
 func _build_menu() -> void:
 	var items := [
 		["本地游戏", func() -> void:
-			local_game.emit(), "", "card"],
+			_show_mode_select(), "", "card"],
 		["联机游戏", func() -> void:
 			online_game.emit(), "", "net"],
 		["商　城", func() -> void:
@@ -225,6 +226,84 @@ func _tutorial_badge() -> String:
 	if gs != null and not bool(gs.tutorial_seen):
 		return "NEW"
 	return ""
+
+
+## 模式选择弹窗: 普通(现行规则) / 肉鸽(命运卡); 右上 ? 打开图像化规则说明
+func _show_mode_select() -> void:
+	if _mode_dlg != null and is_instance_valid(_mode_dlg):
+		_mode_dlg.queue_free()
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	dlg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_close_mode_select())
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dlg.add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 40
+	sb.content_margin_right = 40
+	sb.content_margin_top = 26
+	sb.content_margin_bottom = 30
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	panel.add_child(box)
+	# 标题行 + 右上 ?
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	box.add_child(head)
+	var title := AppTheme.make_label(28, AppTheme.GOLD)
+	title.text = "选择游戏模式"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(title)
+	var help := AppTheme.make_button("?", Vector2(40, 40), 20)
+	help.pressed.connect(func() -> void:
+		Audio.play("click")
+		var rh: Control = (load("res://src/client/ui/rogue_help.gd") as GDScript).new()
+		rh.closed.connect(func() -> void: rh.queue_free())
+		add_child(rh))
+	head.add_child(help)
+	# 普通模式
+	var normal := AppTheme.make_button("普通模式", Vector2(420, 64), 22)
+	normal.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_mode_select()
+		local_game.emit("normal"))
+	box.add_child(normal)
+	var d1 := AppTheme.make_label(14, AppTheme.DIM)
+	d1.text = "经典大富豪: 换牌 / 革命 / 8切, 回合制排名结算"
+	box.add_child(d1)
+	# 肉鸽模式
+	var rogue := AppTheme.make_button("肉鸽模式", Vector2(420, 64), 22)
+	rogue.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_mode_select()
+		local_game.emit("rogue"))
+	box.add_child(rogue)
+	var d2 := AppTheme.make_label(14, AppTheme.DIM)
+	d2.text = "每局随机一张『命运卡』增强随机性, 规则主体与普通一致"
+	d2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(d2)
+	_mode_dlg = dlg
+	add_child(dlg)
+
+
+func _close_mode_select() -> void:
+	if _mode_dlg != null and is_instance_valid(_mode_dlg):
+		_mode_dlg.queue_free()
+	_mode_dlg = null
 
 
 func _refresh_balance() -> void:

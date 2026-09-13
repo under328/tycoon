@@ -19,6 +19,7 @@ const SCENE_PATHS := [
 	"res://src/client/scenes/tutorial.gd",
 	"res://src/client/ui/settings_panel.gd",
 	"res://src/client/ui/game_end_panel.gd",
+	"res://src/client/ui/rogue_help.gd",
 ]
 
 const PROFILES := [
@@ -225,6 +226,13 @@ func _check_scene(i: int, w: float, h: float) -> void:
 			expect(s.get_global_rect().size == Vector2(w, h), "settings 面板未铺满视口")
 		7:  # 结算面板(纯容器布局, 交给通用断言)
 			expect(s.get_global_rect().size == Vector2(w, h), "结算面板未铺满视口")
+		8:  # 肉鸽规则说明(翻页框)
+			expect(absf(s._prev_btn.position.x - (w / 2.0 - 300.0)) <= 1.0,
+					"rogue_help 上一页未居中左")
+			expect(absf(s._next_btn.position.x - (w / 2.0 + 120.0)) <= 1.0,
+					"rogue_help 下一页未居中右")
+			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0,
+					"rogue_help 关闭未锚右缘")
 
 
 func _initialize() -> void:

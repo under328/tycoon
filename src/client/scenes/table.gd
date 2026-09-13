@@ -67,6 +67,9 @@ var _last_turn_seat := -99
 var _kbd_shift := 0.0   # 虚拟键盘避让位移(移动端聊天聚焦时)
 
 var info_label: Label
+var rogue := false              # 肉鸽模式(仅本地): 每局随机命运卡
+var rogue_lbl: Label = null     # 场内命运卡标签
+var _rogue_dlg: Control = null  # 命运卡揭示弹窗
 var self_label: RichTextLabel
 var status_label: Label
 var error_label: Label
@@ -156,6 +159,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return  # 后台托管中隐藏的牌桌不抢 ESC(确认框等由当前界面处理)
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if _rogue_dlg != null:
+			_close_rogue_reveal()
+			return
 		if _leave_dlg != null:
 			_close_leave_dialog()
 			return
@@ -184,7 +190,10 @@ func _new_match() -> void:
 	_seat_skins = [Wallet.equipped_skin, "", "", ""]
 	for i in range(1, 4):
 		_seat_skins[i] = ids[randi() % ids.size()]
-	_advance()
+	if rogue:
+		_show_rogue_reveal()  # 首局命运卡: 关闭后 _advance()
+	else:
+		_advance()
 
 
 ## 驱动循环：AI 依次行动 / 阶段过渡，停在人需要操作处。
@@ -260,6 +269,10 @@ func _advance() -> void:
 			var r := GameStateGd.apply(state, {"t": "next_round"})
 			if bool(r["ok"]):
 				state = r["state"]
+				if rogue:
+					_advance_gen += 1  # 揭示期间停循环, 关闭后重启
+					_show_rogue_reveal()
+					break
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
@@ -482,6 +495,100 @@ func _close_leave_dialog() -> void:
 	_leave_dlg = null
 
 
+## 命运卡揭示(每局开始): 全屏暗幕 + 居中卡面, 点击关闭后恢复驱动。
+## 首局由 _new_match 调用(关闭后启动循环); 后续局由 _advance 调用(已停循环)。
+func _show_rogue_reveal() -> void:
+	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
+		_rogue_dlg.queue_free()
+	var mod_id := str(state["cfg"].get("rogue_mod", ""))
+	var meta := {}
+	for m in GameStateGd.ROGUE_MODS:
+		if str(m["id"]) == mod_id:
+			meta = m
+			break
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.62)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 18, 2)
+	sb.content_margin_left = 44
+	sb.content_margin_right = 44
+	sb.content_margin_top = 28
+	sb.content_margin_bottom = 26
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var cap := AppTheme.make_label(15, AppTheme.DIM)
+	cap.text = "命运卡 · 第 %d 局" % (int(state["round"]) + 1)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(cap)
+	var glyph := AppTheme.make_label(88, AppTheme.GOLD)
+	glyph.add_theme_font_override("font", AppTheme.title_font())
+	glyph.text = str(meta.get("glyph", "?"))
+	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(glyph)
+	var name_lbl := AppTheme.make_label(30, AppTheme.WHITE)
+	name_lbl.add_theme_font_override("font", AppTheme.title_font())
+	name_lbl.text = str(meta.get("name", ""))
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(name_lbl)
+	var desc := AppTheme.make_label(16, AppTheme.DIM)
+	desc.text = str(meta.get("desc", ""))
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(desc)
+	var go := AppTheme.make_button("开始对局", Vector2(190, 48), 18)
+	go.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_rogue_reveal())
+	var go_wrap := CenterContainer.new()
+	go_wrap.add_child(go)
+	box.add_child(go_wrap)
+	_rogue_dlg = dlg
+	add_child(dlg)
+	dlg.position = Vector2.ZERO
+	dlg.size = size
+	_update_rogue_lbl()
+
+
+func _close_rogue_reveal() -> void:
+	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
+		_rogue_dlg.queue_free()
+	_rogue_dlg = null
+	_update_rogue_lbl()
+	if advancing:
+		return
+	_advance()
+
+
+## 场内命运卡标签(该局生效中常显)
+func _update_rogue_lbl() -> void:
+	if rogue_lbl == null:
+		return
+	var mod_id := str(state["cfg"].get("rogue_mod", ""))
+	var show := rogue and _rogue_dlg == null and mod_id != "" 			and str(state["phase"]) in ["play", "exchange"]
+	rogue_lbl.visible = show
+	if show:
+		var meta := {}
+		for m in GameStateGd.ROGUE_MODS:
+			if str(m["id"]) == mod_id:
+				meta = m
+				break
+		rogue_lbl.text = "命运卡: %s — %s" % [meta.get("name", ""), meta.get("desc", "")]
+
+
+## ESC 关闭命运卡弹窗(在 _unhandled_input 的 leave_dlg 分支旁)
+
+
 # ---------------------------------------------------------------- 网络
 
 func _bind_net() -> void:
@@ -597,6 +704,13 @@ func _build_ui() -> void:
 	info_label.position = Vector2(20, 12)
 	add_child(info_label)
 	_add_text_shadow(info_label)
+	# 肉鸽命运卡标签(顶部居中下移, 避开对家面板与计时器)
+	rogue_lbl = _make_label(14, AppTheme.GOLD)
+	rogue_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	rogue_lbl.add_theme_constant_override("shadow_offset_x", 1)
+	rogue_lbl.add_theme_constant_override("shadow_offset_y", 1)
+	rogue_lbl.visible = false
+	add_child(rogue_lbl)
 
 	timer_label = _make_label(22, AppTheme.WHITE)
 	timer_label.position = Vector2(1180, 12)
@@ -933,6 +1047,10 @@ func _relayout() -> void:
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
 	rules_btn.position = Vector2(w - 204, 10)
+	if rogue_lbl != null:
+		rogue_lbl.position = Vector2(w / 2.0 - 330.0, 12.0)
+		rogue_lbl.custom_minimum_size = Vector2(660.0, 0)
+		rogue_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# 对家(上中) + 其牌背扇
 	_seat_panels[1].position = Vector2(w / 2.0 - 230, 8)
 	_opp_hands[1].position = Vector2(w / 2.0 + 60, 44)
@@ -1117,6 +1235,7 @@ func _refresh_view(view: Dictionary) -> void:
 		status_label.text = "全场结束！  " + _round_end_text(view)
 		status_label.add_theme_color_override("font_color", AppTheme.GOLD)
 
+	_update_rogue_lbl()
 	var returning := not _my_pending_return(view).is_empty()
 	btn_play.visible = my_turn or returning
 	btn_play.text = "确认返还" if returning else "出牌"

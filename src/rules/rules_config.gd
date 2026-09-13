@@ -13,6 +13,8 @@ static func defaults() -> Dictionary:
 		"turn_seconds": 20,
 		"exchange_seconds": 15,
 		"stakes": 1,
+		"rogue": false,
+		"rogue_mod": "",
 	}
 
 
