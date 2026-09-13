@@ -137,6 +137,7 @@ func _launch_new_local() -> void:
 	if table != null:
 		table.queue_free()
 		table = null
+	menu.visible = false
 	table = TableScene.instantiate()
 	table.name = "Table"
 	table.mode = "local"
@@ -220,6 +221,7 @@ func _resume_local_game() -> void:
 		return
 	table.auto_pilot = false  # 重新接管自己的座位
 	table.advancing = false   # 后台驱动循环由代际机制自动让位
+	menu.visible = false
 	table.visible = true
 	table._refresh()
 	Audio.play_bgm("table")

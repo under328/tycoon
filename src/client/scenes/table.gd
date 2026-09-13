@@ -38,7 +38,6 @@ var _emoji_cd := 0.0
 var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
-var _leave_confirm_at := 0
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
 var self_panel: Control
@@ -129,11 +128,14 @@ func _update_keyboard_avoid() -> void:
 	_relayout()
 
 
-## ESC / 安卓返回键 = 返回菜单(联机对局中沿用 3 秒二次确认的弃局语义)
+## ESC / 安卓返回键 = 返回菜单(先弹确认框); 确认框打开时先关框
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return  # 后台托管中隐藏的牌桌不抢 ESC(确认框等由当前界面处理)
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if _leave_dlg != null:
+			_close_leave_dialog()
+			return
 		_on_leave_pressed()
 
 
@@ -342,18 +344,19 @@ func _on_rematch_pressed() -> void:
 	_new_match()
 
 
+## 返回菜单/大厅: 对局进行中先弹确认框, 确认后才真正离开
 func _on_leave_pressed() -> void:
 	_sfx("click")
-	# 联机对局中离开=弃局交给 AI, 需 3 秒内二次确认; 本地模式直接返回
-	if mode == "online" and not _at_game_end:
-		var now := Time.get_ticks_msec()
-		if now - _leave_confirm_at > 3000:
-			_leave_confirm_at = now
-			btn_leave.text = "确认弃局?"
-			var tw := create_tween()
-			tw.tween_interval(3.0)
-			tw.tween_callback(func() -> void: btn_leave.text = "返回大厅")
-			return
+	var local_live: bool = mode == "local" and not state.is_empty() \
+			and str(state["phase"]) != "game_end"
+	var online_live: bool = mode == "online" and not _at_game_end
+	if local_live or online_live:
+		_show_leave_dialog()
+		return
+	_do_leave()
+
+
+func _do_leave() -> void:
 	if net != null:
 		net.leave_room()
 	# 本地模式中途返回菜单: 托管继续(牌桌保留), 重新进入可继续本局
@@ -363,6 +366,72 @@ func _on_leave_pressed() -> void:
 		advancing = false
 		_advance()
 	finished.emit()
+
+
+## 离开确认框(与首页"返回上一局"确认框同款样式)
+var _leave_dlg: Control = null
+
+
+func _show_leave_dialog() -> void:
+	if _leave_dlg != null:
+		return
+	var local := mode == "local"
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 14, 2)
+	sb.content_margin_left = 30
+	sb.content_margin_right = 30
+	sb.content_margin_top = 22
+	sb.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var title := AppTheme.make_label(22, AppTheme.GOLD)
+	title.text = "返回菜单？" if local else "离开对局？"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var desc := AppTheme.make_label(15, AppTheme.DIM)
+	desc.text = "返回后本局由 AI 托管继续, 从首页可回到本局。" if local \
+			else "离开后你的座位由 AI 代管(弃局), 并返回大厅。"
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(desc)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	var go := AppTheme.make_button("返回菜单" if local else "离开对局",
+			Vector2(150, 46), 17)
+	go.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_leave_dialog()
+		_do_leave())
+	row.add_child(go)
+	var cancel := AppTheme.make_button("取消", Vector2(96, 46), 15)
+	cancel.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_leave_dialog())
+	row.add_child(cancel)
+	_leave_dlg = dlg
+	add_child(dlg)
+	dlg.position = Vector2.ZERO
+	dlg.size = size
+
+
+func _close_leave_dialog() -> void:
+	if _leave_dlg != null and is_instance_valid(_leave_dlg):
+		_leave_dlg.queue_free()
+	_leave_dlg = null
 
 
 # ---------------------------------------------------------------- 网络
