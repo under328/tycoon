@@ -101,16 +101,7 @@ func _ready() -> void:
 	Audio.play_bgm("table")
 
 
-var f_dbg := 0
-
 func _process(delta: float) -> void:
-	if f_dbg < 600:
-		f_dbg += 1
-		if f_dbg % 20 == 0:
-			print("[tc] phase=%s turn=%d lead=%s follow=%.2f advancing=%s" % [
-				str(state.get("phase", "?")), int(state.get("turn", -9)),
-				str(not (state.get("lead", {}) as Dictionary).is_empty()),
-				_my_follow_ms, str(advancing)])
 	if _emoji_cd > 0.0:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:

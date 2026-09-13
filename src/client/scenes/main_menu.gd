@@ -130,7 +130,7 @@ func _build_title() -> void:
 
 	# 版本号(锚左下)
 	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
-	_ver_lbl.text = "v1.0.0"
+	_ver_lbl.text = "v" + str(ProjectSettings.get_setting("application/config/version", "1.0.0"))
 	_ver_lbl.position = Vector2(16, 690)
 	add_child(_ver_lbl)
 
