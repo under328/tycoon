@@ -39,6 +39,7 @@ var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
 var _timer_shown := -1           # 倒计时已显示的整数秒(文字门控)
+var _auto_pass_done := false     # 本回合已自动"不要"(防重复)
 var _pulse: Tween = null       # "轮到你"状态文字呼吸脉冲
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
@@ -56,6 +57,7 @@ var _prev_phase := ""
 var _last_round_ids: Array = []
 var _end_shown := false
 var _field_count := -1
+var _had_field := false         # 出牌区是否有过牌(区分清桌音效与首次刷新)
 var _turn_total := -1.0
 var _turn_remain := -1.0
 var _last_turn_seat := -99
@@ -157,6 +159,7 @@ func _new_match() -> void:
 	_prev_phase = ""
 	_last_round_ids = []
 	_field_count = -1
+	_had_field = false
 	_last_hand = []
 	# 本地: 我用已装备皮肤, AI 随机皮肤
 	var ids: Array = []
@@ -337,6 +340,22 @@ func _on_pass_pressed() -> void:
 		net.pass_turn()
 		return
 	_human_apply({"t": "pass", "seat": 0})
+
+
+## 自动"不要": 本地须直改状态——它恰在 AI 移交回合的刷新中触发,
+## 此时 advancing=true 会拦掉 _human_apply; 联机走网络不受限。
+func _auto_pass() -> void:
+	_sfx("pass")
+	if mode == "online":
+		net.pass_turn()
+		return
+	var r := GameStateGd.apply(state, {"t": "pass", "seat": 0})
+	if not bool(r["ok"]):
+		return
+	state = r["state"]
+	selected.clear()
+	_refresh()
+	_advance()
 
 
 func _on_next_pressed() -> void:
@@ -593,6 +612,19 @@ func _build_ui() -> void:
 
 	# 牌桌中央: 桌面区
 	field_panel = Panel.new()
+	# 点击出牌区 = 出牌(与"出牌"按钮等效; 换牌阶段为确认返还);
+	# 非你回合时点出牌区无动作(不弹错误)
+	field_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	field_panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			var v: Dictionary = _current_view()
+			var er: Dictionary = _my_pending_return(v)
+			if str(v.get("phase", "")) == "play" \
+					and int(v.get("turn", -1)) != int(v.get("my_seat", -2)) \
+					and er.is_empty():
+				return
+			_on_play_pressed())
 	var field_sb := StyleBoxFlat.new()
 	field_sb.bg_color = Color(0.09, 0.09, 0.20, 0.94)
 	field_sb.set_corner_radius_all(14)
@@ -980,6 +1012,16 @@ func _refresh_view(view: Dictionary) -> void:
 
 	var lead: Dictionary = view["lead"]
 	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
+	# 轮到你但压不过 → 自动"不要"(每回合一次; 手动选牌也没意义)
+	if my_turn and not lead.is_empty() and str(view["phase"]) == "play":
+		if not _auto_pass_done:
+			_auto_pass_done = true
+			var act: Dictionary = BotPlayerGd.decide_from_view(view)
+			if str(act.get("t")) == "pass":
+				_auto_pass()
+				return
+	elif not my_turn:
+		_auto_pass_done = false
 	# 轮到你: 状态文字金色呼吸脉冲(移动端视线不在屏幕中央也能注意到)
 	if my_turn:
 		if _pulse == null or not _pulse.is_valid():
@@ -1159,13 +1201,15 @@ func _refresh_field(view: Dictionary) -> void:
 			field_hint.text = "首手必须包含 ♦3"
 	if field.size() == _field_count:
 		return
-	var grew := field.size() > _field_count
-	var emptied := field.is_empty() and _field_count > 0
+	var grew := field.size() > _field_count and not field.is_empty()
+	var emptied := field.is_empty()
 	_field_count = field.size()
 	if emptied:
 		for child in field_box.get_children():
 			child.queue_free()
-		_sfx("clear")
+		if _field_count == 0 and _had_field:
+			_sfx("clear")  # 由有到无=清桌; 首次刷新(-1→0)不出声
+		_had_field = false
 		return
 	# 增量追加: 出牌只加最新一手(整排重建会闪一帧鬼影 — queue_free 延迟移除)
 	if grew:
@@ -1186,6 +1230,7 @@ func _refresh_field(view: Dictionary) -> void:
 			hz.add_child(old_card)
 		holder.add_child(hz)
 		field_box.add_child(holder)
+		_had_field = true
 		# 最新一手高亮: 淡入 + 弹性缩放; 上一手降为做旧
 		var prev_idx := field_box.get_child_count() - 2
 		if prev_idx >= 0:
