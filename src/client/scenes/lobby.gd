@@ -52,6 +52,9 @@ var _ts_chip: PanelContainer   # 联机准备条: Tailscale 就绪状态 + 一�
 var _ts_dot: ColorRect
 var _ts_state_lbl: Label
 var _ts_dl_btn: Button
+var _ts_apk_url := ""          # 运行时解析的 Android APK 直链(缓存)
+
+const TS_PKGS_URL := "https://pkgs.tailscale.com/stable/"
 var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
@@ -578,9 +581,7 @@ func _build_ui() -> void:
 	ts_col.add_child(_ts_state_lbl)
 	_ts_dl_btn = AppTheme.make_button(
 			"⬇ 一键下载\n(%s)" % Responsive.platform_label(), Vector2(120, 0), 13)
-	_ts_dl_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		OS.shell_open(Responsive.tailscale_url()))
+	_ts_dl_btn.pressed.connect(_open_ts_download)
 	ts_row.add_child(_ts_dl_btn)
 
 	stats_label = AppTheme.make_label(15, COLOR_DIM)
@@ -621,11 +622,47 @@ func _build_ui() -> void:
 	hp_box.add_child(hp_hint)
 	var hp_dl := AppTheme.make_button("⬇ 一键下载", Vector2(220, 38), 15)
 	hp_dl.visible = false
-	hp_dl.pressed.connect(func() -> void:
-		Audio.play("click")
-		OS.shell_open(Responsive.tailscale_url()))
+	hp_dl.pressed.connect(_open_ts_download)
 	hp_box.add_child(hp_dl)
 	host_dl_btn = hp_dl
+
+
+## 打开 Tailscale 下载(两个下载按钮共用)。
+## Android 不跳 Google Play(国内无法访问): 运行时从官方包列表解析
+## 最新通用版 APK 直链(pkgs.tailscale.com 官方源), 解析失败退回列表页。
+func _open_ts_download() -> void:
+	Audio.play("click")
+	if not OS.has_feature("android"):
+		OS.shell_open(Responsive.tailscale_url())
+		return
+	if _ts_apk_url != "":
+		OS.shell_open(_ts_apk_url)
+		return
+	var http := HTTPRequest.new()
+	http.timeout = 12.0
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int,
+			_headers: PackedStringArray, body: PackedByteArray) -> void:
+		http.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			_open_ts_fallback()
+			return
+		var re := RegEx.new()
+		re.compile("tailscale-android-universal-[0-9.]+\\.apk")
+		var m := re.search(body.get_string_from_utf8())
+		if m == null:
+			_open_ts_fallback()
+			return
+		_ts_apk_url = TS_PKGS_URL + m.get_string(0)
+		OS.shell_open(_ts_apk_url))
+	var err := http.request(TS_PKGS_URL)
+	if err != OK:
+		http.queue_free()
+		_open_ts_fallback()
+
+
+func _open_ts_fallback() -> void:
+	OS.shell_open(TS_PKGS_URL + "#android")  # 列表页锚点, 用户手点 APK 链接
 
 	# 自适应锚定注册(基准坐标 = 创建时的 position; 模式含义见 _reg/_relayout)
 	_reg(back_btn, "left")

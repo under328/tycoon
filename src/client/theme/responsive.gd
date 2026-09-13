@@ -24,10 +24,11 @@ static func tailscale_ips() -> Array:
 	return out
 
 
-## 当前设备的 Tailscale 下载直达页(一键安装)
+## 当前设备的 Tailscale 下载直达页
+## (Android 不用 Play 商店——国内无法访问; 大厅按钮会用运行时解析的 APK 直链)
 static func tailscale_url() -> String:
 	if OS.has_feature("android"):
-		return "https://play.google.com/store/apps/details?id=com.tailscale.ipn"
+		return "https://pkgs.tailscale.com/stable/#android"
 	if OS.has_feature("ios"):
 		return "https://apps.apple.com/app/tailscale/id1475387142"
 	if OS.has_feature("macos"):
