@@ -27,7 +27,6 @@ var create_btn: Button
 var join_btn: Button
 var fill_btn: Button
 var start_btn: Button
-var leave_btn: Button
 var copy_btn: Button
 var save_settings_btn: Button
 var status_label: Label
@@ -157,6 +156,8 @@ func _apply_view(v: String) -> void:
 		c.visible = v == "room"
 	if host_panel != null:
 		host_panel.visible = _host_panel_wanted and v == "entry"
+	# 左上角按钮: 入口页=回主菜单; 房间页=离开房间
+	back_btn.text = "离开房间" if v == "room" else "← 主菜单"
 	_relayout()
 
 
@@ -192,8 +193,12 @@ func _notification(what: int) -> void:
 		code_edit.text = ""
 
 
-## 离开当前页面回主菜单(返回按钮与 Android 返回键共用)
+## 返回: 房间页=离开房间回入口; 入口页=回主菜单
+## (左上角按钮 / ESC / Android 返回键共用)
 func go_back() -> void:
+	if _view == "room":
+		_exit_room()
+		return
 	net.leave_room()
 	back_to_menu.emit()
 
@@ -298,7 +303,7 @@ func _refresh_invite(state: Dictionary) -> void:
 ## 房间内专属 UI 的显隐切换
 func _enter_room() -> void:
 	_apply_view("room")
-	for b: Button in [fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
+	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = false
 
 
@@ -547,12 +552,6 @@ func _build_ui() -> void:
 		Audio.play("click")
 		net.start_game())
 	add_child(start_btn)
-	leave_btn = AppTheme.make_button("离开房间", Vector2(140, 46), 17)
-	leave_btn.position = Vector2(470, 470)
-	leave_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_exit_room())
-	add_child(leave_btn)
 	copy_btn = AppTheme.make_button("复制邀请码", Vector2(140, 46), 17)
 	copy_btn.position = Vector2(630, 470)
 	copy_btn.pressed.connect(func() -> void:
@@ -728,7 +727,6 @@ func _build_ui() -> void:
 	_reg_room(fill_btn, Vector2(150, 306), "center", 0.05)
 	_reg_room(kick_btn, Vector2(310, 306), "center", 0.05)
 	_reg_room(start_btn, Vector2(470, 306), "center", 0.05)
-	_reg_room(leave_btn, Vector2(630, 306), "center", 0.05)
 	_reg_room(rules_lbl, Vector2(830, 66), "right")
 	_reg_room(chk_joker, Vector2(830, 100), "right")
 	_reg_room(chk_revolution, Vector2(830, 140), "right")
@@ -740,7 +738,7 @@ func _build_ui() -> void:
 	for i in _emoji_btns.size():
 		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
 
-	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
+	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
 	host_btn.disabled = false
 	connect_btn.disabled = false
@@ -921,7 +919,6 @@ func _on_room_state(state: Dictionary) -> void:
 	var host: bool = host_seat == int(net.my_seat)
 	fill_btn.disabled = not host
 	start_btn.disabled = not host
-	leave_btn.disabled = false
 
 
 func _set_status(text: String, color: Color) -> void:
