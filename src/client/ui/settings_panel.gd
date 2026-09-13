@@ -19,9 +19,9 @@ var _toast: Label
 
 func _ready() -> void:
 	# 全屏模态层
+	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级,
+	# 不再手动赋视口尺寸(那会溢出父级边界, 手机上按钮超界)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	position = Vector2.ZERO
-	size = get_viewport().get_visible_rect().size
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var dim := ColorRect.new()
@@ -42,11 +42,16 @@ func _ready() -> void:
 	sb.content_margin_top = 24
 	sb.content_margin_bottom = 24
 	panel.add_theme_stylebox_override("panel", sb)
-	center.add_child(panel)
+	# 内容整体可滚动: 手机紧凑视口下设置项超出面板高度时上下滚动
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
-	panel.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
 
 	# 标题
 	var title := AppTheme.make_label(24, AppTheme.GOLD)

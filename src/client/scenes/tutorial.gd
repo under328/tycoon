@@ -34,9 +34,9 @@ var _dots: Array = []
 
 
 func _ready() -> void:
+	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级,
+	# 不再手动赋视口尺寸(那会溢出父级边界, 手机上按钮超界)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	position = Vector2.ZERO
-	size = get_viewport().get_visible_rect().size
 
 	var bg := ColorRect.new()
 	bg.color = AppTheme.OVERLAY_BG
