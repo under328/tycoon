@@ -23,7 +23,8 @@ static func normalize(cfg: Dictionary) -> Dictionary:
 		if cfg.has(k):
 			out[k] = cfg[k]
 	out["eight_cut"] = true  # rule.md: 8切为基础规则, 不可关闭
-	out["rounds"] = clampi(int(out["rounds"]), 1, 5)
+	# 回合制: 一回合 = 3 局; 开房可选 一/三/五回合(3/9/15 局)
+	out["rounds"] = clampi(int(out["rounds"]), 1, 15)
 	out["turn_seconds"] = clampi(int(out["turn_seconds"]), 5, 120)
 	out["exchange_seconds"] = clampi(int(out["exchange_seconds"]), 5, 60)
 	out["stakes"] = clampi(int(out["stakes"]), 1, 3)

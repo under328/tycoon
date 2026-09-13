@@ -596,13 +596,13 @@ func _update_url() -> String:
 	stakes_option.custom_minimum_size = Vector2(90, 34)
 	add_child(stakes_option)
 	rounds_lbl = AppTheme.make_label(15, COLOR_WHITE)
-	rounds_lbl.text = "局数"
+	rounds_lbl.text = "回合数"
 	rounds_lbl.position = Vector2(830, 460)
 	add_child(rounds_lbl)
 	rounds_option = OptionButton.new()
-	for r: int in [1, 3, 5]:
-		rounds_option.add_item(str(r) + " 局", r)
-	rounds_option.select(1)
+	for r: Array in [[3, "一回合"], [9, "三回合"], [15, "五回合"]]:
+		rounds_option.add_item(str(r[1]) + "（%d 局）" % r[0], r[0])
+	rounds_option.select(0)
 	rounds_option.position = Vector2(880, 456)
 	rounds_option.custom_minimum_size = Vector2(90, 34)
 	add_child(rounds_option)

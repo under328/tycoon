@@ -81,7 +81,6 @@ var fx_layer: Control
 var btn_play: Button
 var btn_hint: Button
 var btn_pass: Button
-var btn_next: Button
 var btn_rematch: Button
 var btn_leave: Button
 
@@ -222,18 +221,15 @@ func _advance() -> void:
 			state = r2["state"]
 		elif phase == "round_end":
 			_refresh()
-			# 最后一局: 短暂展示本局结果后自动进入全场结算(面板自动弹出)
-			# 非末局且托管中: 自动进入下一局(后台连续进行)
+			# 回合制: 每局结束短展示本局结果后自动进入下一局;
+			# 最后一局自动进入全场结算(结算面板统一弹出)
 			var is_last: bool = int(state["round"]) + 1 >= int(state["cfg"]["rounds"])
-			if is_last or auto_pilot:
-				await get_tree().create_timer(1.4 if is_last else 1.2).timeout
-				if gen != _advance_gen or not is_inside_tree():
-					return
-				var r := GameStateGd.apply(state, {"t": "next_round"})
-				if bool(r["ok"]):
-					state = r["state"]
-			else:
-				break  # 等待玩家点下一局
+			await get_tree().create_timer(1.4 if is_last else 1.2).timeout
+			if gen != _advance_gen or not is_inside_tree():
+				return
+			var r := GameStateGd.apply(state, {"t": "next_round"})
+			if bool(r["ok"]):
+				state = r["state"]
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
@@ -356,11 +352,6 @@ func _auto_pass() -> void:
 	selected.clear()
 	_refresh()
 	_advance()
-
-
-func _on_next_pressed() -> void:
-	_sfx("click")
-	_human_apply({"t": "next_round"})
 
 
 func _on_rematch_pressed() -> void:
@@ -682,13 +673,11 @@ func _build_ui() -> void:
 	btn_hint.pressed.connect(_on_hint_pressed)
 	btn_pass = _button("不要")
 	btn_pass.pressed.connect(_on_pass_pressed)
-	btn_next = _button("下一局")
-	btn_next.pressed.connect(_on_next_pressed)
 	btn_rematch = _button("再来一场")
 	btn_rematch.pressed.connect(_on_rematch_pressed)
 	btn_leave = _button("返回大厅")
 	btn_leave.pressed.connect(_on_leave_pressed)
-	for b: Button in [btn_play, btn_hint, btn_pass, btn_next, btn_rematch, btn_leave]:
+	for b: Button in [btn_play, btn_hint, btn_pass, btn_rematch, btn_leave]:
 		ops_row.add_child(b)
 
 	# 快捷表情（仅联机模式; 44px 触控热区）
@@ -961,9 +950,14 @@ func _refresh() -> void:
 func _refresh_view(view: Dictionary) -> void:
 	var phase: String = view["phase"]
 
-	info_label.text = "第 %d/%d 局    %s" % [
-		int(view["round"]) + 1,
-		int(view["rounds_total"]),
+	# 回合制展示: 一回合 = 3 局 → "第 X 回合 第 Y/Z 局"
+	var round_num := int(view["round"]) + 1
+	var rounds_total := int(view["rounds_total"])
+	var in_round := (round_num - 1) % 3 + 1
+	var round_idx := (round_num - 1) / 3 + 1
+	var round_total := ceili(rounds_total / 3.0)
+	info_label.text = "第 %d 回合 · 第 %d/%d 局    %s" % [
+		round_idx, in_round, rounds_total,
 		"革命!" if bool(view["revolution"]) else "",
 	]
 
@@ -1066,7 +1060,6 @@ func _refresh_view(view: Dictionary) -> void:
 	btn_play.text = "确认返还" if returning else "出牌"
 	btn_hint.visible = my_turn
 	btn_pass.visible = my_turn and not lead.is_empty()
-	btn_next.visible = mode == "local" and phase == "round_end"
 	btn_rematch.visible = mode == "local" and phase == "game_end"
 	btn_leave.visible = true
 	btn_leave.text = "返回大厅" if mode == "online" else "返回菜单"
