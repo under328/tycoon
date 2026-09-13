@@ -26,6 +26,8 @@ var _badge: PanelContainer
 var _ver_lbl: Label
 var _hint_lbl: Label
 var _fan: Control             # 右下卡扇(展示已装备卡面)
+var _bg: Control                # 菜单动态背景
+var _menu_items: Array = []     # 斜切菜单项(位置由 _relayout 按屏高自适应)
 
 
 func _ready() -> void:
@@ -35,9 +37,11 @@ func _ready() -> void:
 	size = get_viewport().get_visible_rect().size
 	theme = AppTheme.build_theme()
 
-	var bg := BGScript.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	_bg = BGScript.new()
+	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 移动端: 菜单被安全区内缩, 背景描金边框会贴在分隔线上 → 隐藏
+	_bg.frame_visible = not Responsive.is_touch()
+	add_child(_bg)
 
 	_build_title()
 	_build_menu()
@@ -50,23 +54,31 @@ func _ready() -> void:
 
 
 ## 多设备自适应(1280x720 设计基准): 标题组锚右半区并随高度下移,
-## 余额徽章锚右上, 版本号左下, 底部提示居中, 卡扇贴右下——手机/平板/PC 通吃。
+## 余额徽章按屏宽比例边距锚右上, 菜单项按屏高自适应间距,
+## 版本号左下, 底部提示居中, 卡扇贴右下——手机/平板/PC 通吃。
 func _relayout() -> void:
 	var w := size.x
 	var h := size.y
 	if w < 100.0 or h < 100.0:
 		return
+	var margin := maxf(28.0, w * 0.025)   # 屏越宽边距越大(手机不再贴边)
 	var tx := clampf(w * 0.45, 500.0, w - 540.0)
 	if _title_group != null:
 		_title_group.position = Vector2(tx, clampf(h * 0.17, 28.0, 170.0))
 	if _badge != null:
-		_badge.position = Vector2(w - _badge.size.x - 28.0, 30)
+		_badge.position = Vector2(w - _badge.size.x - margin, 30)
 	if _ver_lbl != null:
 		_ver_lbl.position = Vector2(16, h - 30)
 	if _hint_lbl != null:
 		_hint_lbl.position = Vector2((w - _hint_lbl.size.x) / 2.0, h - 36)
 	if _fan != null:
-		_fan.position = Vector2(w - 340.0, h * 0.60)
+		_fan.position = Vector2(w - 340.0, clampf(h * 0.60, 300.0, h - 300.0))
+	# 菜单项: 按可用高度自适应间距(手机紧凑视口也能放下全部六项)
+	var y0 := clampf(h * 0.23, 110.0, 188.0)
+	var spacing := clampf((h - y0 - 120.0) / 5.0, 52.0, 76.0)
+	for i in _menu_items.size():
+		var it: Control = _menu_items[i]
+		it.position = Vector2(clampf(90.0 + i * 28.0, 40.0, w - 490.0), y0 + i * spacing)
 
 
 func _build_title() -> void:
@@ -158,6 +170,7 @@ func _build_menu() -> void:
 		item.position = Vector2(90 + i * 28, 188 + i * 76)
 		item.custom_minimum_size = Vector2(440, 62)
 		item.size = Vector2(440, 62)
+		_menu_items.append(item)
 		var cb: Callable = items[i][1]
 		item.pressed.connect(cb)
 		if str(items[i][0]) == "新手引导":

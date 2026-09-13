@@ -230,11 +230,34 @@ func _arm_loopback_guard() -> void:
 		if net._is_connected():
 			return
 		var a := str(net.address)
-		if a != "127.0.0.1" and a != "localhost" and a != "::1":
+		if a == "127.0.0.1" or a == "localhost" or a == "::1":
+			net.disconnect_all()
+			_loopback_hint = true
+			_show_loopback_hint()
 			return
-		net.disconnect_all()
-		_loopback_hint = true
-		_show_loopback_hint())
+		_probe_reachable(a, int(net.port) + 1))
+
+
+## 可达性探测: 服务器在 游戏端口+1 上有 HTTP 状态服务, 能否打开它 =
+## "对方主机 + 服务器是否在运行"的可靠判据(与联机同一条通路)。
+## 远程主机不可达时 ENet 30 秒都不报错, 用探测尽快给出诊断清单。
+func _probe_reachable(host: String, http_port: int) -> void:
+	var http := HTTPRequest.new()
+	http.timeout = 6.0
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		http.queue_free()
+		if net == null or not is_inside_tree() or net._is_connected():
+			return
+		_loopback_hint = false  # 探测结论取代回环指引, 不被就绪条刷新覆盖
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+			_set_status("主机在线, 联机协商中… 若 15 秒后仍未进入, 请点【连接】重试", COLOR_GOLD)
+		else:
+			_set_status("暂时无法到达 %s(仍在自动重试)—— 请确认:\n① 对方已点【本机开房】(服务器需在运行)\n② 双方 Tailscale 已连接(联机准备条均为 ✓)\n③ 对方防火墙已放行 UDP %d" % [host, int(net.port)], COLOR_RED))
+	var err := http.request("http://%s:%d/status" % [host, http_port])
+	if err != OK:
+		http.queue_free()
+		_set_status("无法发起连接探测, 请检查网络", COLOR_RED)
 
 
 ## 回环指引(引导而非故障, 用金色不报警): 按 Tailscale 就绪状态给出
