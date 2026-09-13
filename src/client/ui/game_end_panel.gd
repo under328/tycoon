@@ -82,6 +82,10 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 		var dia: HBoxContainer = Icons.CurrencyText.new(19)
 		dia.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		dia.amount("gem", "+%d" % int(reward.get("diamonds", 0)), AppTheme.WHITE)
+		if bool(reward.get("doubled", false)):
+			dia.text("(双倍卡)", AppTheme.GOLD)
+		if int(reward.get("bonus", 0)) > 0:
+			dia.text(" 首胜+%d" % int(reward.get("bonus", 0)), AppTheme.GOLD)
 		dia.text("    钱包:", AppTheme.DIM)
 		dia.amount("coin", str(int(reward.get("wallet_gold", 0))), AppTheme.WHITE)
 		dia.text("·", AppTheme.DIM)

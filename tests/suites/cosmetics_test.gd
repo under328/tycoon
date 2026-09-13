@@ -20,6 +20,8 @@ func run(t) -> void:
 	_joker_pixel_art(t)
 	_buy_flow(t)
 	_server_pool(t)
+	_special_items(t)
+	_rank_title(t)
 
 
 func _registry(t) -> void:
@@ -103,3 +105,57 @@ func _buy_flow(t) -> void:
 func _server_pool(t) -> void:
 	for id in NEW_SKINS:
 		t.expect(RoomManagerGd.SKINS.has(id), "服务端 AI 皮肤池含 %s" % id)
+
+
+## 特殊道具: 金币购买 / 当日双倍 / 结算翻倍与标记 / 首胜每日一次 / 次日失效
+func _special_items(t) -> void:
+	t.expect(WalletGd.SPECIALS.size() >= 1, "特殊道具已上架")
+	var dd: Dictionary = {}
+	for it in WalletGd.SPECIALS:
+		if str(it["id"]) == "item_double_diamond":
+			dd = it
+	t.expect(not dd.is_empty() and int(dd["price"]) == 120
+			and str(dd["currency"]) == "gold", "双倍钻石卡 120 金币")
+	var w = WalletGd.new()
+	w.save_path = "user://test_special_wallet.cfg"
+	w.gold = 100
+	t.expect(not w.buy_special("item_double_diamond"), "金币不足购买被拒")
+	w.gold = 130
+	t.expect(w.buy_special("item_double_diamond"), "购买成功")
+	t.expect_eq(int(w.gold), 10, "扣款 120 金币")
+	t.expect(w.double_diamond_active(), "当日双倍生效")
+	# 结算: 富豪 +1 钻 → 双倍 +2, 标记 doubled
+	var r: Dictionary = w.grant_match_reward(10, 2, 1)
+	t.expect_eq(int(r["diamonds"]), 2, "双倍卡: +1 钻变 +2")
+	t.expect(bool(r["doubled"]), "结算标记 doubled")
+	# 当日首胜: 大富豪 +2 钻翻倍 +4, 首胜再 +3
+	var r2: Dictionary = w.grant_match_reward(20, 1, 1)
+	t.expect_eq(int(r2["diamonds"]), 4, "大富豪 +2 → 双倍 +4")
+	t.expect_eq(int(r2["bonus"]), 3, "每日首胜 +3")
+	t.expect_eq(int(r2["bonus"]) if r2.has("bonus") else -1, 3, "bonus 标记返回")
+	# 同日第二胜: 首胜奖励不再发
+	var r3: Dictionary = w.grant_match_reward(20, 1, 1)
+	t.expect_eq(int(r3["bonus"]), 0, "同日再胜无首胜奖励")
+	# 次日(模拟: 生效日写成昨天) → 双倍失效, 首胜名额重置
+	w.double_diamond_day = "2000-01-01"
+	w.first_win_day = "2000-01-01"
+	t.expect(not w.double_diamond_active(), "次日双倍失效")
+	var r4: Dictionary = w.grant_match_reward(20, 1, 1)
+	t.expect_eq(int(r4["diamonds"]), 2, "无卡: 大富豪 +2 不翻倍")
+	t.expect(not bool(r4["doubled"]), "无卡不标记 doubled")
+	t.expect_eq(int(r4["bonus"]), 3, "新的一日首胜名额重置")
+	w.queue_free()
+
+
+## 称号随胜场晋升
+func _rank_title(t) -> void:
+	var w = WalletGd.new()
+	w.local_wins = 0
+	t.expect_eq(w.rank_title(), "新人", "0 胜 = 新人")
+	w.local_wins = 5
+	t.expect_eq(w.rank_title(), "平民", "5 胜 = 平民")
+	w.local_wins = 15
+	t.expect_eq(w.rank_title(), "富豪", "15 胜 = 富豪")
+	w.local_wins = 30
+	t.expect_eq(w.rank_title(), "大富豪", "30 胜 = 大富豪")
+	w.queue_free()

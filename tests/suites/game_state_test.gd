@@ -95,9 +95,23 @@ func _joker_last_ban(t) -> void:
 	st["hands"][1] = [20, 21]
 	st["hands"][2] = [40, 41]
 	st["hands"][3] = [44, 45]
+	# 领出: 单王是唯一合法动作(否则对局死锁) → 放行
 	var r := GameStateGd.apply(st, {"t": "play", "seat": 0, "cards": [52]})
-	t.expect(not bool(r["ok"]), "最后一张王被禁止单出")
-	t.expect_eq(str(r["error"]), "joker_last_ban", "错误码 joker_last_ban")
+	t.expect(bool(r["ok"]), "领出时单王放行(死锁修复)")
+	# 跟牌: 单王仍禁止(压任何牌都非法)
+	var stf := GameStateGd.new_match({}, 7)
+	stf["phase"] = "play"
+	stf["turn"] = 0
+	stf["lead"] = {"type": 0, "key": 7.0, "len": 1, "cards": [16]}
+	stf["must_include"] = -1
+	stf["finish_order"] = []
+	stf["hands"][0] = [52]
+	stf["hands"][1] = [20, 21]
+	stf["hands"][2] = [40, 41]
+	stf["hands"][3] = [44, 45]
+	var rf := GameStateGd.apply(stf, {"t": "play", "seat": 0, "cards": [52]})
+	t.expect(not bool(rf["ok"]), "跟牌时最后一张王被禁止单出")
+	t.expect_eq(str(rf["error"]), "joker_last_ban", "错误码 joker_last_ban")
 	# 对照: 最后一张普通牌可以出完
 	var st2 := GameStateGd.new_match({}, 7)
 	st2["phase"] = "play"

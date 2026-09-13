@@ -23,6 +23,7 @@ var _shop: Control
 var _balance: Control          # CurrencyText 金额行
 var _title_group: Control   # 标题/斩切线/副标/朱印 组容器(内部坐标固定, 整体锚定)
 var _badge: PanelContainer
+var _rank_lbl: Label
 var _ver_lbl: Label
 var _hint_lbl: Label
 var _fan: Control             # 右下卡扇(展示已装备卡面)
@@ -129,16 +130,24 @@ func _build_title() -> void:
 	seal_char.position = Vector2(10, 2)
 	seal.add_child(seal_char)
 
-	# 余额徽章(锚右上): 铜钱/宝石图标 + 数字
+	# 余额徽章(锚右上): 铜钱/宝石图标 + 数字 + 称号/战绩行(随胜场晋升)
 	_badge = PanelContainer.new()
 	_badge.add_theme_stylebox_override("panel", AppTheme.flat(
 			Color(0.08, 0.08, 0.18, 0.9), Color(AppTheme.GOLD, 0.6), 4, 0))
 	_badge.position = Vector2(1040, 30)
 	_badge.rotation = -0.03
 	add_child(_badge)
+	var badge_box := VBoxContainer.new()
+	badge_box.add_theme_constant_override("separation", 2)
+	_badge.add_child(badge_box)
 	_balance = Icons.CurrencyText.new(19)
 	_balance.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
-	_badge.add_child(_balance)
+	badge_box.add_child(_balance)
+	_rank_lbl = AppTheme.make_label(13, AppTheme.GOLD)
+	_rank_lbl.text = "称号 %s · %d胜/%d场" % [Wallet.rank_title(),
+			Wallet.local_wins, Wallet.local_matches]
+	_rank_lbl.reset_size()
+	badge_box.add_child(_rank_lbl)
 
 	# 版本号(锚左下)
 	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
@@ -221,6 +230,10 @@ func _tutorial_badge() -> String:
 func _refresh_balance() -> void:
 	if _balance != null:
 		_balance.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
+	if _rank_lbl != null:
+		_rank_lbl.text = "称号 %s · %d胜/%d场" % [Wallet.rank_title(),
+				Wallet.local_wins, Wallet.local_matches]
+		_rank_lbl.reset_size()
 
 
 func _open_shop() -> void:

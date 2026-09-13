@@ -1,5 +1,6 @@
 ## 规则式 AI（托管 / 本地模式 / fuzz 测试共用）。
-## 策略 v1：跟牌出"最小能压的"；领出优先出牌数多的组合 shed 牌，同数取最小 key。
+## 策略 v2: 一手清盘立即出; 领出按出牌价值(牌数−2×王数)保王;
+## 跟牌出"最小能压的", 同距省王再省牌数。
 class_name BotPlayer
 extends RefCounted
 
@@ -32,8 +33,17 @@ static func _decide_exchange_return(st: Dictionary, seat: int) -> Dictionary:
 static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
 	var hand: Array = st["hands"][seat]
 	var lead: Dictionary = st["lead"]
-	var combos := all_combos(hand, st["cfg"])
+	var combos := all_combos(hand, st["cfg"],
+			hand.size() == 1 and CardsGd.is_joker(hand[0]) and not lead.is_empty())
 	var must_include := int(st["must_include"])
+	# 一手清盘 = 直接获胜, 立即打出(受 must_include 约束; 跟牌时还须压过场牌)
+	for combo in combos:
+		if must_include >= 0 and not combo["cards"].has(must_include):
+			continue
+		if int(combo["len"]) != hand.size():
+			continue
+		if lead.is_empty() or ComboGd.beats(combo, lead, st["revolution"]):
+			return {"t": "play", "seat": seat, "cards": combo["cards"]}
 	if lead.is_empty():
 		var best := {}
 		for combo in combos:
@@ -48,24 +58,30 @@ static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
 	var lead_eff := ComboGd.eff_key(float(lead["key"]), st["revolution"])
 	var beat_d := INF
 	var beat_jokers := 99
+	var beat_len := 99
 	for combo in combos:
 		if not ComboGd.beats(combo, lead, st["revolution"]):
 			continue
 		var d: float = absf(ComboGd.eff_key(float(combo["key"]), st["revolution"]) - lead_eff)
 		var jc := _joker_count(combo)
-		if beat.is_empty() or d < beat_d or (d == beat_d and jc < beat_jokers):
+		if beat.is_empty() or d < beat_d or (d == beat_d and (jc < beat_jokers
+				or (jc == beat_jokers and int(combo["len"]) < beat_len))):
 			beat = combo
 			beat_d = d
 			beat_jokers = jc
+			beat_len = int(combo["len"])
 	if beat.is_empty():
 		return {"t": "pass", "seat": seat}
 	return {"t": "play", "seat": seat, "cards": beat["cards"]}
 
 
 static func _prefer_lead(a: Dictionary, b: Dictionary, revolution: bool) -> bool:
-	# 牌数多者优先（先跑为敬）；同数取当前点序下更弱者（反转时 key 大者更弱）
-	if int(a["len"]) != int(b["len"]):
-		return int(a["len"]) > int(b["len"])
+	# 出牌价值 = 牌数 - 2×王数(王是跟牌压制的战略资源, 领出尽量不舍王);
+	# 同分取当前点序下更弱者(反转时 key 大者更弱)
+	var sa := int(a["len"]) - 2 * _joker_count(a)
+	var sb := int(b["len"]) - 2 * _joker_count(b)
+	if sa != sb:
+		return sa > sb
 	return ComboGd.eff_key(float(a["key"]), revolution) \
 			< ComboGd.eff_key(float(b["key"]), revolution)
 
@@ -94,7 +110,8 @@ static func decide_from_view(view: Dictionary) -> Dictionary:
 
 
 ## 枚举手牌全部合法组合（v2: 单张/对子/三条/四条, 含王补位）。
-static func all_combos(hand: Array, cfg: Dictionary) -> Array:
+## ban_last_joker: 仅剩一张王且跟牌时禁止单出(领出放行, 见 game_state 规则)。
+static func all_combos(hand: Array, cfg: Dictionary, ban_last_joker := true) -> Array:
 	var out := []
 	var by_val := {}
 	var jokers := []
@@ -106,8 +123,6 @@ static func all_combos(hand: Array, cfg: Dictionary) -> Array:
 			if not by_val.has(v):
 				by_val[v] = []
 			by_val[v].append(c)
-	# 单张(仅剩一张王时禁止打出 → 不枚举该组合)
-	var ban_last_joker := hand.size() == 1 and CardsGd.is_joker(hand[0])
 	for c in hand:
 		if ban_last_joker:
 			continue
