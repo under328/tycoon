@@ -71,6 +71,7 @@ var rounds_lbl: Label
 var _room_ui: Array = []          # 仅房间内显示的控件
 var _in_room := false             # 是否处于房间内(驱动房间 UI 显隐)
 var _conn_fails := 0
+var _loopback_hint := false   # 当前状态栏显示的是回环指引(随环境变化刷新)
 var _placed: Array = []           # 自适应锚定表: [控件, 基准坐标, 模式, 高度分配比]
 
 
@@ -116,6 +117,9 @@ func _refresh_ts_chip() -> void:
 		_ts_state_lbl.text = "未安装或未启动"
 		_ts_state_lbl.add_theme_color_override("font_color", COLOR_DIM)
 	_ts_dl_btn.visible = not ready
+	# 回环指引随环境刷新(Tailscale 装好/掉线时, 指引文案同步更新)
+	if _loopback_hint:
+		_show_loopback_hint_for(ready)
 
 
 ## 多设备自适应(1280x720 设计基准, 见 responsive.gd):
@@ -163,6 +167,7 @@ func _auto_connect() -> void:
 	var host: String = AppMode.address if AppMode.address_from_cli else GameSettings.host
 	var port: int = AppMode.port if AppMode.port_from_cli else GameSettings.host_port
 	_conn_fails = 0
+	_loopback_hint = false
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 	net.auto_reconnect = true
 	net.connect_to(host, port)
@@ -183,7 +188,22 @@ func _arm_loopback_guard() -> void:
 		if a != "127.0.0.1" and a != "localhost" and a != "::1":
 			return
 		net.disconnect_all()
-		_set_status("127.0.0.1 是本机回环地址, 这里没有服务器。\n① 点【本机开房】自己当主机\n② 或右上角填主机 IP(Tailscale 100.x.x.x)点【连接】\n③ 或点【粘贴邀请码, 一键加入】", COLOR_RED))
+		_loopback_hint = true
+		_show_loopback_hint())
+
+
+## 回环指引(引导而非故障, 用金色不报警): 按 Tailscale 就绪状态给出
+## 对应出路, 并随联机准备条的状态变化自动刷新
+func _show_loopback_hint() -> void:
+	_show_loopback_hint_for(Responsive.tailscale_ips().size() > 0)
+
+
+func _show_loopback_hint_for(ready: bool) -> void:
+	_loopback_hint = true
+	if ready:
+		_set_status("Tailscale 已就绪 — 点【本机开房】创建房间, 把邀请码发给朋友;\n或点【粘贴邀请码, 一键加入】朋友的主机。", COLOR_GOLD)
+	else:
+		_set_status("未连接服务器(127.0.0.1 只是本机地址)。\n先在【联机准备】安装并登录 Tailscale, 再【本机开房】或【粘贴邀请码】开局。", COLOR_GOLD)
 
 
 ## 供 main(本机开房) 推送状态/主机 IP 信息
@@ -223,6 +243,7 @@ func _paste_join() -> void:
 	port_edit.text = str(port)
 	_auto_join_code = code
 	_conn_fails = 0
+	_loopback_hint = false
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to(ip, port)
@@ -298,6 +319,7 @@ func _manual_connect() -> void:
 	net.auto_reconnect = true
 	net.connect_to(host, port)
 	_arm_loopback_guard()
+	_loopback_hint = false
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 
 
@@ -736,6 +758,7 @@ func _bind_net() -> void:
 	net.connected_ok.connect(func() -> void:
 		update_btn.visible = false
 		_conn_fails = 0
+		_loopback_hint = false
 		_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
 		if _auto_join_code != "":
 			var join_code := _auto_join_code
@@ -754,7 +777,7 @@ func _bind_net() -> void:
 		var loopback: bool = str(net.address) in ["127.0.0.1", "localhost", "::1"]
 		if loopback and not auto_create_room:
 			net.disconnect_all()
-			_set_status("127.0.0.1 是本机回环地址, 这里没有服务器。\n① 点【本机开房】自己当主机\n② 或右上角填主机 IP(Tailscale 100.x.x.x)点【连接】\n③ 或点【粘贴邀请码, 一键加入】", COLOR_RED)
+			_show_loopback_hint()
 			return
 		_set_status("无法连接 %s:%d（第 %d 次），自动重试中…\n确认服务器已启动、地址正确、防火墙放行"
 				% [net.address, net.port, _conn_fails], COLOR_RED))
