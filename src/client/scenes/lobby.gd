@@ -930,5 +930,6 @@ func _check(text: String, pos: Vector2) -> CheckButton:
 	var c := CheckButton.new()
 	c.text = text
 	c.position = pos
+	c.button_pressed = true   # 默认开启(与服务端默认规则一致: 带王/革命)
 	add_child(c)
 	return c
