@@ -692,9 +692,13 @@ func _build_ui() -> void:
 	chat_edit.text_submitted.connect(func(_t: String) -> void: _on_chat_send())
 	add_child(chat_edit)
 	chat_btn = _button("发送")
-	chat_btn.position = Vector2(792, 666)
-	chat_btn.custom_minimum_size = Vector2(60, 36)
-	chat_btn.add_theme_font_size_override("font_size", 15)
+	chat_btn.position = Vector2(788, 666)
+	# 紧凑小钮: 覆盖 _button 的触屏放大(与表情/操作行同排, 宽度受聊天区约束)
+	var cb_min := Vector2(64, 48) if Responsive.is_touch() else Vector2(56, 36)
+	chat_btn.custom_minimum_size = cb_min
+	chat_btn.size = cb_min
+	chat_btn.add_theme_font_size_override("font_size",
+			18 if Responsive.is_touch() else 15)
 	chat_btn.pressed.connect(_on_chat_send)
 	add_child(chat_btn)
 	if mode == "local":
@@ -864,9 +868,10 @@ func _relayout() -> void:
 	_opp_hands[2].position = Vector2(30, 50)
 	_seat_panels[0].position = Vector2(w - 284, h * 0.41)
 	_opp_hands[0].position = Vector2(w - 150, 108)
-	# 操作行(先定位: 手牌让位) — 卡底不得压按钮
+	# 操作行(先定位: 手牌让位) — 卡底不得压按钮; 且不与左侧聊天行重叠
 	var ops_y := h - ops_h - 14.0
-	ops_row.position = Vector2(w - 16.0 - (640.0 if touch else 420.0), ops_y)
+	var ops_x := maxf(w - 16.0 - (640.0 if touch else 420.0), 860.0)
+	ops_row.position = Vector2(ops_x, ops_y)
 	# 手牌区
 	var hand_y := ops_y - 6.0 - 18.0 - card_h
 	hand_box.position = Vector2(w - 1014, hand_y)
@@ -890,11 +895,13 @@ func _relayout() -> void:
 	status_label.custom_minimum_size = Vector2(field_w, 26)
 	error_label.position = Vector2(field_x, error_y)
 	error_label.custom_minimum_size = Vector2(field_w, 22)
-	# 联机聊天(仅联机创建); 紧凑时记录在左上空带, 输入行挪到顶部
+	# 联机聊天(仅联机创建): 表情后固定左侧区(440..848), 与右锚操作行解耦;
+	# 紧凑时输入行挪到顶部空带。发送钮尺寸在入树后补设(入树前赋值不生效)
+	chat_btn.size = Vector2(64, 48) if touch else Vector2(56, 36)
 	chat_log.position = Vector2(16, 120.0 if compact else h - 258.0)
-	chat_edit.position = Vector2((240.0 if compact else (w - 840.0)),
+	chat_edit.position = Vector2(440.0 if not compact else 240.0,
 			(8.0 if compact else (h - 58)))
-	chat_btn.position = Vector2((592.0 if compact else (w - 488.0)),
+	chat_btn.position = Vector2(788.0 if not compact else 592.0,
 			(8.0 if compact else (h - 58)))
 	# 快捷表情(联机): 贴底缘
 	for i in _emoji_btns.size():

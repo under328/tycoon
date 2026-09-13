@@ -113,6 +113,13 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					"table 出牌区压手牌区 field_bottom=%s hand_top=%s" % [
 						s.field_panel.position.y + s.field_panel.size.y,
 						s.hand_box.position.y + 14.0])
+			# 聊天发送钮与操作行同排时不得重叠
+			if absf(s.chat_btn.position.y - s.ops_row.position.y) < 30.0:
+				expect(s.chat_btn.position.x + s.chat_btn.size.x
+						<= s.ops_row.position.x + 1.0,
+						"table 聊天发送钮压操作行 chat_end=%s ops_x=%s" % [
+							s.chat_btn.position.x + s.chat_btn.size.x,
+							s.ops_row.position.x])
 		3:  # 商城
 			expect(s._back_btn.position.x + s._back_btn.size.x <= w - 20.0,
 					"shop 返回按钮未锚右缘")
