@@ -1,10 +1,11 @@
-## 皮肤与卡面数据表 + 程序化头像绘制 v2。
-## v2: 每款头像=皮肤色底+内环珠纹+肩部衣领+头部细节+描金外环; 新增皮肤在此追加。
+## 皮肤与卡面数据表 + 程序化头像绘制 v3。
+## v3: 头像改为精修像素画(avatar_pix.gd 32x32 合成器), 未知皮肤回退 v2 矢量画法。
 class_name SkinsLib
 extends RefCounted
 
 const GOLD := Color("e0a83c")
 const RED := Color("e0503c")
+const AvatarPix = preload("res://src/client/ui/avatar_pix.gd")
 
 ## 皮肤(座位人物形象徽章)
 const SKINS := [
@@ -52,6 +53,10 @@ static func draw_avatar(ci: CanvasItem, skin_id: String, center: Vector2, r: flo
 		var ang := TAU * i / 12.0
 		ci.draw_circle(center + Vector2.from_angle(ang) * r * 0.86,
 				r * 0.045, Color(GOLD, 0.5))
+	# 精修像素头像(32x32 合成器); 未知皮肤回退旧矢量画法
+	if AvatarPix.draw(ci, skin_id, center, r * 0.94):
+		ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
+		return
 	var shoulder := PackedVector2Array([
 		center + Vector2(-r * 0.78, r), center + Vector2(-r * 0.5, r * 0.52),
 		center + Vector2(r * 0.5, r * 0.52), center + Vector2(r * 0.78, r),
