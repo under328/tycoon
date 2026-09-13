@@ -35,6 +35,14 @@ const CARDS := [
 		"border": Color("7fb0d8"), "red": Color("ff8899"), "black": Color("d0e2f2"),
 		"shadow": Color(0, 0, 0, 0.4), "back": Color("0e1a30"),
 		"speckle": Color(0.5, 0.7, 1.0, 0.10)},
+	{"id": "card_wukong", "motif": "wukong", "name": "悟空", "price": 100, "face": Color("241f2b"),
+		"border": Color("c8a048"), "red": Color("e0563c"), "black": Color("e8c86a"),
+		"shadow": Color(0, 0, 0, 0.45), "back": Color("171221"),
+		"speckle": Color(0.85, 0.68, 0.3, 0.10)},
+	{"id": "card_cyber", "motif": "cyber", "name": "赛博朋克", "price": 100, "face": Color("15181f"),
+		"border": Color("30e0df"), "red": Color("ff2e88"), "black": Color("fcee0a"),
+		"shadow": Color(0, 0, 0, 0.5), "back": Color("0d0f16"),
+		"speckle": Color(0.2, 0.9, 0.9, 0.08)},
 ]
 
 

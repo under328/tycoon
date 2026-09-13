@@ -325,6 +325,10 @@ func _draw_joker() -> void:
 			_pixel_art(PIX_FOX, _pix_pal_fox(), c, size)
 		"umi":
 			_pixel_art(PIX_KAPPA, _pix_pal_kappa(), c, size)
+		"wukong":
+			_pixel_art(PIX_WUKONG, _pix_pal_wukong(), c, size)
+		"cyber":
+			_pixel_art(PIX_CYBER, _pix_pal_cyber(), c, size)
 		_:
 			_pixel_art(PIX_DARUMA, _pix_pal_daruma(), c, size)
 	# 角标: JOKER
@@ -367,6 +371,17 @@ func _pix_pal_fox() -> Dictionary:
 
 func _pix_pal_kappa() -> Dictionary:
 	return {"Y": Wafu.GOLD, "G": Color("58a878"), "B": COLOR_BLACK, "P": Color("e8a0b4")}
+
+
+func _pix_pal_wukong() -> Dictionary:
+	return {"G": Color("f2c14e"), "F": Color("4a3423"), "T": Color("d9a878"),
+		"W": Color("f8f6f0"), "E": Color("ffe98a"), "B": Color("181018"),
+		"M": Color("7a1a14"), "R": Color("c8742a"), "Y": Color("e8d8b0")}
+
+
+func _pix_pal_cyber() -> Dictionary:
+	return {"D": Color("23262e"), "V": Color("fcee0a"), "E": Color("ffffff"),
+		"C": Color("30e0df"), "B": Color("0d0f16"), "M": Color("ff2e88")}
 
 
 const PIX_DARUMA := [
@@ -429,6 +444,38 @@ const PIX_KAPPA := [
 	"............",
 ]
 
+## 悟空: 金箍 + 猴脸金瞳 + 虎皮纹(裙)
+const PIX_WUKONG := [
+	"...GGGGGG...",
+	".GGGGGGGGGG.",
+	".FFFFFFFFFF.",
+	"FFFTTTTTTFFF",
+	"FFTTTTTTTTFF",
+	"FTWWETTEWWTF",
+	"FTTTTTTTTTTF",
+	"FTTBTTTBTTTF",
+	"FTTTTTTTTTTF",
+	".FTTMMMMTTF.",
+	"..FTTTTTTF..",
+	".RRYRRRRYRR.",
+]
+
+## 赛博义体: 金属头壳 + 额电路 + 霓虹目镜 + 散热栅
+const PIX_CYBER := [
+	"..DDDDDDDD..",
+	".DDDDDDDDDD.",
+	".DCDCCCCDCD.",
+	"DDDDDDDDDDDD",
+	"DVVVVVVVVVVD",
+	"DVEVVEVVEVVD",
+	"DDDDDDDDDDDD",
+	".DDBDBDBBDD.",
+	"..DDDDDDDD..",
+	".CDDDDDDDDC.",
+	"..DDMMDDDD..",
+	"............",
+]
+
 
 ## 数字牌中心主题纹环(低饱和, 不干扰识别)。
 func _draw_center_ring(motif: String, c: Vector2, r: float, col: Color) -> void:
@@ -448,6 +495,24 @@ func _draw_center_ring(motif: String, c: Vector2, r: float, col: Color) -> void:
 				var p := c + Vector2.from_angle(ang) * r * 0.78
 				draw_arc(p, r * 0.5, ang + PI * 0.9, ang + PI * 2.1, 14,
 						col, 2.2, true)
+		"wukong":  # 金箍环: 双环 + 四如意云头
+			draw_arc(c, r, 0, TAU, 40, col, 2.4, true)
+			draw_arc(c, r * 0.62, 0, TAU, 32, Color(col, col.a * 0.7), 1.6, true)
+			for i in 4:
+				var ang := TAU * i / 4.0 + PI * 0.25
+				draw_circle(c + Vector2.from_angle(ang) * r * 0.82, r * 0.14, col)
+		"cyber":  # 全息六边 + 数据断流
+			var hex := PackedVector2Array()
+			for i in 6:
+				var ang := TAU * i / 6.0 + PI * 0.5
+				hex.append(c + Vector2.from_angle(ang) * r)
+			hex.append(hex[0])
+			draw_polyline(hex, col, 2.2, true)
+			draw_line(c + Vector2(-r * 0.5, -r * 0.15), c + Vector2(-r * 0.1, -r * 0.15),
+					Color(_pal["red"], col.a), 1.8, true)
+			draw_line(c + Vector2(r * 0.1, r * 0.15), c + Vector2(r * 0.5, r * 0.15),
+					Color(_pal["red"], col.a), 1.8, true)
+			draw_circle(c, r * 0.16, col)
 		_:  # washi 樱花五瓣
 			for i in 5:
 				var ang := TAU * i / 5.0 - PI * 0.5
@@ -504,6 +569,33 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 			draw_circle(c + Vector2(-s * 0.62, -s * 0.12), s * 0.1, light)
 			draw_arc(c + Vector2(s * 0.1, 0), s * 0.3, -PI * 0.4, PI * 0.4, 12,
 					light, s * 0.05, true)
+		"wukong":
+			# 金箍棒斜置(两端箍) + 脚下祥云
+			var a := c + Vector2(-s * 0.75, s * 0.8)
+			var b := c + Vector2(s * 0.75, -s * 0.8)
+			draw_line(a, b, col, s * 0.16, true)
+			var dir := (b - a).normalized()
+			for p: Vector2 in [a, b]:
+				draw_line(p - dir * s * 0.12, p + dir * s * 0.12,
+						Color(_pal["face"], 0.7), s * 0.3, true)
+			draw_arc(c + Vector2(-s * 0.55, s * 0.65), s * 0.3,
+					PI * 1.1, PI * 1.9, 12, col, s * 0.07, true)
+			draw_arc(c + Vector2(s * 0.35, s * 0.72), s * 0.26,
+					PI * 1.15, PI * 1.85, 12, col, s * 0.07, true)
+		"cyber":
+			# 义眼: 六边框 + 扫描横线 + 品红故障残影
+			var hex := PackedVector2Array()
+			for i in 6:
+				var ang := TAU * i / 6.0 + PI * 0.5
+				hex.append(c + Vector2.from_angle(ang) * s * 0.85)
+			hex.append(hex[0])
+			draw_polyline(hex, Color(_pal["red"], col.a * 0.5), s * 0.07, true)
+			draw_polyline(hex, col, s * 0.05, true)
+			draw_line(c + Vector2(-s * 0.55, -s * 0.1), c + Vector2(s * 0.55, -s * 0.1),
+					col, s * 0.08, true)
+			draw_line(c + Vector2(-s * 0.35, s * 0.12), c + Vector2(s * 0.3, s * 0.12),
+					Color(_pal["face"], 0.7), s * 0.06, true)
+			draw_circle(c, s * 0.14, col)
 		_:
 			var body := PackedVector2Array([
 				c + Vector2(-s * 0.7, s * 0.1), c + Vector2(-s * 0.2, -s * 0.35),
@@ -597,6 +689,53 @@ func _draw_back_pattern(host: CanvasItem) -> void:
 					host.draw_arc(Vector2(xx, y), rr, PI, TAU, 12,
 							Color(border_c, col_a), size.x * 0.03, true)
 					xx += rr * 1.5
+		"wukong":
+			# 山文甲: 交错金鳞(半圆盘叠压) + 中央云纹圆
+			var rr := size.x * 0.18
+			var row_h := rr * 0.78
+			var rowi := 0
+			var yy := -rr * 0.3
+			while yy < size.y + rr:
+				var offset := 0.0 if rowi % 2 == 0 else rr
+				var xx := -rr + offset
+				while xx < size.x + rr:
+					var scale := PackedVector2Array([
+						Vector2(xx - rr, yy + rr * 0.9),
+						Vector2(xx, yy - rr * 0.35),
+						Vector2(xx + rr, yy + rr * 0.9),
+					])
+					host.draw_colored_polygon(scale, Color(border_c, 0.10))
+					host.draw_arc(Vector2(xx, yy), rr * 0.82, PI * 1.05, PI * 1.95, 12,
+							Color(border_c, 0.30), size.x * 0.025, true)
+					xx += rr * 1.9
+				yy += row_h
+				rowi += 1
+			var cw := size / 2.0
+			host.draw_arc(cw, size.y * 0.16, 0, TAU, 28, Color(border_c, 0.5),
+					size.x * 0.03, true)
+			host.draw_circle(cw, size.y * 0.05, Color(_pal["red"], 0.6))
+		"cyber":
+			# 电路走线: 横线 + 直角折线 + 节点 + 扫描/故障条
+			var line_c := Color(_pal["black"], 0.30)   # 霓虹主色
+			var acc_c := Color(_pal["red"], 0.55)
+			for li in 5:
+				var y := size.y * (0.14 + 0.18 * li)
+				host.draw_line(Vector2(0, y), Vector2(size.x, y),
+						Color(line_c, 0.16), size.x * 0.015, true)
+				var x0 := size.x * (0.12 + 0.2 * ((li * 3) % 4))
+				var x1 := size.x * (0.45 + 0.12 * ((li * 7) % 3))
+				var ym := y - size.y * 0.07 if li % 2 == 0 else y + size.y * 0.07
+				host.draw_line(Vector2(x0, y), Vector2(x0, ym), line_c,
+						size.x * 0.02, true)
+				host.draw_line(Vector2(x0, ym), Vector2(x1, ym), line_c,
+						size.x * 0.02, true)
+				host.draw_circle(Vector2(x1, ym), size.x * 0.028, line_c)
+				host.draw_circle(Vector2(x0, y), size.x * 0.035,
+						acc_c if li % 3 == 0 else line_c)
+			host.draw_rect(Rect2(0, size.y * 0.52, size.x, size.y * 0.02),
+					Color(_pal["red"], 0.35))
+			host.draw_rect(Rect2(size.x * 0.62, size.y * 0.66, size.x * 0.38,
+					size.y * 0.014), Color(_pal["black"], 0.4))
 		_:
 			var rr := size.x * 0.30
 			var row_h := rr * 0.9
