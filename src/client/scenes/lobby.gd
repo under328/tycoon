@@ -116,8 +116,13 @@ func _relayout() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		net.leave_room()
-		back_to_menu.emit()
+		go_back()
+
+
+## 离开当前页面回主菜单(返回按钮与 Android 返回键共用)
+func go_back() -> void:
+	net.leave_room()
+	back_to_menu.emit()
 
 
 func _auto_connect() -> void:
@@ -273,8 +278,7 @@ func _build_ui() -> void:
 	back_btn = create_and_place("← 主菜单", Vector2(20, 16), Vector2(110, 36), 15)
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		net.leave_room()
-		back_to_menu.emit())
+		go_back())
 
 	# 标题
 	title_lbl = AppTheme.make_label(28, COLOR_GOLD)

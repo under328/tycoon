@@ -5,10 +5,12 @@ extends Control
 signal closed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 var _nickname_edit: LineEdit
 var _bgm_slider: HSlider
 var _sfx_slider: HSlider
+var _display_ctrls: Array = []   # 图像设置控件(移动端无意义, 整组隐藏)
 var _fullscreen_btn: CheckButton
 var _vsync_btn: CheckButton
 var _resolution_btn: OptionButton
@@ -72,23 +74,28 @@ func _ready() -> void:
 	_bgm_slider = _slider(box, "音乐", _on_bgm_changed)
 	_sfx_slider = _slider(box, "音效", _on_sfx_changed)
 
-	# ── 图像 ──
-	box.add_child(_section("图像"))
+	# ── 图像(桌面专属: 手机上全屏/垂直同步/分辨率均无意义, 整组隐藏) ──
+	var sec_img := _section("图像")
+	box.add_child(sec_img)
+	_display_ctrls.append(sec_img)
 	_fullscreen_btn = CheckButton.new()
 	_fullscreen_btn.text = "全屏"
 	_fullscreen_btn.button_pressed = _is_fullscreen()
 	_fullscreen_btn.toggled.connect(_on_fullscreen)
 	box.add_child(_fullscreen_btn)
+	_display_ctrls.append(_fullscreen_btn)
 
 	_vsync_btn = CheckButton.new()
 	_vsync_btn.text = "垂直同步"
 	_vsync_btn.button_pressed = DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED
 	_vsync_btn.toggled.connect(_on_vsync)
 	box.add_child(_vsync_btn)
+	_display_ctrls.append(_vsync_btn)
 
 	var res_row := HBoxContainer.new()
 	res_row.add_theme_constant_override("separation", 12)
 	box.add_child(res_row)
+	_display_ctrls.append(res_row)
 	var res_lbl := AppTheme.make_label(16, AppTheme.WHITE)
 	res_lbl.text = "分辨率"
 	res_lbl.custom_minimum_size = Vector2(100, 0)
@@ -109,6 +116,10 @@ func _ready() -> void:
 	apply_btn.custom_minimum_size = Vector2(200, 36)
 	apply_btn.pressed.connect(_on_apply_resolution)
 	box.add_child(apply_btn)
+	_display_ctrls.append(apply_btn)
+	if Responsive.is_touch():
+		for c: Control in _display_ctrls:
+			c.visible = false
 
 	# ── 关闭 ──
 	box.add_child(HSeparator.new())

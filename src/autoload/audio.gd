@@ -15,8 +15,7 @@ var library := {}
 func _ready() -> void:
 	_setup_buses()
 	_build_library()
-	_bgm_tracks["table"] = Synth.bgm_koto()
-	_bgm_tracks["table_rev"] = Synth.bgm_koto_rev()
+	# 只在启动时合成首页曲; 对局两曲较长, 惰性合成(手机冷启动不再连卡三曲)
 	_bgm_tracks["lobby"] = Synth.bgm_lobby()
 	apply_volumes()
 	play_bgm("lobby")
@@ -98,10 +97,16 @@ func play(sfx_name: String) -> void:
 	p.play()
 
 
-## 切换 BGM 轨道（"lobby"/"table"）；同轨不重启。
+## 切换 BGM 轨道（"lobby"/"table"/"table_rev"）；同轨不重启；对局曲惰性合成。
 func play_bgm(track: String = "lobby") -> void:
 	if not _bgm_tracks.has(track):
-		return
+		match track:
+			"table":
+				_bgm_tracks["table"] = Synth.bgm_koto()
+			"table_rev":
+				_bgm_tracks["table_rev"] = Synth.bgm_koto_rev()
+			_:
+				return
 	if _bgm_current == track and bgm_player.playing:
 		return
 	_bgm_current = track

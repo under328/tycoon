@@ -4,6 +4,7 @@
 extends Control
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 signal finished  # online：玩家点"返回大厅"
 
@@ -57,6 +58,7 @@ var _field_count := -1
 var _turn_total := -1.0
 var _turn_remain := -1.0
 var _last_turn_seat := -99
+var _kbd_shift := 0.0   # 虚拟键盘避让位移(移动端聊天聚焦时)
 
 var info_label: Label
 var self_label: RichTextLabel
@@ -108,6 +110,23 @@ func _process(delta: float) -> void:
 			if remain <= 5.0 and cur >= 1 and cur != _prev_tick:
 				_prev_tick = cur
 				_sfx("tick")
+	# 移动端: 聊天框聚焦时虚拟键盘会盖住底部输入行 → 整行上移避让
+	if mode == "online" and OS.has_feature("android"):
+		_update_keyboard_avoid()
+
+
+## 虚拟键盘高度(物理px)换算到逻辑画布并驱动避让; 失焦归零由 _relayout 复位
+func _update_keyboard_avoid() -> void:
+	var kh := float(DisplayServer.virtual_keyboard_get_height())
+	var target := 0.0
+	if chat_edit.has_focus() and kh > 0.0:
+		var wsize := Vector2(DisplayServer.window_get_size())
+		if wsize.y > 0.0:
+			target = minf(kh * (size.y / wsize.y), size.y * 0.45)
+	if target == _kbd_shift:
+		return
+	_kbd_shift = target
+	_relayout()
 
 
 ## ESC / 安卓返回键 = 返回菜单(联机对局中沿用 3 秒二次确认的弃局语义)
@@ -451,7 +470,9 @@ func _build_ui() -> void:
 	self_label.scroll_active = false
 	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	self_label.custom_minimum_size = Vector2(140, 52)
-	self_label.add_theme_font_size_override("normal_font_size", 15)
+	# 触屏设备信息文字加大一档(手机 720p 逻辑画布物理密度高, 14/15px 偏小)
+	self_label.add_theme_font_size_override("normal_font_size",
+			17 if Responsive.is_touch() else 15)
 	sp_row.add_child(self_label)
 
 	info_label = _make_label(20, AppTheme.GOLD)
@@ -561,14 +582,11 @@ func _build_ui() -> void:
 	for b: Button in [btn_play, btn_hint, btn_pass, btn_next, btn_rematch, btn_leave]:
 		ops_row.add_child(b)
 
-	# 快捷表情（仅联机模式）
+	# 快捷表情（仅联机模式; 44px 触控热区）
 	for i in EMOJIS.size():
 		var id := i
-		var eb := Button.new()
-		eb.text = EMOJIS[i]
+		var eb := AppTheme.make_button(EMOJIS[i], Vector2(44, 44), 20)
 		eb.position = Vector2(16 + i * 52, 664)
-		eb.custom_minimum_size = Vector2(44, 40)
-		eb.add_theme_font_size_override("font_size", 20)
 		eb.pressed.connect(func() -> void:
 			if _emoji_cd > 0.0:
 				_flash_error("表情发太快了")
@@ -646,7 +664,8 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.scroll_active = false
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lb.custom_minimum_size = Vector2(140, 48)
-	lb.add_theme_font_size_override("normal_font_size", 14)
+	lb.add_theme_font_size_override("normal_font_size",
+			16 if Responsive.is_touch() else 14)
 	row.add_child(lb)
 	return [panel, lb, av]
 
@@ -767,6 +786,13 @@ func _relayout() -> void:
 	# 快捷表情(联机): 与聊天/操作行同排贴底
 	for i in _emoji_btns.size():
 		_emoji_btns[i].position = Vector2(16 + i * 52, h - 58)
+	# 虚拟键盘避让: 聚焦聊天时底部整行抬到键盘上方
+	if _kbd_shift > 0.0:
+		chat_log.position.y -= _kbd_shift * 0.6
+		chat_edit.position.y -= _kbd_shift
+		chat_btn.position.y -= _kbd_shift
+		for eb: Button in _emoji_btns:
+			eb.position.y -= _kbd_shift
 
 
 func _refresh() -> void:

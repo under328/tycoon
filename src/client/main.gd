@@ -102,6 +102,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		_close_resume_dialog()
 
 
+## Android 返回手势/返回键(WM_GO_BACK_REQUEST, 不走 ESC 键路径):
+## 按当前界面路由 — 牌桌=返回菜单 / 大厅=回首页 / 首页=退出应用
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_handle_android_back()
+
+
+func _handle_android_back() -> void:
+	if _resume_dlg != null and is_instance_valid(_resume_dlg):
+		_close_resume_dialog()
+		return
+	if table != null and is_instance_valid(table) and table.visible:
+		table._on_leave_pressed()
+		return
+	if lobby != null and is_instance_valid(lobby) and lobby.visible:
+		lobby.go_back()
+		return
+	get_tree().quit()  # 首页按返回 = 退出应用
+
+
 func _start_local() -> void:
 	# 上一场本地局仍在后台托管进行中 → 弹窗让玩家选: 回局继续 / 开新局
 	if table != null and table.mode == "local" \
