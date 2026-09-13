@@ -30,7 +30,6 @@ var start_btn: Button
 var copy_btn: Button
 var save_settings_btn: Button
 var status_label: Label
-var stats_label: Label
 var chk_joker: CheckButton
 var chk_revolution: CheckButton
 var rounds_option: OptionButton
@@ -326,7 +325,6 @@ func show_host_panel(ip: String) -> void:
 	_host_panel_wanted = true
 	host_panel.visible = true
 	status_label.visible = false
-	stats_label.visible = false
 	host_ip_value.text = ip if ip != "" else "未检测到 Tailscale\n(请安装并登录 Tailscale)"
 	host_dl_btn.visible = ip == ""
 	host_dl_btn.text = "⬇ 一键下载\n(%s)" % Responsive.platform_label()
@@ -336,7 +334,6 @@ func hide_host_panel() -> void:
 	_host_panel_wanted = false
 	host_panel.visible = false
 	status_label.visible = true
-	stats_label.visible = true
 
 
 func _manual_connect() -> void:
@@ -361,6 +358,15 @@ func _manual_connect() -> void:
 	_arm_loopback_guard()
 	_loopback_hint = false
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
+
+
+## 版本更新地址: 优先从当前联机主机的内置下载服务获取
+## (http://主机:健康端口/download — 与联机同一条 Tailscale/局域网通路,
+## 国内无障碍); 无主机信息时退回配置的 DOWNLOAD_URL。
+func _update_url() -> String:
+	if net != null and str(net.address) != "":
+		return "http://%s:%d/download" % [str(net.address), int(net.port) + 1]
+	return GameSettings.DOWNLOAD_URL
 
 
 func _build_ui() -> void:
@@ -451,21 +457,12 @@ func _build_ui() -> void:
 
 	# 发现新版本: 版本握手不匹配时显示, 点击打开下载页
 	update_btn = AppTheme.make_button("⬇ 发现新版本, 点击更新", Vector2(260, 46), 16)
-	update_btn.position = Vector2(40, 220)
+	update_btn.position = Vector2(40, 200)
 	update_btn.visible = false
 	update_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		OS.shell_open(_update_url()))
 	add_child(update_btn)
-
-
-## 版本更新地址: 优先从当前联机主机的内置下载服务获取
-## (http://主机:健康端口/download — 与联机同一条 Tailscale/局域网通路,
-## 国内无障碍); 无主机信息时退回配置的 DOWNLOAD_URL。
-func _update_url() -> String:
-	if net != null and str(net.address) != "":
-		return "http://%s:%d/download" % [str(net.address), int(net.port) + 1]
-	return GameSettings.DOWNLOAD_URL
 
 	# 联机帮助(图文, 四页: 三步开房/朋友加入/主机须知/常见问题)
 	help_btn = AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)
@@ -624,10 +621,10 @@ func _update_url() -> String:
 		add_child(eb)
 		_emoji_btns.append(eb)
 
-	# 状态
+	# 状态(左列独立分区: 联机准备条之下、更新按钮之下, 自动换行多行)
 	status_label = AppTheme.make_label(15, COLOR_DIM)
-	status_label.position = Vector2(40, 260)
-	status_label.custom_minimum_size = Vector2(360, 80)
+	status_label.position = Vector2(40, 258)
+	status_label.custom_minimum_size = Vector2(368, 90)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -666,14 +663,6 @@ func _update_url() -> String:
 			"⬇ 一键下载\n(%s)" % Responsive.platform_label(), Vector2(120, 0), 13)
 	_ts_dl_btn.pressed.connect(_open_ts_download)
 	ts_row.add_child(_ts_dl_btn)
-
-	stats_label = AppTheme.make_label(15, COLOR_DIM)
-	stats_label.position = Vector2(40, 350)
-	stats_label.custom_minimum_size = Vector2(360, 40)
-	stats_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	stats_label.add_theme_constant_override("shadow_offset_x", 1)
-	stats_label.add_theme_constant_override("shadow_offset_y", 1)
-	add_child(stats_label)
 
 	# 主机信息卡(本机开房后显示: Tailscale IP + 加入指引)
 	host_panel = PanelContainer.new()
@@ -715,7 +704,6 @@ func _update_url() -> String:
 	_reg(_ts_chip, "left")
 	_reg(host_panel, "left", 0.1)
 	_reg(status_label, "left", 0.1)
-	_reg(stats_label, "left", 0.15)
 	_reg(title_lbl, "center")
 	_reg(nick_lbl, "center")
 	_reg(nickname_edit, "center")
@@ -832,8 +820,7 @@ func _bind_net() -> void:
 			auto_create_room = false
 			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房
 		for b: Button in [quick_btn, create_btn, join_btn]:
-			b.disabled = false
-		net.request_stats())
+			b.disabled = false)
 	net.connection_failed.connect(func() -> void:
 		_conn_fails += 1
 		# 手机连 127.0.0.1 = 连自己, 那里没有服务器; 停止无休止重试, 给出明确指引
@@ -858,13 +845,6 @@ func _bind_net() -> void:
 			update_btn.visible = true
 		else:
 			_set_status("已被移出房间(%s)" % reason, COLOR_RED))
-	net.stats_updated.connect(func(entry: Dictionary) -> void:
-		if entry.is_empty():
-			stats_label.text = "战绩: 暂无"
-		else:
-			stats_label.text = "战绩: %d 场 / 胜 %d / %+d 分" % [
-				int(entry.get("matches", 0)), int(entry.get("wins", 0)),
-				int(entry.get("total_points", 0))])
 	net.room_state.connect(_on_room_state)
 	net.view_changed.connect(func(_view: Dictionary) -> void:
 		start_game.emit())

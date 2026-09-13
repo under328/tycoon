@@ -40,6 +40,7 @@ var _emoji_btns: Array = []
 var _prev_tick := -1
 var _timer_shown := -1           # 倒计时已显示的整数秒(文字门控)
 var _auto_pass_done := false     # 本回合已自动"不要"(防重复)
+var _my_follow_ms := -1.0        # 本地跟牌计时(30s 自动不要)
 var _pulse: Tween = null       # "轮到你"状态文字呼吸脉冲
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
@@ -100,6 +101,19 @@ func _process(delta: float) -> void:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:
 		_chat_cd -= delta
+	# 本地对局: 跟牌超过 30 秒自动"不要"(领出时无法 Pass, 不适用)
+	if mode == "local" and visible and not state.is_empty() \
+			and str(state["phase"]) == "play" and int(state["turn"]) == 0 \
+			and not auto_pilot and not (state["lead"] as Dictionary).is_empty():
+		if _my_follow_ms < 0.0:
+			_my_follow_ms = 0.0
+		else:
+			_my_follow_ms += delta
+			if _my_follow_ms >= 30.0:
+				_my_follow_ms = -1.0
+				_auto_pass()
+	else:
+		_my_follow_ms = -1.0
 	# 在线模式回合倒计时(仅整数秒变化时更新文字, 避免每帧重排)
 	if mode == "online" and _turn_remain > 0.0:
 		_turn_remain -= delta
@@ -189,14 +203,25 @@ func _advance() -> void:
 			break
 		var phase: String = state["phase"]
 		if phase == "play":
-			if int(state["turn"]) == 0 and not auto_pilot:
+			var seat_to_act := int(state["turn"])
+			if seat_to_act == 0 and not auto_pilot:
+				# 停靠在玩家回合: 压不过也自动"不要"(无需等玩家手动)
+				if not (state["lead"] as Dictionary).is_empty():
+					var act: Dictionary = BotPlayerGd.decide(state, 0)
+					if str(act.get("t")) == "pass":
+						_auto_pass()
+						continue
 				_vibrate(40)  # 轮到你(移动端触感)
 				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			if gen != _advance_gen or not is_inside_tree():
 				return
-			var action := BotPlayerGd.decide(state, int(state["turn"]))
+			# 等待期间局面可能被推进(如自动"不要"): 重新评估而非套用旧座位,
+			# 否则 AI 动作打在错误座位上(not_your_turn)导致循环死亡
+			if str(state["phase"]) != "play" or int(state["turn"]) != seat_to_act:
+				continue
+			var action := BotPlayerGd.decide(state, seat_to_act)
 			var r := _local_apply(action)
 			if not bool(r["ok"]):
 				push_error("local table: AI 非法动作 %s" % str(r["error"]))
@@ -213,6 +238,8 @@ func _advance() -> void:
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			if gen != _advance_gen or not is_inside_tree():
 				return
+			if str(state["phase"]) != "exchange":
+				continue
 			var action := BotPlayerGd.decide(state, int(state["turn"]))
 			var r2 := GameStateGd.apply(state, action)
 			if not bool(r2["ok"]):
