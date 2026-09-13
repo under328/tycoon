@@ -96,7 +96,16 @@ func _ready() -> void:
 	Audio.play_bgm("table")
 
 
+var f_dbg := 0
+
 func _process(delta: float) -> void:
+	if f_dbg < 600:
+		f_dbg += 1
+		if f_dbg % 20 == 0:
+			print("[tc] phase=%s turn=%d lead=%s follow=%.2f advancing=%s" % [
+				str(state.get("phase", "?")), int(state.get("turn", -9)),
+				str(not (state.get("lead", {}) as Dictionary).is_empty()),
+				_my_follow_ms, str(advancing)])
 	if _emoji_cd > 0.0:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:
@@ -951,7 +960,7 @@ func _relayout() -> void:
 	chat_log.position = Vector2(16, 120.0 if compact else h - 258.0)
 	chat_edit.position = Vector2(440.0 if not compact else 240.0,
 			(8.0 if compact else (h - 58)))
-	chat_btn.position = Vector2(788.0 if not compact else 592.0,
+	chat_btn.position = Vector2(744.0 if not compact else 592.0,
 			(8.0 if compact else (h - 58)))
 	# 快捷表情(联机): 贴底缘
 	for i in _emoji_btns.size():

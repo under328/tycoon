@@ -283,6 +283,12 @@ func _stop_host() -> void:
 func _enter_table() -> void:
 	if lobby != null:
 		lobby.visible = false
+	# 守卫: 大厅的 view_changed 在每个服务器广播都会触发 start_game,
+	# 已有牌桌时绝不再实例化(否则牌桌叠罗汉: 特效闪烁/卡顿/操作多次)
+	if table != null and is_instance_valid(table):
+		table.visible = true
+		_fit_safe_area(table)
+		return
 	table = TableScene.instantiate()
 	table.name = "Table"
 	table.mode = "online"
