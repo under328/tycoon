@@ -150,14 +150,20 @@ func _reg_at(view: String, n: Control, pos: Vector2, mode: String, dy_frac: floa
 ## 视图切换: 入口页/房间页互斥显隐(返回按钮/状态栏两页共享)
 func _apply_view(v: String) -> void:
 	_view = v
+	# 双集共享的控件(返回按钮/状态栏)只换位置与文案, 始终可见 —
+	# 若参与两个互斥显隐循环, 后一个循环会把它们藏掉(回归过一次)
 	for c in _entry_set:
-		c.visible = v == "entry"
+		if not _room_set.has(c):
+			c.visible = v == "entry"
 	for c in _room_set:
-		c.visible = v == "room"
+		if not _entry_set.has(c):
+			c.visible = v == "room"
 	if host_panel != null:
 		host_panel.visible = _host_panel_wanted and v == "entry"
 	# 左上角按钮: 入口页=回主菜单; 房间页=离开房间
 	back_btn.text = "离开房间" if v == "room" else "← 主菜单"
+	back_btn.visible = true
+	status_label.visible = true
 	_relayout()
 
 
