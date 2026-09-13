@@ -56,6 +56,17 @@ func _refit_bleed_bg() -> void:
 	if _bleed_bg != null:
 		_bleed_bg.position = Vector2.ZERO
 		_bleed_bg.size = get_viewport().get_visible_rect().size
+		# 条带颜色跟随当前场景的背景顶色(菜单天空/牌桌夜空/大厅深靛),
+		# 让安全区外的露出条带与场景无缝衔接
+		var p: String = ""
+		if _fit_target != null and is_instance_valid(_fit_target) 				and _fit_target.get_script() != null:
+			p = str(_fit_target.get_script().resource_path)
+		if p.ends_with("main_menu.gd"):
+			_bleed_bg.color = Color("232348")
+		elif p.ends_with("table.gd"):
+			_bleed_bg.color = Color("191934")
+		else:
+			_bleed_bg.color = AppTheme.BG
 
 
 ## 窗口尺寸/设备旋转变化后重算安全区(手机横屏翻转时刘海换边)
