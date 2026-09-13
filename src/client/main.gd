@@ -17,6 +17,7 @@ var net = null
 var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
 var _fit_target: Control = null # 最近一次做过安全区适配的可见场景
 var _resume_dlg: Control = null # "返回上一局?"确认框
+var _bleed_bg: ColorRect = null # 全屏铺底色(填充刘海/挖孔避让条, 消除异色边)
 
 
 func _ready() -> void:
@@ -26,6 +27,11 @@ func _ready() -> void:
 		net.setup(true)
 		add_child(net)
 		return
+	_bleed_bg = ColorRect.new()
+	_bleed_bg.color = AppTheme.BG
+	_bleed_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bleed_bg)  # 第一个子节点 = 所有场景之下
+	_refit_bleed_bg()
 	menu = MainMenuScript.new()
 	menu.name = "Menu"
 	add_child(menu)
@@ -38,8 +44,17 @@ func _ready() -> void:
 		_start_online()  # --client 直达联机大厅
 
 
+## 底色铺满整个视口(含安全区外的刘海/挖孔条); 场景根被 _fit_safe_area
+## 内缩后, 露出的条带与场景背景同色, 视觉上无缝
+func _refit_bleed_bg() -> void:
+	if _bleed_bg != null:
+		_bleed_bg.position = Vector2.ZERO
+		_bleed_bg.size = get_viewport().get_visible_rect().size
+
+
 ## 窗口尺寸/设备旋转变化后重算安全区(手机横屏翻转时刘海换边)
 func _refit_safe_area() -> void:
+	_refit_bleed_bg()
 	if _fit_target != null and is_instance_valid(_fit_target) and _fit_target.visible:
 		_fit_safe_area(_fit_target)
 

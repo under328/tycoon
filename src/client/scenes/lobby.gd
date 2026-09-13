@@ -127,6 +127,24 @@ func _auto_connect() -> void:
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 	net.auto_reconnect = true
 	net.connect_to(host, port)
+	_arm_loopback_guard()
+
+
+## 回环地址快速止损: 4 秒仍未连上 → 停止重试并给出联机指引。
+## (手机默认设置会连 127.0.0.1, 那里没有服务器; ENet 自身的失败信号
+## 要 ~30 秒才到, 玩家等不起, 需要立刻给出"本机开房/填主机IP"指引)
+func _arm_loopback_guard() -> void:
+	var timer := get_tree().create_timer(4.0)
+	timer.timeout.connect(func() -> void:
+		if auto_create_room or net == null or not is_inside_tree():
+			return  # 本机开房流程自己管理连接
+		if net._is_connected():
+			return
+		var a := str(net.address)
+		if a != "127.0.0.1" and a != "localhost" and a != "::1":
+			return
+		net.disconnect_all()
+		_set_status("127.0.0.1 是本机回环地址, 这里没有服务器。\n① 点【本机开房】自己当主机\n② 或右上角填主机 IP(Tailscale 100.x.x.x)点【连接】\n③ 或点【粘贴邀请码, 一键加入】", COLOR_RED))
 
 
 ## 供 main(本机开房) 推送状态/主机 IP 信息
@@ -239,6 +257,7 @@ func _manual_connect() -> void:
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to(host, port)
+	_arm_loopback_guard()
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 
 
@@ -624,6 +643,13 @@ func _bind_net() -> void:
 		net.request_stats())
 	net.connection_failed.connect(func() -> void:
 		_conn_fails += 1
+		# 手机连 127.0.0.1 = 连自己, 那里没有服务器; 停止无休止重试, 给出明确指引
+		# (本机开房流程不受影响: 它带 auto_create_room 标记且连的是内嵌服务器)
+		var loopback: bool = str(net.address) in ["127.0.0.1", "localhost", "::1"]
+		if loopback and not auto_create_room:
+			net.disconnect_all()
+			_set_status("127.0.0.1 是本机回环地址, 这里没有服务器。\n① 点【本机开房】自己当主机\n② 或右上角填主机 IP(Tailscale 100.x.x.x)点【连接】\n③ 或点【粘贴邀请码, 一键加入】", COLOR_RED)
+			return
 		_set_status("无法连接 %s:%d（第 %d 次），自动重试中…\n确认服务器已启动、地址正确、防火墙放行"
 				% [net.address, net.port, _conn_fails], COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
