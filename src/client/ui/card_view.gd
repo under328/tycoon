@@ -20,21 +20,25 @@ const COLOR_GOLD := Color("e0a83c")
 var card := -1:
 	set(v):
 		card = v
-		queue_redraw()
+		_redraw_card()
 var selected := false:
 	set(v):
 		selected = v
-		queue_redraw()
+		_redraw_card()
 var face_down := false:
 	set(v):
 		face_down = v
-		queue_redraw()
+		_redraw_card()
 ## 显式指定卡面皮肤 id(商城预览用); 空 = 跟随已装备
 var palette_id := "":
 	set(v):
 		palette_id = v
 		_refresh_palette()
-		queue_redraw()
+		_redraw_card()
+
+## 牌背纹样绘制层: 纹样网格刻意越界(曲线出血到边缘), 由裁剪容器收进牌面
+var _back_clip: Control = null
+var _back_paint: Control = null
 
 var _pal: Dictionary = {}
 var _face_sb := StyleBoxFlat.new()
@@ -50,7 +54,19 @@ func _init(p_card: int = -1) -> void:
 	card = p_card
 	custom_minimum_size = Vector2(72, 100)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	clip_contents = true  # 牌背纹样/放射线严格限制在牌面内
+	# 牌背纹样遮罩: 子层按本体已绘制内容(牌面板)裁剪 —
+	# clip_contents 的裁剪区不随控件旋转(旋转卡必溢出), clip_children 旋转安全;
+	# AND_DRAW = 本体照常绘制, 子层以本体内容为遮罩
+	clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+
+	# 纹样层容器: 相对牌面板内缩一圈边框, 内含绘制子层
+	_back_clip = Control.new()
+	_back_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_back_clip)
+	_back_paint = BackPaint.new()
+	_back_paint.card = self
+	_back_paint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_back_clip.add_child(_back_paint)
 
 	_face_sb.bg_color = COLOR_FACE
 	_face_sb.set_corner_radius_all(7)
@@ -83,10 +99,35 @@ func _init(p_card: int = -1) -> void:
 
 
 func _ready() -> void:
-	# 画布级自裁剪: 牌背纹样/和纸颗粒等 _draw 超界部分严格裁进牌面
-	# (clip_contents 只裁子节点, 裁不到控件自身的 _draw)
-	RenderingServer.canvas_item_set_clip(get_canvas_item(), true)
+	# 裁剪容器随牌面尺寸走(边框内缩), 纹样绘制层在其中被裁剪
+	resized.connect(_layout_back_paint)
+	_layout_back_paint()
 	_refresh_palette()  # 入树后解析 Wallet 装备卡面(_init 阶段尚不可达)
+
+
+func _layout_back_paint() -> void:
+	if _back_clip == null:
+		return
+	var m := 2.0 * (size.y / 100.0)  # 边框宽: 纹样裁剪区向内收一圈
+	_back_clip.position = Vector2(m, m)
+	var sz := size - Vector2(m, m) * 2.0
+	_back_clip.size = Vector2(maxf(sz.x, 0.0), maxf(sz.y, 0.0))
+
+
+## 重绘卡牌本体 + 牌背纹样层
+func _redraw_card() -> void:
+	queue_redraw()
+	if _back_paint != null:
+		_back_paint.queue_redraw()
+
+
+## 牌背纹样层(子节点): 绘制命令落在子层, 由 _back_clip 裁剪到牌面内
+class BackPaint extends Control:
+	var card = null  # CardView(脚本无全局类名, 用鸭子类型引用宿主)
+
+	func _draw() -> void:
+		if card != null and card.face_down:
+			card._draw_back_pattern(self)
 
 
 ## 当前装备卡面皮肤的调色板(跟随商城更换)
@@ -494,27 +535,31 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 ## 主题牌背: 和纸=青海波+樱花 / 墨玉=远山月夜 / 绯红=市松纹+焰芯 / 苍海=层浪落日。
 func _draw_back() -> void:
 	draw_style_box(_back_sb, Rect2(Vector2.ZERO, size))
+
+
+## 牌背纹样(绘制在 _back_paint 子层, 坐标可越界, 由 _back_clip 裁进牌面)
+func _draw_back_pattern(host: CanvasItem) -> void:
 	var motif := str(_pal.get("motif", "washi"))
 	var border_c: Color = _pal["border"]
 	match motif:
 		"sumi":
-			draw_circle(Vector2(size.x * 0.72, size.y * 0.26), size.y * 0.16,
+			host.draw_circle(Vector2(size.x * 0.72, size.y * 0.26), size.y * 0.16,
 					Color(_pal["face"], 0.30))
 			var m1 := PackedVector2Array([
 				Vector2(0, size.y * 0.72), Vector2(size.x * 0.22, size.y * 0.46),
 				Vector2(size.x * 0.46, size.y * 0.70), Vector2(size.x * 0.66, size.y * 0.52),
 				Vector2(size.x, size.y * 0.74), Vector2(size.x, size.y), Vector2(0, size.y),
 			])
-			draw_colored_polygon(m1, Color(border_c, 0.28))
+			host.draw_colored_polygon(m1, Color(border_c, 0.28))
 			var m2 := PackedVector2Array([
 				Vector2(0, size.y * 0.88), Vector2(size.x * 0.3, size.y * 0.68),
 				Vector2(size.x * 0.62, size.y * 0.9), Vector2(size.x * 0.85, size.y * 0.74),
 				Vector2(size.x, size.y * 0.86), Vector2(size.x, size.y), Vector2(0, size.y),
 			])
-			draw_colored_polygon(m2, Color(border_c, 0.5))
-			draw_rect(Rect2(0, size.y * 0.58, size.x, size.y * 0.05),
+			host.draw_colored_polygon(m2, Color(border_c, 0.5))
+			host.draw_rect(Rect2(0, size.y * 0.58, size.x, size.y * 0.05),
 					Color(_pal["face"], 0.10))
-			draw_rect(Rect2(0, size.y * 0.78, size.x, size.y * 0.04),
+			host.draw_rect(Rect2(0, size.y * 0.78, size.x, size.y * 0.04),
 					Color(_pal["face"], 0.08))
 		"hi":
 			var cell := size.x / 7.0
@@ -523,25 +568,25 @@ func _draw_back() -> void:
 			for i in 7:
 				for row in 2:
 					var top_col := accent if (i + row) % 2 == 0 else dark
-					draw_rect(Rect2(i * cell, row * cell, cell, cell), top_col)
+					host.draw_rect(Rect2(i * cell, row * cell, cell, cell), top_col)
 					var yb := size.y - (row + 1) * cell
-					draw_rect(Rect2(i * cell, yb, cell, cell),
+					host.draw_rect(Rect2(i * cell, yb, cell, cell),
 							accent if (i + row) % 2 == 0 else dark)
 				for col_i in 2:
 					var side_col := accent if (i + col_i) % 2 == 0 else dark
-					draw_rect(Rect2(col_i * cell, i * cell, cell, cell), side_col)
+					host.draw_rect(Rect2(col_i * cell, i * cell, cell, cell), side_col)
 					var xr := size.x - (col_i + 1) * cell
-					draw_rect(Rect2(xr, i * cell, cell, cell), side_col)
+					host.draw_rect(Rect2(xr, i * cell, cell, cell), side_col)
 			var c := size / 2.0
 			var flame := PackedVector2Array()
 			for i in 14:
 				var ang := TAU * i / 14.0 - PI * 0.5
 				var rr := size.y * (0.20 if i % 2 == 0 else 0.13)
 				flame.append(c + Vector2.from_angle(ang) * rr)
-			draw_colored_polygon(flame, Color(_pal["red"], 0.75))
-			draw_circle(c, size.y * 0.07, Color(Wafu.GOLD, 0.85))
+			host.draw_colored_polygon(flame, Color(_pal["red"], 0.75))
+			host.draw_circle(c, size.y * 0.07, Color(Wafu.GOLD, 0.85))
 		"umi":
-			draw_circle(Vector2(size.x * 0.5, size.y * 0.30), size.y * 0.15,
+			host.draw_circle(Vector2(size.x * 0.5, size.y * 0.30), size.y * 0.15,
 					Color(_pal["red"], 0.65))
 			for li in 4:
 				var y := size.y * (0.48 + 0.13 * li)
@@ -549,7 +594,7 @@ func _draw_back() -> void:
 				var rr := size.x * 0.22
 				var xx := -rr
 				while xx < size.x + rr:
-					draw_arc(Vector2(xx, y), rr, PI, TAU, 12,
+					host.draw_arc(Vector2(xx, y), rr, PI, TAU, 12,
 							Color(border_c, col_a), size.x * 0.03, true)
 					xx += rr * 1.5
 		_:
@@ -562,21 +607,21 @@ func _draw_back() -> void:
 				var xx := -rr * 1.5 + offset
 				while xx < size.x + rr * 1.5:
 					for ring in 3:
-						draw_arc(Vector2(xx, yy), rr * (0.9 - ring * 0.28),
+						host.draw_arc(Vector2(xx, yy), rr * (0.9 - ring * 0.28),
 								0, PI, 16, Color(border_c, 0.32 - ring * 0.08),
 								size.x * 0.025, true)
 					xx += rr * 2
 				yy += row_h
 				rowi += 1
 			var cm := size / 2.0
-			draw_circle(cm, size.y * 0.17, Color(_pal["back"], 0.9))
+			host.draw_circle(cm, size.y * 0.17, Color(_pal["back"], 0.9))
 			for i in 5:
 				var ang := TAU * i / 5.0 - PI * 0.5
-				draw_circle(cm + Vector2.from_angle(ang) * size.y * 0.11,
+				host.draw_circle(cm + Vector2.from_angle(ang) * size.y * 0.11,
 						size.y * 0.07, Color(_pal["face"], 0.8))
-			draw_circle(cm, size.y * 0.045, Color(Wafu.GOLD, 0.9))
+			host.draw_circle(cm, size.y * 0.045, Color(Wafu.GOLD, 0.9))
 	var s2 := size.y / 100.0
-	draw_rect(Rect2(Vector2(5, 5) * s2, size - Vector2(10, 10) * s2),
+	host.draw_rect(Rect2(Vector2(5, 5) * s2, size - Vector2(10, 10) * s2),
 			Color(_pal["border"], 0.4), false, 1.5 * s2)
-	Wafu.corner_ticks(self, Rect2(Vector2(2, 2) * s2, size - Vector2(4, 4) * s2),
+	Wafu.corner_ticks(host, Rect2(Vector2(2, 2) * s2, size - Vector2(4, 4) * s2),
 			6.0 * s2, Color(Wafu.GOLD, 0.55))
