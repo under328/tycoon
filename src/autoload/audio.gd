@@ -8,6 +8,9 @@ var bgm_player: AudioStreamPlayer
 var _bgm_tracks := {}
 var _bgm_current := ""
 var _bgm_thread: Thread = null   # 对局曲后台预合成(避免进桌主线程卡顿)
+var _table_synth_done := false   # 预合成结果已注册(主线程可见); 防兜底路径在
+                                 # "线程已结束但 deferred 注册未跑"的一帧窗口内
+                                 # 于主线程重复合成整轨(1-4s 冻结 → 手机 ANR)
 var _sfx_players: Array = []
 var _sfx_next := 0
 var library := {}
@@ -19,7 +22,9 @@ func _ready() -> void:
 	# 首页曲启动即合成; 对局两曲较长 → 后台线程预合成(主线程整轨合成会冻结 1-4 秒)
 	_bgm_tracks["lobby"] = Synth.bgm_lobby()
 	_bgm_thread = Thread.new()
-	_bgm_thread.start(_synth_table_tracks)
+	if _bgm_thread.start(_synth_table_tracks) != OK:
+		_bgm_thread = null
+		_synth_table_tracks()  # 降级: 主线程合成(Thread.start 失败极罕见)
 	apply_volumes()
 	play_bgm("lobby")
 
@@ -33,6 +38,7 @@ func _synth_table_tracks() -> void:
 func _register_table_tracks(koto: AudioStreamWAV, rev: AudioStreamWAV) -> void:
 	_bgm_tracks["table"] = koto
 	_bgm_tracks["table_rev"] = rev
+	_table_synth_done = true
 	if _bgm_thread != null:
 		_bgm_thread.wait_to_finish()
 		_bgm_thread = null
@@ -116,7 +122,7 @@ func _build_library() -> void:
 # ---------------------------------------------------------------- API
 
 func play(sfx_name: String) -> void:
-	if not library.has(sfx_name):
+	if not library.has(sfx_name) or _sfx_players.is_empty():
 		return
 	var p: AudioStreamPlayer = _sfx_players[_sfx_next]
 	_sfx_next = (_sfx_next + 1) % _sfx_players.size()
@@ -127,10 +133,14 @@ func play(sfx_name: String) -> void:
 ## 切换 BGM 轨道（"lobby"/"table"/"table_rev"）；同轨不重启。
 ## 对局曲后台预合成中 → 定时重试(绝不主线程合成卡顿); 兜底同步合成。
 func play_bgm(track: String = "lobby") -> void:
+	if bgm_player == null:
+		return
 	if not _bgm_tracks.has(track):
 		match track:
 			"table", "table_rev":
-				if _bgm_thread != null:
+				# 合成未注册(线程仍在跑, 或已结束但 deferred 注册未到) → 只重试,
+				# 不在主线程兜底合成 — 兜底路径在手机上冻结 1-4 秒即 ANR
+				if _bgm_thread != null or not _table_synth_done:
 					get_tree().create_timer(0.25).timeout.connect(
 							play_bgm.bind(track))
 					return

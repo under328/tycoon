@@ -125,7 +125,12 @@ func _ready() -> void:
 
 ## Tailscale 就绪检测: 有 CGNAT 段地址即就绪; 未就绪显示一键下载。
 ## 定时刷新 — 用户从商店装完回来, 状态自动转绿, 无需重启。
+## 页面不可见时跳过(每 3s 的 IP 枚举在首页/牌桌纯属空转)。
 func _refresh_ts_chip() -> void:
+	if _ts_state_lbl == null:
+		return  # 进树时的可见性通知早于 _ready → UI 未建
+	if not is_visible_in_tree():
+		return
 	var ips: Array = Responsive.tailscale_ips()
 	var ready := not ips.is_empty()
 	_ts_dot.color = COLOR_GREEN if ready else COLOR_RED
@@ -209,10 +214,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		go_back()
 
 
-## 每次进入联机页面清空上次输入的房间码(输入框跨页面残留, 避免误入旧房)
+## 每次进入联机页面清空上次输入的房间码(输入框跨页面残留, 避免误入旧房);
+## 重新可见时立即刷新联机准备条(隐藏期间定时器空转, 不主动查地址)
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_VISIBILITY_CHANGED and visible and code_edit != null:
-		code_edit.text = ""
+	if what == NOTIFICATION_VISIBILITY_CHANGED and visible:
+		if code_edit != null:
+			code_edit.text = ""
+		_refresh_ts_chip()
 
 
 ## 返回: 房间页=离开房间回入口; 入口页=回主菜单
@@ -928,8 +936,10 @@ func _open_ts_fallback() -> void:
 
 ## ── 局域网发现(同 WiFi 一键加入) ──
 ## 每 3 秒广播一次查询, 主机(游戏端口+2)单播回房间概览; 超时 12s 未回包移除。
-## 本机开房/已进房时不搜(不列自己; 房间页也不需要)。
+## 本机开房/已进房/整页不可见(首页或牌桌)时不搜 — 空转定时器耗电且无意义。
 func _scan_tick() -> void:
+	if not is_visible_in_tree():
+		return
 	_scan_send()
 	_scan_read()
 	_rebuild_found_rows()
