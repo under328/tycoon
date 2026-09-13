@@ -38,6 +38,7 @@ var _emoji_cd := 0.0
 var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
+var _timer_shown := -1           # 倒计时已显示的整数秒(文字门控)
 var _pulse: Tween = null       # "轮到你"状态文字呼吸脉冲
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
@@ -98,18 +99,19 @@ func _process(delta: float) -> void:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:
 		_chat_cd -= delta
-	# 在线模式回合倒计时
+	# 在线模式回合倒计时(仅整数秒变化时更新文字, 避免每帧重排)
 	if mode == "online" and _turn_remain > 0.0:
 		_turn_remain -= delta
 		if _turn_total > 0:
 			var remain := maxf(_turn_remain, 0.0)
 			var cur := int(ceil(remain))
-			timer_label.text = "⏱ %d" % cur
-			timer_label.add_theme_color_override("font_color",
-					AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
-			if remain <= 5.0 and cur >= 1 and cur != _prev_tick:
-				_prev_tick = cur
-				_sfx("tick")
+			if cur != _timer_shown:
+				_timer_shown = cur
+				timer_label.text = "⏱ %d" % cur
+				timer_label.add_theme_color_override("font_color",
+						AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
+				if remain <= 5.0 and cur >= 1:
+					_sfx("tick")
 	# 移动端: 聊天框聚焦时虚拟键盘会盖住底部输入行 → 整行上移避让
 	if mode == "online" and OS.has_feature("android"):
 		_update_keyboard_avoid()
@@ -1085,6 +1087,7 @@ func _real_name(seat: int) -> String:
 
 
 ## 对手手牌: 重叠牌背(斗地主式), 数量跟随该座位剩牌数
+## 增量增删(任一对手出牌只动差值, 不再整扇 39 张子树重建)
 func _refresh_opp_hands(view: Dictionary) -> void:
 	var my := int(view["my_seat"])
 	var counts: Array = view["counts"]
@@ -1095,10 +1098,12 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 			continue  # 数量未变不重建(消除每手 AI 动作的节点抖动)
 		box.set_meta("count", n)
 		var vert: bool = bool(box.get_meta("vert"))
-		for child in box.get_children():
-			child.queue_free()
-		box.visible = n > 0
-		for k in n:
+		while box.get_child_count() > n:
+			var dead: Control = box.get_child(box.get_child_count() - 1)
+			box.remove_child(dead)
+			dead.queue_free()
+		while box.get_child_count() < n:
+			var k := box.get_child_count()
 			var cv := CardViewScript.new(-1)
 			cv.face_down = true
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1106,6 +1111,7 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 			cv.size = Vector2(40, 56)
 			cv.position = Vector2(0, k * 11) if vert else Vector2(k * 12, 0)
 			box.add_child(cv)
+		box.visible = n > 0
 
 
 ## 座位信息区文本: 名字 / 剩牌与积分 / 身份（出完才显示）
@@ -1156,17 +1162,17 @@ func _refresh_field(view: Dictionary) -> void:
 	var grew := field.size() > _field_count
 	var emptied := field.is_empty() and _field_count > 0
 	_field_count = field.size()
-	for child in field_box.get_children():
-		child.queue_free()
 	if emptied:
+		for child in field_box.get_children():
+			child.queue_free()
 		_sfx("clear")
 		return
-	for i in field.size():
-		var entry: Dictionary = field[i]
+	# 增量追加: 出牌只加最新一手(整排重建会闪一帧鬼影 — queue_free 延迟移除)
+	if grew:
+		var entry: Dictionary = field[field.size() - 1]
 		var holder := VBoxContainer.new()
 		holder.add_theme_constant_override("separation", 2)
-		var is_latest := i == field.size() - 1
-		var name_lb := _make_label(14, AppTheme.GOLD if is_latest else AppTheme.DIM)
+		var name_lb := _make_label(14, AppTheme.GOLD)
 		name_lb.text = _seat_name(view, int(entry["seat"]))
 		name_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		holder.add_child(name_lb)
@@ -1175,23 +1181,48 @@ func _refresh_field(view: Dictionary) -> void:
 		var fw := 70.0 if Responsive.is_touch() else 56.0
 		var fh := 98.0 if Responsive.is_touch() else 78.0
 		for c in entry["combo"]["cards"]:
-			hz.add_child(_make_card(int(c), fw, fh, false, false))
+			var old_card: Control = _make_card(int(c), fw, fh, false, false)
+			old_card.modulate = Color.WHITE
+			hz.add_child(old_card)
 		holder.add_child(hz)
 		field_box.add_child(holder)
-		# 只突出最后一手: 先前的牌做旧(降透明+偏冷), 视线聚焦当前须压的牌
-		if not is_latest:
-			holder.modulate = Color(0.75, 0.78, 0.92, 0.5)
-		if is_latest and grew:
-			# 最新一手: 淡入 + 弹性缩放（容器托管布局，位置不可直接动画）
-			holder.pivot_offset = Vector2(120, 60)
-			holder.modulate.a = 0.0
-			holder.scale = Vector2(0.75, 0.75)
-			var tw := holder.create_tween()
-			tw.set_parallel(true)
-			tw.tween_property(holder, "modulate:a", 1.0, 0.22)
-			tw.tween_property(holder, "scale", Vector2.ONE, 0.22)\
-					.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			_sfx("play_card")
+		# 最新一手高亮: 淡入 + 弹性缩放; 上一手降为做旧
+		var prev_idx := field_box.get_child_count() - 2
+		if prev_idx >= 0:
+			var prev: Control = field_box.get_child(prev_idx)
+			prev.modulate = Color(0.75, 0.78, 0.92, 0.5)
+			for lb in prev.get_children():
+				if lb is Label:
+					(lb as Label).add_theme_color_override("font_color", AppTheme.DIM)
+		holder.pivot_offset = Vector2(120, 60)
+		holder.modulate.a = 0.0
+		holder.scale = Vector2(0.75, 0.75)
+		var tw := holder.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(holder, "modulate:a", 1.0, 0.22)
+		tw.tween_property(holder, "scale", Vector2.ONE, 0.22)\
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_sfx("play_card")
+	else:
+		# 手数变少(异常/回退): 全量重建兜底
+		for child in field_box.get_children():
+			child.queue_free()
+		for i in field.size():
+			var entry: Dictionary = field[i]
+			var holder := VBoxContainer.new()
+			holder.add_theme_constant_override("separation", 2)
+			var name_lb := _make_label(14, AppTheme.DIM)
+			name_lb.text = _seat_name(view, int(entry["seat"]))
+			name_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			holder.add_child(name_lb)
+			var hz := HBoxContainer.new()
+			hz.add_theme_constant_override("separation", 4)
+			var fw := 70.0 if Responsive.is_touch() else 56.0
+			var fh := 98.0 if Responsive.is_touch() else 78.0
+			for c in entry["combo"]["cards"]:
+				hz.add_child(_make_card(int(c), fw, fh, false, false))
+			holder.add_child(hz)
+			field_box.add_child(holder)
 
 
 func _make_card(card_id: int, w: float, h: float, is_selected: bool, _clickable := true) -> Control:

@@ -44,6 +44,7 @@ var _want_connection := false
 var _retry_timer := 0.0
 var _fail_count := 0
 var _autoplay_armed := false
+var _last_view_sig := 0        # 上一视图哈希(同内容去重)
 var _had_view := false
 var _welcomed := false
 var _pending_ops: Array = []   # 握手完成前缓存的房间操作
@@ -274,6 +275,11 @@ func s_game_view(data: Dictionary) -> void:
 	if is_server:
 		return
 	var view: Dictionary = data.get("view", {})
+	# 同内容视图去重: 重连/重复广播不再触发整桌刷新(闪烁源之一)
+	var sig := hash(view)
+	if sig == _last_view_sig and not latest_view.is_empty():
+		return
+	_last_view_sig = sig
 	latest_view = view
 	my_seat = int(view.get("my_seat", my_seat))
 	_had_view = true

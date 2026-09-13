@@ -28,6 +28,9 @@ var selected := false:
 var face_down := false:
 	set(v):
 		face_down = v
+		# 遮罩仅牌背需要(纹样刻意出血; 牌面内容不越界) — 离屏合成逐卡
+		# 开启在手机上代价高, 牌面态关闭
+		clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW if v 				else CanvasItem.CLIP_CHILDREN_DISABLED
 		_redraw_card()
 ## 显式指定卡面皮肤 id(商城预览用); 空 = 跟随已装备
 var palette_id := "":
@@ -41,23 +44,50 @@ var _back_clip: Control = null
 var _back_paint: Control = null
 
 var _pal: Dictionary = {}
-var _face_sb := StyleBoxFlat.new()
-var _inner_sb := StyleBoxFlat.new()
-var _joker_sb := StyleBoxFlat.new()
-var _back_sb := StyleBoxFlat.new()
+var _sb: Dictionary = {}          # 共享样式盒包(按 palette_id 缓存, 见 _styleboxes)
 var _sel_sb := StyleBoxFlat.new()
 var _font_ascii: Font = AppTheme.display_font() if false else null
 var _font_cjk: Font = null
+
+## 共享样式盒: 同一卡面调色板只配置一次(重建卡牌不再逐个 new StyleBoxFlat)
+static var _sb_cache := {}
+
+
+static func _styleboxes(pal_id: String, pal: Dictionary) -> Dictionary:
+	if _sb_cache.has(pal_id):
+		return _sb_cache[pal_id]
+	var face := StyleBoxFlat.new()
+	face.bg_color = pal["face"]
+	face.set_corner_radius_all(7)
+	face.set_border_width_all(2)
+	face.border_color = pal["border"]
+	var inner := StyleBoxFlat.new()
+	inner.bg_color = Color(0, 0, 0, 0)
+	inner.set_corner_radius_all(5)
+	inner.set_border_width_all(1)
+	inner.border_color = Color(COLOR_BORDER, 0.6)
+	var joker := StyleBoxFlat.new()
+	joker.bg_color = Color(0, 0, 0, 0)
+	joker.set_corner_radius_all(7)
+	joker.set_border_width_all(2)
+	joker.border_color = COLOR_BORDER
+	var back := StyleBoxFlat.new()
+	back.bg_color = pal["back"]
+	back.set_corner_radius_all(7)
+	back.set_border_width_all(2)
+	back.border_color = COLOR_BORDER
+	var pack := {"face": face, "inner": inner, "joker": joker, "back": back}
+	_sb_cache[pal_id] = pack
+	return pack
 
 
 func _init(p_card: int = -1) -> void:
 	card = p_card
 	custom_minimum_size = Vector2(72, 100)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	# 牌背纹样遮罩: 子层按本体已绘制内容(牌面板)裁剪 —
-	# clip_contents 的裁剪区不随控件旋转(旋转卡必溢出), clip_children 旋转安全;
-	# AND_DRAW = 本体照常绘制, 子层以本体内容为遮罩
-	clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	# 牌背纹样遮罩仅牌背需要(纹样刻意出血; 牌面内容不越界)。
+	# 遮罩 = 离屏合成, 逐卡开启在手机上代价高 → face_down 切换时启停。
+	# 注意: clip_contents 的裁剪区不随控件旋转, 必须用 clip_children。
 
 	# 纹样层容器: 相对牌面板内缩一圈边框, 内含绘制子层
 	_back_clip = Control.new()
@@ -67,26 +97,6 @@ func _init(p_card: int = -1) -> void:
 	_back_paint.card = self
 	_back_paint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_back_clip.add_child(_back_paint)
-
-	_face_sb.bg_color = COLOR_FACE
-	_face_sb.set_corner_radius_all(7)
-	_face_sb.set_border_width_all(2)
-	_face_sb.border_color = COLOR_BORDER
-
-	_inner_sb.bg_color = Color(0, 0, 0, 0)
-	_inner_sb.set_corner_radius_all(5)
-	_inner_sb.set_border_width_all(1)
-	_inner_sb.border_color = Color(COLOR_BORDER, 0.6)
-
-	_joker_sb.bg_color = Color(0, 0, 0, 0)
-	_joker_sb.set_corner_radius_all(7)
-	_joker_sb.set_border_width_all(2)
-	_joker_sb.border_color = COLOR_BORDER
-
-	_back_sb.bg_color = COLOR_BACK_BG
-	_back_sb.set_corner_radius_all(7)
-	_back_sb.set_border_width_all(2)
-	_back_sb.border_color = COLOR_BORDER
 
 	_sel_sb.bg_color = Color(1, 1, 1, 0.10)
 	_sel_sb.set_corner_radius_all(7)
@@ -141,9 +151,7 @@ func _refresh_palette() -> void:
 	elif w != null:
 		cid = str(w.equipped_card)
 	_pal = SkinsLib.palette(cid)
-	_face_sb.bg_color = _pal["face"]
-	_face_sb.border_color = _pal["border"]
-	_back_sb.bg_color = _pal["back"]
+	_sb = _styleboxes(cid, _pal)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -171,13 +179,13 @@ func _draw() -> void:
 
 
 func _draw_face() -> void:
-	draw_style_box(_face_sb, Rect2(Vector2.ZERO, size))
+	draw_style_box(_sb["face"], Rect2(Vector2.ZERO, size))
 	if card < 0 or card > 53:
 		return
 	# 全部元素按牌面高度等比缩放(标准 100 高 → s=1.0)
 	var s := size.y / 100.0
 	# 内框细线(双框)
-	draw_style_box(_inner_sb, Rect2(Vector2(4, 4) * s, size - Vector2(8, 8) * s))
+	draw_style_box(_sb["inner"], Rect2(Vector2(4, 4) * s, size - Vector2(8, 8) * s))
 	# 和纸纵向微渐变(顶部微亮)
 	for gi in 4:
 		draw_rect(Rect2(0, size.y * gi / 4.0, size.x, size.y / 4.0 + 1.0),
@@ -308,7 +316,7 @@ func _draw_joker() -> void:
 				base.lerp(Color(0, 0, 0), 0.4 * float(i) / (strips - 1)))
 	Wafu.speckle(self, Rect2(Vector2(3, 3), size - Vector2(6, 6)), 16, 500 + card,
 			Color(Wafu.GOLD, 0.12))
-	draw_style_box(_joker_sb, Rect2(Vector2.ZERO, size))
+	draw_style_box(_sb["joker"], Rect2(Vector2.ZERO, size))
 	Wafu.corner_ticks(self, Rect2(Vector2(2, 2), size - Vector2(4, 4)), 6.0,
 			Color(Wafu.GOLD, 0.6))
 	var c := size / 2.0
@@ -530,8 +538,7 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 				var t := float(i) / 24.0
 				pts.append(c + Vector2(-s * 0.7 + t * s * 1.5,
 						s * 0.55 * sin(t * PI * 1.6)))
-			for i in range(1, pts.size()):
-				draw_line(pts[i - 1], pts[i], col, s * 0.16, true)
+			draw_polyline(pts, col, s * 0.16, true)  # 单次提交(原 24 条线)
 			draw_circle(pts[0], s * 0.17, col)
 			draw_line(pts[0] + Vector2(-s * 0.1, -s * 0.08),
 					c + Vector2(-s * 1.0, -s * 0.62), col, s * 0.05, true)
@@ -626,7 +633,7 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 
 ## 主题牌背: 和纸=青海波+樱花 / 墨玉=远山月夜 / 绯红=市松纹+焰芯 / 苍海=层浪落日。
 func _draw_back() -> void:
-	draw_style_box(_back_sb, Rect2(Vector2.ZERO, size))
+	draw_style_box(_sb["back"], Rect2(Vector2.ZERO, size))
 
 
 ## 牌背纹样(绘制在 _back_paint 子层, 坐标可越界, 由 _back_clip 裁进牌面)
@@ -737,7 +744,9 @@ func _draw_back_pattern(host: CanvasItem) -> void:
 			host.draw_rect(Rect2(size.x * 0.62, size.y * 0.66, size.x * 0.38,
 					size.y * 0.014), Color(_pal["black"], 0.4))
 		_:
-			var rr := size.x * 0.30
+			# 小牌(对手牌背扇 40px): 单环大格纹样, 绘制量 -70%
+			var small := size.x < 60.0
+			var rr := size.x * (0.44 if small else 0.30)
 			var row_h := rr * 0.9
 			var rowi := 0
 			var yy := -rr * 0.4
@@ -745,10 +754,14 @@ func _draw_back_pattern(host: CanvasItem) -> void:
 				var offset := 0.0 if rowi % 2 == 0 else rr
 				var xx := -rr * 1.5 + offset
 				while xx < size.x + rr * 1.5:
-					for ring in 3:
-						host.draw_arc(Vector2(xx, yy), rr * (0.9 - ring * 0.28),
-								0, PI, 16, Color(border_c, 0.32 - ring * 0.08),
-								size.x * 0.025, true)
+					if small:
+						host.draw_arc(Vector2(xx, yy), rr * 0.9, 0, PI, 10,
+								Color(border_c, 0.30), size.x * 0.03, true)
+					else:
+						for ring in 3:
+							host.draw_arc(Vector2(xx, yy), rr * (0.9 - ring * 0.28),
+									0, PI, 16, Color(border_c, 0.32 - ring * 0.08),
+									size.x * 0.025, true)
 					xx += rr * 2
 				yy += row_h
 				rowi += 1

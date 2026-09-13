@@ -5,6 +5,8 @@ const SkinsLib = preload("res://src/client/ui/skins.gd")
 
 var skin_id := "skin_default":
 	set(v):
+		if skin_id == v:
+			return  # 联机每次视图刷新都会赋值: 同值早退避免像素网格重绘
 		skin_id = v
 		queue_redraw()
 

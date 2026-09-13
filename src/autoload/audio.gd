@@ -7,6 +7,7 @@ const Synth := preload("res://src/client/audio/synth.gd")
 var bgm_player: AudioStreamPlayer
 var _bgm_tracks := {}
 var _bgm_current := ""
+var _bgm_thread: Thread = null   # 对局曲后台预合成(避免进桌主线程卡顿)
 var _sfx_players: Array = []
 var _sfx_next := 0
 var library := {}
@@ -15,10 +16,36 @@ var library := {}
 func _ready() -> void:
 	_setup_buses()
 	_build_library()
-	# 只在启动时合成首页曲; 对局两曲较长, 惰性合成(手机冷启动不再连卡三曲)
+	# 首页曲启动即合成; 对局两曲较长 → 后台线程预合成(主线程整轨合成会冻结 1-4 秒)
 	_bgm_tracks["lobby"] = Synth.bgm_lobby()
+	_bgm_thread = Thread.new()
+	_bgm_thread.start(_synth_table_tracks)
 	apply_volumes()
 	play_bgm("lobby")
+
+
+func _synth_table_tracks() -> void:
+	var koto := Synth.bgm_koto()
+	var rev := Synth.bgm_koto_rev()
+	_register_table_tracks.call_deferred(koto, rev)
+
+
+func _register_table_tracks(koto: AudioStreamWAV, rev: AudioStreamWAV) -> void:
+	_bgm_tracks["table"] = koto
+	_bgm_tracks["table_rev"] = rev
+	if _bgm_thread != null:
+		_bgm_thread.wait_to_finish()
+		_bgm_thread = null
+	# 预合成期间有排队的重试请求 → 立即补播
+	if (_bgm_current == "table" or _bgm_current == "table_rev") \
+			and not bgm_player.playing:
+		play_bgm(_bgm_current)
+
+
+func _exit_tree() -> void:
+	if _bgm_thread != null:
+		_bgm_thread.wait_to_finish()
+		_bgm_thread = null
 
 
 func _notification(what: int) -> void:
@@ -97,14 +124,18 @@ func play(sfx_name: String) -> void:
 	p.play()
 
 
-## 切换 BGM 轨道（"lobby"/"table"/"table_rev"）；同轨不重启；对局曲惰性合成。
+## 切换 BGM 轨道（"lobby"/"table"/"table_rev"）；同轨不重启。
+## 对局曲后台预合成中 → 定时重试(绝不主线程合成卡顿); 兜底同步合成。
 func play_bgm(track: String = "lobby") -> void:
 	if not _bgm_tracks.has(track):
 		match track:
-			"table":
-				_bgm_tracks["table"] = Synth.bgm_koto()
-			"table_rev":
-				_bgm_tracks["table_rev"] = Synth.bgm_koto_rev()
+			"table", "table_rev":
+				if _bgm_thread != null:
+					get_tree().create_timer(0.25).timeout.connect(
+							play_bgm.bind(track))
+					return
+				_bgm_tracks[track] = Synth.bgm_koto() if track == "table" \
+						else Synth.bgm_koto_rev()
 			_:
 				return
 	if _bgm_current == track and bgm_player.playing:

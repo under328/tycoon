@@ -51,29 +51,46 @@ static func seigaiha(ci: CanvasItem, size: Vector2, top_y: float, rows: int, ste
 			k += 1
 
 
-## 和纸颗粒(确定性噪点, 覆在牌面/面板上)
+## 和纸颗粒(确定性噪点, 覆在牌面/面板上)。
+## 性能: 颗粒烘焙进纹理缓存(按尺寸+种子), 绘制仅 1 次 draw_texture_rect。
+static var _speckle_tex := {}
+
 static func speckle(ci: CanvasItem, rect: Rect2, count: int, seed_v: int, color: Color) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_v
-	for i in count:
-		ci.draw_circle(
-			rect.position + Vector2(rng.randf() * rect.size.x, rng.randf() * rect.size.y),
-			rng.randf_range(0.5, 1.5), color)
+	var key := [int(rect.size.x), int(rect.size.y), seed_v, count]
+	if not _speckle_tex.has(key):
+		var img := Image.create(maxi(int(rect.size.x), 1), maxi(int(rect.size.y), 1),
+				false, Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_v
+		for i in count:
+			var cx := clampi(int(rng.randf() * img.get_width()), 0, img.get_width() - 1)
+			var cy := clampi(int(rng.randf() * img.get_height()), 0, img.get_height() - 1)
+			var rad := rng.randf_range(0.5, 1.5)
+			img.set_pixel(cx, cy, Color(1, 1, 1, 1.0 if rad > 1.0 else 0.6))
+			if rad > 1.2 and cx + 1 < img.get_width():
+				img.set_pixel(cx + 1, cy, Color(1, 1, 1, 0.5))
+		_speckle_tex[key] = ImageTexture.create_from_image(img)
+	ci.draw_texture_rect(_speckle_tex[key], rect, false, color)
 
 
-## 和风角饰(四角短金线)
+## 和风角饰(四角短金线): draw_multiline 单次提交
 static func corner_ticks(ci: CanvasItem, rect: Rect2, ln: float, color: Color) -> void:
 	var p := rect.position
 	var e := rect.end
-	for corner in [
+	var pts := PackedVector2Array()
+	for corner: Array in [
 		[p, Vector2(1, 1)], [Vector2(e.x, p.y), Vector2(-1, 1)],
 		[p + Vector2(0, rect.size.y), Vector2(1, -1)],
 		[e, Vector2(-1, -1)],
 	]:
 		var o: Vector2 = corner[0]
 		var d: Vector2 = corner[1]
-		ci.draw_line(o + Vector2(3 * d.x, 0), o + Vector2(3 * d.x + ln * d.x, 0), color, 2.0)
-		ci.draw_line(o + Vector2(0, 3 * d.y), o + Vector2(0, 3 * d.y + ln * d.y), color, 2.0)
+		pts.append(o + Vector2(3 * d.x, 0))
+		pts.append(o + Vector2((3 + ln) * d.x, 0))
+		pts.append(o + Vector2(0, 3 * d.y))
+		pts.append(o + Vector2(0, (3 + ln) * d.y))
+	ci.draw_multiline(pts, color, 2.0)
 
 
 ## 全屏描金边框
