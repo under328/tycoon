@@ -48,6 +48,10 @@ var _emoji_btns: Array = []
 var host_panel: PanelContainer
 var host_ip_value: Label
 var host_dl_btn: Button      # 未检测到 Tailscale 时显示的下载入口
+var _ts_chip: PanelContainer   # 联机准备条: Tailscale 就绪状态 + 一键下载
+var _ts_dot: ColorRect
+var _ts_state_lbl: Label
+var _ts_dl_btn: Button
 var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
@@ -87,7 +91,28 @@ func _ready() -> void:
 	_build_ui()
 	Responsive.watch(self, _relayout)
 	_bind_net()
+	_refresh_ts_chip()
+	var ts_timer := Timer.new()
+	ts_timer.wait_time = 3.0
+	ts_timer.timeout.connect(_refresh_ts_chip)
+	add_child(ts_timer)
+	ts_timer.start()
 	_auto_connect()
+
+
+## Tailscale 就绪检测: 有 CGNAT 段地址即就绪; 未就绪显示一键下载。
+## 定时刷新 — 用户从商店装完回来, 状态自动转绿, 无需重启。
+func _refresh_ts_chip() -> void:
+	var ips: Array = Responsive.tailscale_ips()
+	var ready := not ips.is_empty()
+	_ts_dot.color = COLOR_GREEN if ready else COLOR_RED
+	if ready:
+		_ts_state_lbl.text = "✓ 已就绪  %s" % str(ips[0])
+		_ts_state_lbl.add_theme_color_override("font_color", COLOR_GREEN)
+	else:
+		_ts_state_lbl.text = "未安装或未启动"
+		_ts_state_lbl.add_theme_color_override("font_color", COLOR_DIM)
+	_ts_dl_btn.visible = not ready
 
 
 ## 多设备自适应(1280x720 设计基准, 见 responsive.gd):
@@ -235,6 +260,7 @@ func show_host_panel(ip: String) -> void:
 	stats_label.visible = false
 	host_ip_value.text = ip if ip != "" else "未检测到 Tailscale\n(请安装并登录 Tailscale)"
 	host_dl_btn.visible = ip == ""
+	host_dl_btn.text = "⬇ 一键下载\n(%s)" % Responsive.platform_label()
 
 
 func hide_host_panel() -> void:
@@ -522,6 +548,41 @@ func _build_ui() -> void:
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(status_label)
 
+	# 联机准备条: Tailscale 就绪检测(定时刷新) + 按设备一键下载
+	_ts_chip = PanelContainer.new()
+	var ts_sb := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.92), Color(AppTheme.GOLD, 0.4), 10, 1)
+	ts_sb.content_margin_left = 14
+	ts_sb.content_margin_right = 14
+	ts_sb.content_margin_top = 10
+	ts_sb.content_margin_bottom = 10
+	_ts_chip.add_theme_stylebox_override("panel", ts_sb)
+	_ts_chip.position = Vector2(40, 108)
+	_ts_chip.custom_minimum_size = Vector2(368, 0)
+	add_child(_ts_chip)
+	var ts_row := HBoxContainer.new()
+	ts_row.add_theme_constant_override("separation", 10)
+	_ts_chip.add_child(ts_row)
+	_ts_dot = ColorRect.new()
+	_ts_dot.custom_minimum_size = Vector2(12, 12)
+	_ts_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ts_row.add_child(_ts_dot)
+	var ts_col := VBoxContainer.new()
+	ts_col.add_theme_constant_override("separation", 2)
+	ts_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ts_row.add_child(ts_col)
+	var ts_title := AppTheme.make_label(14, AppTheme.DIM)
+	ts_title.text = "联机准备 · Tailscale"
+	ts_col.add_child(ts_title)
+	_ts_state_lbl = AppTheme.make_label(15, COLOR_WHITE)
+	_ts_state_lbl.text = "检测中…"
+	ts_col.add_child(_ts_state_lbl)
+	_ts_dl_btn = AppTheme.make_button(
+			"⬇ 一键下载\n(%s)" % Responsive.platform_label(), Vector2(120, 0), 13)
+	_ts_dl_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		OS.shell_open(Responsive.tailscale_url()))
+	ts_row.add_child(_ts_dl_btn)
+
 	stats_label = AppTheme.make_label(15, COLOR_DIM)
 	stats_label.position = Vector2(40, 350)
 	stats_label.custom_minimum_size = Vector2(360, 40)
@@ -558,17 +619,18 @@ func _build_ui() -> void:
 	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hp_hint.custom_minimum_size = Vector2(328, 0)
 	hp_box.add_child(hp_hint)
-	var hp_dl := AppTheme.make_button("⬇ 下载 Tailscale", Vector2(220, 38), 15)
+	var hp_dl := AppTheme.make_button("⬇ 一键下载", Vector2(220, 38), 15)
 	hp_dl.visible = false
 	hp_dl.pressed.connect(func() -> void:
 		Audio.play("click")
-		OS.shell_open("https://tailscale.com/download"))
+		OS.shell_open(Responsive.tailscale_url()))
 	hp_box.add_child(hp_dl)
 	host_dl_btn = hp_dl
 
 	# 自适应锚定注册(基准坐标 = 创建时的 position; 模式含义见 _reg/_relayout)
 	_reg(back_btn, "left")
 	_reg(update_btn, "left")
+	_reg(_ts_chip, "left")
 	_reg(host_panel, "left", 0.1)
 	_reg(status_label, "left", 0.1)
 	_reg(stats_label, "left", 0.15)

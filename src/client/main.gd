@@ -9,6 +9,7 @@ const LobbyScene := preload("res://src/client/scenes/lobby.tscn")
 const MainMenuScript := preload("res://src/client/scenes/main_menu.gd")
 const NetNodeGd := preload("res://src/protocol/net_node.gd")
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const Responsive = preload("res://src/client/theme/responsive.gd")
 
 var menu = null
 var lobby = null
@@ -257,7 +258,7 @@ func _start_host() -> void:
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to("127.0.0.1", port)
-	var ts := _tailscale_ips()
+	var ts: Array = Responsive.tailscale_ips()
 	lobby.host_invite_ip = "" if ts.is_empty() else str(ts[0])
 	lobby.auto_create_room = true  # 连上后自动创建房间, 房主直接复制邀请码
 	lobby.show_host_panel(lobby.host_invite_ip)
@@ -267,17 +268,6 @@ func _stop_host() -> void:
 	if embed_server != null:
 		NetNodeGd.stop_embedded(self)
 		embed_server = null
-
-
-## Tailscale 虚拟网 IP(100.x.x.x): 跨网络联机的首选地址
-func _tailscale_ips() -> Array:
-	var out: Array = []
-	for ip in IP.get_local_addresses():
-		var s := str(ip)
-		var parts := s.split(".")
-		if parts.size() == 4 and int(parts[0]) == 100:
-			out.append(s)
-	return out
 
 
 func _enter_table() -> void:

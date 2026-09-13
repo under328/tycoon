@@ -12,6 +12,48 @@ static func is_touch() -> bool:
 			or OS.has_feature("web_ios")
 
 
+## Tailscale 虚拟网 IP(CGNAT 段 100.64.0.0/10, 而非任意 100.x 公网地址)
+static func tailscale_ips() -> Array:
+	var out: Array = []
+	for ip in IP.get_local_addresses():
+		var s := str(ip)
+		var parts := s.split(".")
+		if parts.size() == 4 and parts[0] == "100" \
+				and int(parts[1]) >= 64 and int(parts[1]) <= 127:
+			out.append(s)
+	return out
+
+
+## 当前设备的 Tailscale 下载直达页(一键安装)
+static func tailscale_url() -> String:
+	if OS.has_feature("android"):
+		return "https://play.google.com/store/apps/details?id=com.tailscale.ipn"
+	if OS.has_feature("ios"):
+		return "https://apps.apple.com/app/tailscale/id1475387142"
+	if OS.has_feature("macos"):
+		return "https://tailscale.com/download/mac"
+	if OS.has_feature("windows"):
+		return "https://tailscale.com/download/windows"
+	if OS.has_feature("linux"):
+		return "https://tailscale.com/download/linux"
+	return "https://tailscale.com/download"
+
+
+## 平台名(下载按钮文案用)
+static func platform_label() -> String:
+	if OS.has_feature("android"):
+		return "Android"
+	if OS.has_feature("ios"):
+		return "iPhone/iPad"
+	if OS.has_feature("macos"):
+		return "macOS"
+	if OS.has_feature("windows"):
+		return "Windows"
+	if OS.has_feature("linux"):
+		return "Linux"
+	return "当前平台"
+
+
 ## 控件尺寸变化(窗口缩放/安全区收缩)时触发重排; 首帧延迟执行一次。
 ## 用法: Responsive.watch(self, _relayout)
 static func watch(c: Control, fn: Callable) -> void:

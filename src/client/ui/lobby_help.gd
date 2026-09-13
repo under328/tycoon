@@ -10,7 +10,7 @@ const Responsive = preload("res://src/client/theme/responsive.gd")
 # 每页: [标题, 正文(bbcode), 图示编号]
 const PAGES := [
 	["三步开始联机",
-		"[color=#7dd87d]准备(一次性)[/color]: 每台设备安装并登录 [color=#e0a83c]Tailscale[/color](免费, tailscale.com)。\n[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 会自动建房并显示你的 100.x.x.x 地址。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【复制邀请码】[/color], 把邀请码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 点 [color=#e0a83c]【粘贴邀请码, 一键加入】[/color], 自动连主机进房间。", 0],
+		"[color=#7dd87d]准备(一次性)[/color]: 每台设备安装并登录 [color=#e0a83c]Tailscale[/color](免费)。\n本页左侧 [color=#e0a83c]【联机准备】[/color]会自动检测状态, 未安装可 [color=#e0a83c]一键下载[/color](按设备直达)。\n[color=#e0a83c]① 房主[/color] 点 [color=#e0a83c]【本机开房】[/color], 会自动建房并显示你的 100.x.x.x 地址。\n[color=#e0a83c]② 房主[/color] 点 [color=#e0a83c]【复制邀请码】[/color], 把邀请码发给朋友。\n[color=#e0a83c]③ 朋友[/color] 点 [color=#e0a83c]【粘贴邀请码, 一键加入】[/color], 自动连主机进房间。", 0],
 	["朋友怎么连进来",
 		"所有设备安装 [color=#e0a83c]Tailscale[/color](免费), 并用【同一个账号】登录,\n即可组成同一虚拟局域网, 每台设备获得 100.x.x.x 专用地址。\n朋友操作: 右上角【服务器】填主机的 100.x.x.x → 【连接】→ 状态变绿 → 输入房间码【加入】。\n不在同一 WiFi 也能玩, 跨城市/跨运营商都没有问题。", 1],
 	["主机专用说明",
