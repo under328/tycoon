@@ -1068,15 +1068,16 @@ func _make_card(card_id: int, w: float, h: float, is_selected: bool, _clickable 
 	return cv
 
 
-## 手牌区统一手势(欢乐斗地主式):
-##   原地点击 = 单张翻转; 按住上滑横扫 = 连续选牌; 按住下滑横扫 = 连续取消。
+## 手牌区统一手势(欢乐斗地主式横向扫选):
+##   原地点击 = 单张翻转; 按住左右滑扫过 = 批量处理 — 模式由按下时
+##   首张牌的状态钉定: 未选中→本次扫过全选, 已选中→本次扫过全取消。
 ## 输入统一在 hand_box 处理(拖动事件只发给按下控件, 跨卡扫选必须容器层做),
 ## 卡牌控件本身 mouse_filter=IGNORE。
 var _drag_pressed := false
 var _drag_active := false
 var _drag_from := -1
-var _drag_up := true
-var _press_gy := 0.0
+var _drag_select := true
+var _press_gx := 0.0
 
 
 func _hand_index_at(local: Vector2) -> int:
@@ -1105,7 +1106,7 @@ func _on_hand_gui_input(event: InputEvent) -> void:
 			_drag_pressed = true
 			_drag_active = false
 			_drag_from = _hand_index_at(event.position)
-			_press_gy = event.global_position.y
+			_press_gx = event.global_position.x
 		else:
 			_drag_pressed = false
 			if not _drag_active and _drag_from >= 0:
@@ -1116,21 +1117,20 @@ func _on_hand_gui_input(event: InputEvent) -> void:
 			_drag_from = -1
 			_drag_active = false
 	elif event is InputEventMouseMotion and _drag_pressed and _drag_from >= 0:
-		var dy: float = event.global_position.y - _press_gy
+		var dx: float = event.global_position.x - _press_gx
 		if not _drag_active:
-			if absf(dy) <= 14.0:
+			if absf(dx) <= 14.0:
 				return
 			_drag_active = true
-			_drag_up = dy < 0.0  # 上滑=选, 下滑=取消
+			_drag_select = not selected.has(_hand_cards[_drag_from].card)
 			_sfx("click")
 		var idx := _hand_index_at(event.position)
 		if idx < 0:
 			return
 		for i in range(mini(_drag_from, idx), maxi(_drag_from, idx) + 1):
 			var cv: Control = _hand_cards[i]
-			var want := _drag_up
-			if selected.has(cv.card) != want:
-				_set_card_selected(cv, want)
+			if selected.has(cv.card) != _drag_select:
+				_set_card_selected(cv, _drag_select)
 		_layout_hand()
 
 
