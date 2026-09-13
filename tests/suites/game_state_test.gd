@@ -19,6 +19,67 @@ func run(t) -> void:
 	_full_match_flow(t)
 	_exchange_details(t)
 	_view_privacy(t)
+	_finish_no_free_lead(t)
+
+
+## 出完者的最后一手留在场上: 下家须压过/Pass, 全部 Pass 才由出完者下家领出
+## (回归: 曾直接"接风"跳过对手 / lead 残留被压的旧牌)
+func _finish_no_free_lead(t) -> void:
+	# 场景 A: 领出者打完最后两张对子出完
+	var st := GameStateGd.new_match({}, 7)
+	st["phase"] = "play"
+	st["turn"] = 0
+	st["lead"] = {}
+	st["must_include"] = -1
+	st["finish_order"] = []
+	st["hands"][0] = [16, 17]          # 对 7 (16=♠7? id16=值7花色0, 17=值7花色1)
+	st["hands"][1] = [24, 25]          # 对 9 可压
+	st["hands"][2] = [40, 41]
+	st["hands"][3] = [44, 45]
+	var r := GameStateGd.apply(st, {"t": "play", "seat": 0, "cards": [16, 17]})
+	t.expect(bool(r["ok"]), "领出最后对子出完成功")
+	var st2: Dictionary = r["state"]
+	t.expect((st2["finish_order"] as Array).has(0), "出完者登记名次")
+	t.expect(not (st2["lead"] as Dictionary).is_empty(), "出完者的牌立为 lead")
+	t.expect_eq(float(st2["lead"]["key"]), 7.0, "lead 为出完者的对 7")
+	t.expect_eq(int(st2["turn"]), 1, "轮到下家(非接风)")
+	# 下家依次 Pass(未出完者数-1=2 人) → 清桌, 领出权落到出完者下家
+	var st3: Dictionary = GameStateGd.apply(st2, {"t": "pass", "seat": 1})["state"]
+	t.expect(not (st3["field"] as Array).is_empty(), "单人 Pass 不清桌")
+	st3 = GameStateGd.apply(st3, {"t": "pass", "seat": 2})["state"]
+	t.expect((st3["field"] as Array).is_empty(), "全过清桌")
+	t.expect((st3["lead"] as Dictionary).is_empty(), "领出重置")
+	t.expect_eq(int(st3["turn"]), 1, "由出完者下家领出")
+
+	# 场景 B: 压别人的牌出完 → lead 是出完者的大牌而非被压的旧牌
+	# (座位3 领出单6 → 座位0 单A 压过并出完; 座位0 的下家是 1)
+	var sb := GameStateGd.new_match({}, 7)
+	sb["phase"] = "play"
+	sb["turn"] = 3
+	sb["lead"] = {}
+	sb["passes"] = 0
+	sb["last_player"] = -1
+	sb["must_include"] = -1
+	sb["finish_order"] = []
+	sb["hands"][3] = [12]              # 领出单 6
+	sb["hands"][0] = [44]              # 单 A 压过并出完
+	sb["hands"][1] = [20, 21]
+	sb["hands"][2] = [40, 41]
+	var rb := GameStateGd.apply(sb, {"t": "play", "seat": 3, "cards": [12]})
+	t.expect(bool(rb["ok"]), "座位3领出单6")
+	var s1: Dictionary = rb["state"]
+	t.expect_eq(int(s1["turn"]), 0, "轮到座位0")
+	var r0 := GameStateGd.apply(s1, {"t": "play", "seat": 0, "cards": [44]})
+	t.expect(bool(r0["ok"]), "座位0单A压过并出完")
+	var s0: Dictionary = r0["state"]
+	t.expect((s0["finish_order"] as Array).has(0), "座位0出完登记")
+	t.expect_eq(float(s0["lead"]["key"]), 14.0, "lead 为单 A 而非旧单 6")
+	t.expect_eq(int(s0["turn"]), 1, "轮到座位1(须压A或Pass)")
+	# 座位1/2 依次 Pass(全过) → 清桌, 由出完者(0)下一位(1)领出
+	var s2: Dictionary = GameStateGd.apply(s0, {"t": "pass", "seat": 1})["state"]
+	s2 = GameStateGd.apply(s2, {"t": "pass", "seat": 2})["state"]
+	t.expect((s2["field"] as Array).is_empty(), "B: 全过清桌")
+	t.expect_eq(int(s2["turn"]), 1, "B: 由出完者下家领出")
 
 
 ## 禁止最后单张出王: 手中只剩一张王时不能单出获胜。

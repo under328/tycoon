@@ -100,6 +100,9 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 	st["passes"] = 0
 	st["last_player"] = seat
 	st["must_include"] = -1
+	# 出完者的最后一手同样立 lead: 其余玩家须先压过/Pass, 全部 Pass
+	# 才清桌并由出完者下一位领出(不得直接"接风"跳过对手)
+	st["lead"] = combo
 	# 革命：四条触发（含王辅助），奇数次反转
 	if bool(st["cfg"]["revolution"]) and int(combo["type"]) == ComboGd.Type.QUAD:
 		st["quads"] = int(st["quads"]) + 1
