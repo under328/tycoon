@@ -188,7 +188,7 @@ func _build_fig(kind: int) -> void:
 			_mini(53, Vector2(240, 60), 1.15)
 			_mini(51, Vector2(340, 90), 1.15)
 			_mini(48, Vector2(440, 60), 1.15)
-			_fig_label("出完手牌 → 大富豪!", Vector2(240, 230), AppTheme.GREEN, 20)
+			_fig_label("最先出完手牌 → 大富豪!", Vector2(240, 230), AppTheme.GREEN, 20)
 		1:
 			var order := [0, 20, 32, 44, 48, 53]
 			var names := ["3", "…", "J", "A", "2", "王"]

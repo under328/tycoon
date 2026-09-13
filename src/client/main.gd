@@ -8,6 +8,7 @@ const TableScene := preload("res://src/client/scenes/table.tscn")
 const LobbyScene := preload("res://src/client/scenes/lobby.tscn")
 const MainMenuScript := preload("res://src/client/scenes/main_menu.gd")
 const NetNodeGd := preload("res://src/protocol/net_node.gd")
+const AppTheme = preload("res://src/client/theme/app_theme.gd")
 
 var menu = null
 var lobby = null
@@ -15,6 +16,7 @@ var table = null
 var net = null
 var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
 var _fit_target: Control = null # 最近一次做过安全区适配的可见场景
+var _resume_dlg: Control = null # "返回上一局?"确认框
 
 
 func _ready() -> void:
@@ -78,19 +80,24 @@ func _fit_safe_area(c: Control) -> void:
 	c.size = canvas - Vector2(left + right, top + bottom)
 
 
+## ESC 关闭"返回上一局"确认框
+func _unhandled_input(event: InputEvent) -> void:
+	if _resume_dlg != null and event is InputEventKey and event.pressed \
+			and event.keycode == KEY_ESCAPE:
+		_close_resume_dialog()
+
+
 func _start_local() -> void:
-	menu.visible = false
-	# 上一场本地局仍在进行(托管中) → 直接继续
+	# 上一场本地局仍在后台托管进行中 → 弹窗让玩家选: 回局继续 / 开新局
 	if table != null and table.mode == "local" \
 			and not table.state.is_empty() \
 			and str(table.state["phase"]) != "game_end":
-		table.auto_pilot = false  # 重新接管自己的座位
-		table.visible = true
-		table._refresh()
-		table._advance()  # 恢复驱动(轮到玩家时等待操作)
-		table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)  # 重连一次性信号
+		_show_resume_dialog()
 		return
-	# 旧场已结束 → 清掉再新开
+	_launch_new_local()
+
+
+func _launch_new_local() -> void:
 	if table != null:
 		table.queue_free()
 		table = null
@@ -100,6 +107,88 @@ func _start_local() -> void:
 	add_child(table)
 	_fit_safe_area(table)
 	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)
+
+
+## 后台对局仍在进行: 询问返回上一局还是开新局
+func _show_resume_dialog() -> void:
+	if _resume_dlg != null:
+		return
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 14, 2)
+	sb.content_margin_left = 30
+	sb.content_margin_right = 30
+	sb.content_margin_top = 22
+	sb.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var title := AppTheme.make_label(22, AppTheme.GOLD)
+	title.text = "返回上一局？"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var desc := AppTheme.make_label(15, AppTheme.DIM)
+	desc.text = "上一局仍在后台进行中（AI 托管代打）"
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(desc)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	var go := AppTheme.make_button("返回上一局", Vector2(150, 46), 17)
+	go.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_resume_dialog()
+		_resume_local_game())
+	row.add_child(go)
+	var new_btn := AppTheme.make_button("开始新游戏", Vector2(150, 46), 17)
+	new_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_resume_dialog()
+		_launch_new_local())
+	row.add_child(new_btn)
+	var cancel := AppTheme.make_button("取消", Vector2(96, 46), 15)
+	cancel.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_resume_dialog())
+	row.add_child(cancel)
+	_resume_dlg = dlg
+	add_child(dlg)
+	# 父节点是普通 Node, 锚点不可靠 → 入树后显式铺满视口(同主菜单做法)
+	dlg.position = Vector2.ZERO
+	dlg.size = get_viewport().get_visible_rect().size
+
+
+func _close_resume_dialog() -> void:
+	if _resume_dlg != null and is_instance_valid(_resume_dlg):
+		_resume_dlg.queue_free()
+	_resume_dlg = null
+
+
+## 回到后台托管中的对局: 重新接管自己的座位
+func _resume_local_game() -> void:
+	_close_resume_dialog()
+	if table == null or not is_instance_valid(table):
+		_launch_new_local()
+		return
+	table.auto_pilot = false  # 重新接管自己的座位
+	table.advancing = false   # 后台驱动循环由代际机制自动让位
+	table.visible = true
+	table._refresh()
+	Audio.play_bgm("table")
+	table._advance()
+	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)  # 重连一次性信号
 
 
 func _start_online() -> void:
@@ -175,11 +264,12 @@ func _leave_table() -> void:
 	if lobby != null:
 		lobby.visible = true
 		_fit_safe_area(lobby)
+	Audio.play_bgm("lobby")
 
 
 func _back_to_menu() -> void:
 	if table != null:
-		# 本地局托管中(返回菜单自动托管) → 保留牌桌, 重新进入可继续
+		# 本地局托管中(返回菜单自动托管) → 保留牌桌后台继续, 重新进入可继续
 		if table.mode == "local" and table.auto_pilot:
 			table.visible = false
 		else:
@@ -190,3 +280,4 @@ func _back_to_menu() -> void:
 	if menu != null:
 		menu.visible = true
 		_fit_safe_area(menu)
+	Audio.play_bgm("lobby")  # 菜单 _ready 只跑一次, 回首页需手动切回首页音乐

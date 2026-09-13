@@ -112,6 +112,8 @@ func _process(delta: float) -> void:
 
 ## ESC / 安卓返回键 = 返回菜单(联机对局中沿用 3 秒二次确认的弃局语义)
 func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return  # 后台托管中隐藏的牌桌不抢 ESC(确认框等由当前界面处理)
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		_on_leave_pressed()
 
@@ -176,9 +178,9 @@ func _advance() -> void:
 			state = r["state"]
 		elif phase == "exchange":
 			_refresh()
-			# 返还选牌: 轮到玩家(座位0)时等待其选牌确认, AI 由 bot 决策
+			# 返还选牌: 轮到玩家(座位0)且未托管时等待其确认; 托管中由 bot 代打
 			var er: Dictionary = _pending_return_for(0)
-			if not er.is_empty():
+			if not er.is_empty() and not auto_pilot:
 				break  # 等玩家选牌
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			if gen != _advance_gen or not is_inside_tree():
@@ -192,15 +194,17 @@ func _advance() -> void:
 		elif phase == "round_end":
 			_refresh()
 			# 最后一局: 短暂展示本局结果后自动进入全场结算(面板自动弹出)
-			if int(state["round"]) + 1 >= int(state["cfg"]["rounds"]):
-				await get_tree().create_timer(1.4).timeout
+			# 非末局且托管中: 自动进入下一局(后台连续进行)
+			var is_last: bool = int(state["round"]) + 1 >= int(state["cfg"]["rounds"])
+			if is_last or auto_pilot:
+				await get_tree().create_timer(1.4 if is_last else 1.2).timeout
 				if gen != _advance_gen or not is_inside_tree():
 					return
 				var r := GameStateGd.apply(state, {"t": "next_round"})
 				if bool(r["ok"]):
 					state = r["state"]
 			else:
-				break  # 非末局等待玩家点下一局
+				break  # 等待玩家点下一局
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
