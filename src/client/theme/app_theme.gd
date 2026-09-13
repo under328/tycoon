@@ -120,6 +120,7 @@ static func flat(bg: Color, border: Color, radius := 8, border_width := 2) -> St
 static func section_label(text: String, size := 15) -> Label:
 	var lb := make_label(size, GOLD)
 	lb.text = "▎" + text
+	lb.reset_size()  # 文本晚于创建 → 尺寸须按实际文本刷新, 否则文本溢出/居中偏移
 	lb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	lb.add_theme_constant_override("shadow_offset_x", 1)
 	lb.add_theme_constant_override("shadow_offset_y", 1)

@@ -509,6 +509,7 @@ func _build_ui() -> void:
 	# 昵称
 	nick_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	nick_lbl.text = "昵称"
+	nick_lbl.reset_size()  # 文本晚于创建 → 刷新尺寸
 	nick_lbl.position = Vector2(150, 70)
 	add_child(nick_lbl)
 	nickname_edit = LineEdit.new()

@@ -143,6 +143,7 @@ func _build_title() -> void:
 	# 版本号(锚左下)
 	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
 	_ver_lbl.text = "v" + str(ProjectSettings.get_setting("application/config/version", "1.0.0"))
+	_ver_lbl.reset_size()  # 文本晚于创建 → 刷新尺寸(避免居中锚定/绘制用旧宽度)
 	_ver_lbl.position = Vector2(16, 690)
 	add_child(_ver_lbl)
 
@@ -180,6 +181,7 @@ func _build_menu() -> void:
 	_hint_lbl = AppTheme.make_label(14, AppTheme.DIM)
 	_hint_lbl.add_theme_font_override("font", AppTheme.accent_font())
 	_hint_lbl.text = "和朋友开一局: 联机游戏 → 创建房间 → 把房间码发给朋友"
+	_hint_lbl.reset_size()  # 文本晚于创建 → 刷新尺寸, _relayout 才能算准居中
 	_hint_lbl.position = Vector2(400, 700)
 	add_child(_hint_lbl)
 
