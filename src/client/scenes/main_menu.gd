@@ -44,6 +44,8 @@ func _ready() -> void:
 	_build_fan()
 	_build_settings()
 	Responsive.watch(self, _relayout)
+	# 余额即时同步: 对局结算(后台托管打完也会结算)发放金币/钻石时首页立即刷新
+	Wallet.balance_changed.connect(_refresh_balance)
 	Audio.play_bgm("lobby")
 
 
