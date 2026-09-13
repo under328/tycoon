@@ -626,44 +626,6 @@ func _build_ui() -> void:
 	hp_box.add_child(hp_dl)
 	host_dl_btn = hp_dl
 
-
-## 打开 Tailscale 下载(两个下载按钮共用)。
-## Android 不跳 Google Play(国内无法访问): 运行时从官方包列表解析
-## 最新通用版 APK 直链(pkgs.tailscale.com 官方源), 解析失败退回列表页。
-func _open_ts_download() -> void:
-	Audio.play("click")
-	if not OS.has_feature("android"):
-		OS.shell_open(Responsive.tailscale_url())
-		return
-	if _ts_apk_url != "":
-		OS.shell_open(_ts_apk_url)
-		return
-	var http := HTTPRequest.new()
-	http.timeout = 12.0
-	add_child(http)
-	http.request_completed.connect(func(result: int, code: int,
-			_headers: PackedStringArray, body: PackedByteArray) -> void:
-		http.queue_free()
-		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-			_open_ts_fallback()
-			return
-		var re := RegEx.new()
-		re.compile("tailscale-android-universal-[0-9.]+\\.apk")
-		var m := re.search(body.get_string_from_utf8())
-		if m == null:
-			_open_ts_fallback()
-			return
-		_ts_apk_url = TS_PKGS_URL + m.get_string(0)
-		OS.shell_open(_ts_apk_url))
-	var err := http.request(TS_PKGS_URL)
-	if err != OK:
-		http.queue_free()
-		_open_ts_fallback()
-
-
-func _open_ts_fallback() -> void:
-	OS.shell_open(TS_PKGS_URL + "#android")  # 列表页锚点, 用户手点 APK 链接
-
 	# 自适应锚定注册(基准坐标 = 创建时的 position; 模式含义见 _reg/_relayout)
 	_reg(back_btn, "left")
 	_reg(update_btn, "left")
@@ -708,6 +670,44 @@ func _open_ts_fallback() -> void:
 	connect_btn.disabled = false
 	paste_btn.disabled = false
 	_set_room_ui(false)
+
+
+## 打开 Tailscale 下载(两个下载按钮共用)。
+## Android 不跳 Google Play(国内无法访问): 运行时从官方包列表解析
+## 最新通用版 APK 直链(pkgs.tailscale.com 官方源), 解析失败退回列表页。
+func _open_ts_download() -> void:
+	Audio.play("click")
+	if not OS.has_feature("android"):
+		OS.shell_open(Responsive.tailscale_url())
+		return
+	if _ts_apk_url != "":
+		OS.shell_open(_ts_apk_url)
+		return
+	var http := HTTPRequest.new()
+	http.timeout = 12.0
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int,
+			_headers: PackedStringArray, body: PackedByteArray) -> void:
+		http.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			_open_ts_fallback()
+			return
+		var re := RegEx.new()
+		re.compile("tailscale-android-universal-[0-9.]+\\.apk")
+		var m := re.search(body.get_string_from_utf8())
+		if m == null:
+			_open_ts_fallback()
+			return
+		_ts_apk_url = TS_PKGS_URL + m.get_string(0)
+		OS.shell_open(_ts_apk_url))
+	var err := http.request(TS_PKGS_URL)
+	if err != OK:
+		http.queue_free()
+		_open_ts_fallback()
+
+
+func _open_ts_fallback() -> void:
+	OS.shell_open(TS_PKGS_URL + "#android")  # 列表页锚点, 用户手点 APK 链接
 
 
 ## 房主可移除的第一个人类座位(不能移除自己/机器人)

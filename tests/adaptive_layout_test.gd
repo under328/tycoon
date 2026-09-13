@@ -26,6 +26,8 @@ var failed: Array = []
 var cur: Control = null
 var scene_idx := -1
 var frames := 0
+var prof_idx := 0
+var prof_sub := 0   # 0=改窗口尺寸 1=传播 2=显式设场景尺寸(模拟 main._fit_safe_area) 3=传播 4=断言
 
 
 func expect(cond: bool, msg: String) -> void:
@@ -134,10 +136,27 @@ func _process(_d: float) -> bool:
 	frames += 1
 	if frames < 8:
 		return false
-	# 每个场景 × 每档分辨率各断言一次
-	for p: Array in PROFILES:
-		root.size = Vector2i(p[1])
-		var vs: Vector2 = root.get_visible_rect().size
-		_check_scene(scene_idx, vs.x, vs.y)
-	_next()
+	if scene_idx >= 0 and scene_idx < 6:
+		match prof_sub:
+			0:
+				root.size = Vector2i(PROFILES[prof_idx][1])
+				prof_sub = 1
+			1:
+				prof_sub = 2
+			2:
+				# 生产环境由 main._fit_safe_area 显式设场景根尺寸(安全区内缩),
+				# 测试同样显式设置 — 裸 Control 不随窗口自动缩放
+				cur.position = Vector2.ZERO
+				cur.size = root.get_visible_rect().size
+				prof_sub = 3
+			3:
+				prof_sub = 4  # 等一帧: resized→_relayout 在下一帧生效
+			_:
+				var vs: Vector2 = root.get_visible_rect().size
+				_check_scene(scene_idx, vs.x, vs.y)
+				prof_idx += 1
+				prof_sub = 0
+				if prof_idx >= PROFILES.size():
+					prof_idx = 0
+					_next()
 	return false
