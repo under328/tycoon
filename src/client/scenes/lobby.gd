@@ -147,6 +147,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		go_back()
 
 
+## 每次进入联机页面清空上次输入的房间码(输入框跨页面残留, 避免误入旧房)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and visible and code_edit != null:
+		code_edit.text = ""
+
+
 ## 离开当前页面回主菜单(返回按钮与 Android 返回键共用)
 func go_back() -> void:
 	net.leave_room()
@@ -362,9 +368,6 @@ func _build_ui() -> void:
 	code_edit.custom_minimum_size = Vector2(200, 44)
 	code_edit.size = Vector2(200, 44)
 	code_edit.placeholder_text = "或输入房间码"
-	var gs4 := get_node_or_null("/root/GameSettings")
-	if gs4 != null and str(gs4.last_room_code) != "":
-		code_edit.text = str(gs4.last_room_code)  # 预填最近房间码, 方便回房
 	code_edit.add_theme_font_size_override("font_size", 18)
 	add_child(code_edit)
 	join_btn = AppTheme.make_button("加入", Vector2(62, 44), 18)
@@ -804,10 +807,6 @@ func _apply_settings(settings: Dictionary) -> void:
 
 func _on_room_state(state: Dictionary) -> void:
 	_last_room_code = str(state.get("room_code", ""))
-	var gs := get_node_or_null("/root/GameSettings")
-	if gs != null and str(gs.last_room_code) != _last_room_code:
-		gs.last_room_code = _last_room_code  # 记住最近房间码, 下次进大厅预填
-		gs.save_settings()
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	_enter_room()

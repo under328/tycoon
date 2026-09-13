@@ -13,7 +13,6 @@ var bgm_volume := 0.8
 var sfx_volume := 1.0
 var client_id := ""      # 游客身份：首启随机生成，持久化
 var tutorial_seen := false  # 是否已看过新手引导
-var last_room_code := ""    # 最近加入的房间码(方便再次输入)
 var host: String = DEFAULT_HOST  # 联机服务器地址(大厅可改, 持久化)
 var host_port := 24565      # 联机服务器端口(持久化)
 var fullscreen := false         # 显示偏好: 全屏(持久化)
@@ -36,7 +35,6 @@ func load_settings() -> void:
 		sfx_volume = cf.get_value("audio", "sfx", sfx_volume)
 		client_id = cf.get_value("player", "client_id", "")
 		tutorial_seen = cf.get_value("player", "tutorial_seen", false)
-		last_room_code = cf.get_value("player", "last_room_code", "")
 		host = str(cf.get_value("net", "host", host))
 		host_port = int(cf.get_value("net", "host_port", host_port))
 		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
@@ -52,7 +50,6 @@ func save_settings() -> void:
 	cf.set_value("audio", "sfx", sfx_volume)
 	cf.set_value("player", "client_id", client_id)
 	cf.set_value("player", "tutorial_seen", tutorial_seen)
-	cf.set_value("player", "last_room_code", last_room_code)
 	cf.set_value("net", "host", host)
 	cf.set_value("net", "host_port", host_port)
 	cf.set_value("display", "fullscreen", fullscreen)
