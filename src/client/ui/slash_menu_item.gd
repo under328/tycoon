@@ -59,13 +59,17 @@ func _draw() -> void:
 	var fill := Color(0.07, 0.07, 0.16, 0.88).lerp(Color(0.14, 0.13, 0.32, 0.97), _hover_t)
 	draw_colored_polygon(PackedVector2Array(pts), fill)
 
-	# 图标位: 淡金斜切底 + 线性图标(悬停点亮, 取代旧红色斜块)
-	var px := 12.0
-	var pw := 44.0
-	var sk2 := 8.0
+	# 图标位: 与左斜边平行的斜切底(完全内缩不压边框) + 线性图标(悬停点亮)
+	var top_y := 9.0
+	var bot_y := size.y - 9.0
+	var slope := skew / (size.y - 4.0)             # 菜单左斜边斜率
+	var edge_top := skew - slope * (top_y - 2.0)   # 左斜边在各高度处的 x
+	var edge_bot := skew - slope * (bot_y - 2.0)
+	var gap := 5.0
+	var pw := 42.0
 	var pl := PackedVector2Array([
-		Vector2(px + sk2, 9), Vector2(px + pw + sk2, 9),
-		Vector2(px + pw, size.y - 9), Vector2(px, size.y - 9),
+		Vector2(edge_top + gap, top_y), Vector2(edge_top + gap + pw, top_y),
+		Vector2(edge_bot + gap + pw, bot_y), Vector2(edge_bot + gap, bot_y),
 	])
 	draw_colored_polygon(pl, Color(Wafu.GOLD, 0.10 + 0.16 * _hover_t))
 	var pl_line := pl.duplicate()
@@ -73,9 +77,8 @@ func _draw() -> void:
 	draw_polyline(pl_line, Color(Wafu.GOLD, 0.30 + 0.40 * _hover_t), 1.2, true)
 	if icon != "":
 		var col := Color.WHITE.lerp(Color(Wafu.GOLD, 1.0), _hover_t)
-		Icons.menu_icon(self, icon,
-				Vector2(px + pw * 0.5 + sk2 * 0.5 + _hover_t * 3.0, size.y / 2.0),
-				12.0, col)
+		var icon_cx := (edge_top + edge_bot) * 0.5 + gap + pw * 0.5 + _hover_t * 3.0
+		Icons.menu_icon(self, icon, Vector2(icon_cx, size.y / 2.0), 12.0, col)
 
 	# 描金边
 	var closed := pts.duplicate()
@@ -84,7 +87,7 @@ func _draw() -> void:
 
 	# 文字
 	var f := AppTheme.display_font()
-	draw_string(f, Vector2(px + pw + sk2 + 16, size.y / 2.0 + 10), text,
+	draw_string(f, Vector2(edge_bot + gap + pw + 16.0, size.y / 2.0 + 10), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 25, AppTheme.WHITE)
 	if badge != "":
 		var bf := AppTheme.accent_font()

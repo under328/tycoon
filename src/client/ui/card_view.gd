@@ -83,6 +83,9 @@ func _init(p_card: int = -1) -> void:
 
 
 func _ready() -> void:
+	# 画布级自裁剪: 牌背纹样/和纸颗粒等 _draw 超界部分严格裁进牌面
+	# (clip_contents 只裁子节点, 裁不到控件自身的 _draw)
+	RenderingServer.canvas_item_set_clip(get_canvas_item(), true)
 	_refresh_palette()  # 入树后解析 Wallet 装备卡面(_init 阶段尚不可达)
 
 
