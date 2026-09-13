@@ -87,6 +87,23 @@ static func build_theme() -> Theme:
 	_theme.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	_theme.set_color("font_hover_color", "Button", Color("ffd75e"))
 	_theme.set_color("font_pressed_color", "Button", Color("ffd75e"))
+	# CheckButton(开关)不继承 Button 的朱红按压态: 选中态用金描边表示"开"
+	var cb_n := flat(Color(0.07, 0.07, 0.16, 0.97), Color(1, 1, 1, 0.18), 8, 1)
+	cb_n.content_margin_left = 10
+	cb_n.content_margin_right = 10
+	cb_n.content_margin_top = 5
+	cb_n.content_margin_bottom = 5
+	var cb_on := flat(Color(0.10, 0.12, 0.20, 0.97), Color(GOLD, 0.6), 8, 2)
+	cb_on.content_margin_left = 10
+	cb_on.content_margin_right = 10
+	cb_on.content_margin_top = 5
+	cb_on.content_margin_bottom = 5
+	_theme.set_stylebox("normal", "CheckButton", cb_n)
+	_theme.set_stylebox("hover", "CheckButton", cb_n)
+	_theme.set_stylebox("pressed", "CheckButton", cb_on)
+	_theme.set_stylebox("hover_pressed", "CheckButton", cb_on)
+	_theme.set_stylebox("focus", "CheckButton", StyleBoxEmpty.new())
+	_theme.set_color("font_pressed_color", "CheckButton", WHITE)
 	return _theme
 
 

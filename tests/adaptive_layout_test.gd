@@ -66,17 +66,31 @@ func _check_scene(i: int, w: float, h: float) -> void:
 				var cs: Script = child.get_script()
 				if cs != null and str(cs.resource_path).ends_with("slash_menu_item.gd"):
 					_in_rect(child, w, h, "menu 菜单项")
-		1:  # 大厅: 所有注册控件不越界 + 锚定公式正确
+		1:  # 大厅: 双视图锚定(入口页/房间页) + 公式正确 + 全控件不越界
 			var extra := maxf(w - 1280.0, 0.0)
 			var eh := maxf(h - 720.0, 0.0)
-			for e: Array in s._placed:
-				_in_rect(e[0], w, h, "lobby %s" % e[0].name)
+			s._apply_view("entry")
+			for n in s._layouts:
+				if (s._layouts[n] as Dictionary).has("entry"):
+					_in_rect(n, w, h, "lobby entry %s" % n.name)
 			expect(absf(s.port_edit.position.x - (1040.0 + extra)) <= 1.0,
 					"lobby 端口输入未锚右缘 x=%s extra=%s" % [s.port_edit.position.x, extra])
-			expect(absf(s._emoji_btns[0].position.y - (550.0 + eh)) <= 1.0,
-					"lobby 表情栏未贴底缘 y=%s eh=%s" % [s._emoji_btns[0].position.y, eh])
-			expect(absf(s.copy_btn.position.y - (470.0 + eh * 0.45)) <= 1.0,
-					"lobby 操作行纵向分配错误 y=%s" % s.copy_btn.position.y)
+			expect(s.code_edit.visible and not s.room_title_lbl.visible,
+					"入口页显隐错误")
+			# 房间页(独立子页面): 切视图后断言
+			s._apply_view("room")
+			for n in s._layouts:
+				if (s._layouts[n] as Dictionary).has("room"):
+					_in_rect(n, w, h, "lobby room %s" % n.name)
+			expect(absf(s._emoji_btns[0].position.y - (662.0 + eh)) <= 1.0,
+					"lobby 房间页表情未贴底缘 y=%s eh=%s" % [s._emoji_btns[0].position.y, eh])
+			expect(absf(s._seat_cards[0]["panel"].position.x - (150.0 + extra * 0.45)) <= 1.0,
+					"lobby 座位卡未随宽漂移 x=%s" % s._seat_cards[0]["panel"].position.x)
+			expect(s.room_title_lbl.visible and not s.code_edit.visible,
+					"房间页显隐错误")
+			expect(not s.quick_btn.visible and not s.host_edit.visible,
+					"房间页仍显示入口控件")
+			s._apply_view("entry")
 		2:  # 牌桌
 			expect(s.hand_box.position.x >= 0.0,
 					"table 手牌区越左缘 x=%s" % s.hand_box.position.x)

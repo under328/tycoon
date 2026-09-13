@@ -31,13 +31,11 @@ var leave_btn: Button
 var copy_btn: Button
 var save_settings_btn: Button
 var status_label: Label
-var room_label: Label
 var stats_label: Label
 var chk_joker: CheckButton
 var chk_revolution: CheckButton
 var rounds_option: OptionButton
 var stakes_option: OptionButton
-var _last_room_code := ""
 var host_edit: LineEdit
 var port_edit: LineEdit
 var connect_btn: Button
@@ -68,11 +66,17 @@ var server_lbl: Label
 var rules_lbl: Label
 var stakes_lbl: Label
 var rounds_lbl: Label
-var _room_ui: Array = []          # 仅房间内显示的控件
-var _in_room := false             # 是否处于房间内(驱动房间 UI 显隐)
+var _view := "entry"              # 当前视图: entry=入口页 / room=房间页
+var _layouts := {}                # ctrl -> {"entry": [pos,mode,dy], "room": [...]}
+var _entry_set: Array = []        # 入口页可见控件
+var _room_set: Array = []         # 房间页可见控件
+var room_title_lbl: Label         # 房间页: 房间码标题
+var invite_lbl: Label             # 房间页: 服务器 IP + 邀请引导
+var _seat_cards: Array = []       # 房间页: 4 张座位卡 {name, tag}
+var _host_panel_wanted := false   # 本机开房信息卡显隐意愿(跨视图管理)
+var _last_room_code := ""
 var _conn_fails := 0
 var _loopback_hint := false   # 当前状态栏显示的是回环指引(随环境变化刷新)
-var _placed: Array = []           # 自适应锚定表: [控件, 基准坐标, 模式, 高度分配比]
 
 
 func setup(p_net: Node) -> void:
@@ -124,8 +128,36 @@ func _refresh_ts_chip() -> void:
 
 ## 多设备自适应(1280x720 设计基准, 见 responsive.gd):
 ## PC 任意窗形 / 手机横屏(多余宽度) / 平板横屏(多余高度) 统一重排。
+## 双视图锚定: 入口页(_reg)与房间页(_reg_room)各自一张坐标表,
+## _relayout 只排当前视图的控件。
 func _reg(n: Control, mode: String, dy_frac := 0.0) -> void:
-	_placed.append([n, n.position, mode, dy_frac])
+	_reg_at("entry", n, n.position, mode, dy_frac)
+	if not _entry_set.has(n):
+		_entry_set.append(n)
+
+
+func _reg_room(n: Control, pos: Vector2, mode: String, dy_frac := 0.0) -> void:
+	_reg_at("room", n, pos, mode, dy_frac)
+	if not _room_set.has(n):
+		_room_set.append(n)
+
+
+func _reg_at(view: String, n: Control, pos: Vector2, mode: String, dy_frac: float) -> void:
+	if not _layouts.has(n):
+		_layouts[n] = {}
+	_layouts[n][view] = [pos, mode, dy_frac]
+
+
+## 视图切换: 入口页/房间页互斥显隐(返回按钮/状态栏两页共享)
+func _apply_view(v: String) -> void:
+	_view = v
+	for c in _entry_set:
+		c.visible = v == "entry"
+	for c in _room_set:
+		c.visible = v == "room"
+	if host_panel != null:
+		host_panel.visible = _host_panel_wanted and v == "entry"
+	_relayout()
 
 
 func _relayout() -> void:
@@ -136,14 +168,16 @@ func _relayout() -> void:
 	var extra := maxf(w - 1280.0, 0.0)
 	var eh := maxf(h - 720.0, 0.0)
 	var shift := extra * 0.45
-	for e: Array in _placed:
-		var ctrl: Control = e[0]
+	for n in _layouts:
+		var lay: Array = _layouts[n].get(_view, [])
+		if lay.is_empty():
+			continue
 		var dx := 0.0
-		if str(e[2]) == "center":
+		if str(lay[1]) == "center":
 			dx = shift
-		elif str(e[2]) == "right":
+		elif str(lay[1]) == "right":
 			dx = extra
-		ctrl.position = Vector2(e[1]) + Vector2(dx, float(e[3]) * eh)
+		(n as Control).position = Vector2(lay[0]) + Vector2(dx, float(lay[2]) * eh)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -261,22 +295,14 @@ func _refresh_invite(state: Dictionary) -> void:
 
 
 ## 房间内专属 UI 的显隐切换
-func _set_room_ui(v: bool) -> void:
-	for n in _room_ui:
-		n.visible = v
-	if v:
-		for b: Button in [fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
-			b.disabled = false
-
-
 func _enter_room() -> void:
-	_in_room = true
-	_set_room_ui(true)
+	_apply_view("room")
+	for b: Button in [fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
+		b.disabled = false
 
 
 func _exit_room() -> void:
-	_in_room = false
-	_set_room_ui(false)
+	_apply_view("entry")
 	if net != null:
 		net.leave_room()
 	hide_host_panel()
@@ -285,6 +311,7 @@ func _exit_room() -> void:
 
 ## 本机开房信息卡(替代多行状态文字)
 func show_host_panel(ip: String) -> void:
+	_host_panel_wanted = true
 	host_panel.visible = true
 	status_label.visible = false
 	stats_label.visible = false
@@ -294,6 +321,7 @@ func show_host_panel(ip: String) -> void:
 
 
 func hide_host_panel() -> void:
+	_host_panel_wanted = false
 	host_panel.visible = false
 	status_label.visible = true
 	stats_label.visible = true
@@ -457,16 +485,44 @@ func _build_ui() -> void:
 		_manual_connect())
 	add_child(connect_btn)
 
-	# 房间面板
-	room_label = AppTheme.make_label(17, COLOR_WHITE)
-	_room_ui.append(room_label)
-	room_label.position = Vector2(150, 310)
-	room_label.custom_minimum_size = Vector2(700, 140)
-	add_child(room_label)
+	# ── 房间页: 标题 / 邀请行 / 座位卡 ──
+	room_title_lbl = AppTheme.make_label(26, COLOR_GOLD)
+	room_title_lbl.text = "房间"
+	room_title_lbl.position = Vector2(150, 20)
+	add_child(room_title_lbl)
+	invite_lbl = AppTheme.make_label(14, COLOR_DIM)
+	invite_lbl.position = Vector2(150, 62)
+	invite_lbl.custom_minimum_size = Vector2(660, 24)
+	add_child(invite_lbl)
+	for i in 4:
+		var sp := PanelContainer.new()
+		var sp_sb := AppTheme.flat(Color(0.08, 0.08, 0.18, 0.92),
+				Color(AppTheme.GOLD, 0.45), 12, 2)
+		sp_sb.content_margin_left = 12
+		sp_sb.content_margin_right = 12
+		sp_sb.content_margin_top = 12
+		sp_sb.content_margin_bottom = 12
+		sp.add_theme_stylebox_override("panel", sp_sb)
+		sp.position = Vector2(150 + i * 166, 104)
+		sp.custom_minimum_size = Vector2(150, 150)
+		add_child(sp)
+		var sv := VBoxContainer.new()
+		sv.add_theme_constant_override("separation", 10)
+		sp.add_child(sv)
+		var cap := AppTheme.make_label(13, AppTheme.DIM)
+		cap.text = "座位 %d" % (i + 1)
+		sv.add_child(cap)
+		var nm := AppTheme.make_label(17, AppTheme.WHITE)
+		nm.text = "(空位)"
+		nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		nm.custom_minimum_size = Vector2(124, 0)
+		sv.add_child(nm)
+		var tag := AppTheme.make_label(13, COLOR_DIM)
+		sv.add_child(tag)
+		_seat_cards.append({"panel": sp, "name": nm, "tag": tag})
 
 	# 房主操作按钮
 	fill_btn = AppTheme.make_button("空位加AI", Vector2(140, 46), 17)
-	_room_ui.append(fill_btn)
 	fill_btn.position = Vector2(150, 470)
 	fill_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -474,7 +530,6 @@ func _build_ui() -> void:
 	add_child(fill_btn)
 
 	kick_btn = AppTheme.make_button("移除玩家", Vector2(140, 46), 17)
-	_room_ui.append(kick_btn)
 	kick_btn.position = Vector2(10, 470)
 	kick_btn.visible = false
 	kick_btn.pressed.connect(func() -> void:
@@ -486,21 +541,18 @@ func _build_ui() -> void:
 			_set_status("没有可移除的玩家(仅房主可移除非自己的人类玩家)", COLOR_RED))
 	add_child(kick_btn)
 	start_btn = AppTheme.make_button("开始游戏", Vector2(140, 46), 17)
-	_room_ui.append(start_btn)
 	start_btn.position = Vector2(310, 470)
 	start_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.start_game())
 	add_child(start_btn)
 	leave_btn = AppTheme.make_button("离开房间", Vector2(140, 46), 17)
-	_room_ui.append(leave_btn)
 	leave_btn.position = Vector2(470, 470)
 	leave_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_exit_room())
 	add_child(leave_btn)
 	copy_btn = AppTheme.make_button("复制邀请码", Vector2(140, 46), 17)
-	_room_ui.append(copy_btn)
 	copy_btn.position = Vector2(630, 470)
 	copy_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -515,16 +567,12 @@ func _build_ui() -> void:
 	rules_lbl = AppTheme.section_label("规则设置")
 	rules_lbl.position = Vector2(830, 310)
 	add_child(rules_lbl)
-	_room_ui.append(rules_lbl)
 	chk_joker = _check("带王", Vector2(830, 340))
-	_room_ui.append(chk_joker)
 	chk_revolution = _check("革命", Vector2(830, 380))
-	_room_ui.append(chk_revolution)
 	stakes_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	stakes_lbl.text = "输赢"
 	stakes_lbl.position = Vector2(830, 414)
 	add_child(stakes_lbl)
-	_room_ui.append(stakes_lbl)
 	stakes_option = OptionButton.new()
 	for item: Array in [["小 ×1", 1], ["中 ×2", 2], ["大 ×3", 3]]:
 		stakes_option.add_item(str(item[0]), int(item[1]))
@@ -532,12 +580,10 @@ func _build_ui() -> void:
 	stakes_option.position = Vector2(880, 410)
 	stakes_option.custom_minimum_size = Vector2(90, 34)
 	add_child(stakes_option)
-	_room_ui.append(stakes_option)
 	rounds_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "局数"
 	rounds_lbl.position = Vector2(830, 460)
 	add_child(rounds_lbl)
-	_room_ui.append(rounds_lbl)
 	rounds_option = OptionButton.new()
 	for r: int in [1, 3, 5]:
 		rounds_option.add_item(str(r) + " 局", r)
@@ -545,10 +591,8 @@ func _build_ui() -> void:
 	rounds_option.position = Vector2(880, 456)
 	rounds_option.custom_minimum_size = Vector2(90, 34)
 	add_child(rounds_option)
-	_room_ui.append(rounds_option)
 	save_settings_btn = AppTheme.make_button("保存设置", Vector2(140, 38), 15)
 	save_settings_btn.position = Vector2(830, 496)
-	_room_ui.append(save_settings_btn)
 	save_settings_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.set_settings(_gather_rules()))
@@ -564,7 +608,6 @@ func _build_ui() -> void:
 			net.send_emoji(id))
 		add_child(eb)
 		_emoji_btns.append(eb)
-		_room_ui.append(eb)
 
 	# 状态
 	status_label = AppTheme.make_label(15, COLOR_DIM)
@@ -651,7 +694,7 @@ func _build_ui() -> void:
 	hp_box.add_child(hp_dl)
 	host_dl_btn = hp_dl
 
-	# 自适应锚定注册(基准坐标 = 创建时的 position; 模式含义见 _reg/_relayout)
+	# ── 入口页锚定 ──
 	_reg(back_btn, "left")
 	_reg(update_btn, "left")
 	_reg(_ts_chip, "left")
@@ -667,34 +710,41 @@ func _build_ui() -> void:
 	_reg(host_btn, "center")
 	_reg(code_edit, "center")
 	_reg(join_btn, "center")
-	_reg(room_label, "center", 0.2)
 	_reg(server_lbl, "right")
 	_reg(host_edit, "right")
 	_reg(port_edit, "right")
 	_reg(connect_btn, "right")
 	_reg(help_btn, "right")
-	_reg(rules_lbl, "right")
-	_reg(chk_joker, "right")
-	_reg(chk_revolution, "right")
-	_reg(stakes_lbl, "right")
-	_reg(stakes_option, "right")
-	_reg(rounds_lbl, "right")
-	_reg(rounds_option, "right")
-	_reg(save_settings_btn, "right")
+
+	# ── 房间页锚定(独立子页面布局) ──
+	_reg_room(back_btn, Vector2(20, 16), "left")
+	_reg_room(status_label, Vector2(150, 386), "center", 0.08)
+	_reg_room(room_title_lbl, Vector2(150, 20), "center")
+	_reg_room(copy_btn, Vector2(660, 16), "center")
+	_reg_room(invite_lbl, Vector2(150, 62), "center")
+	for i in 4:
+		_reg_room(_seat_cards[i]["panel"], Vector2(150 + i * 166, 104), "center")
+	_reg_room(fill_btn, Vector2(150, 306), "center", 0.05)
+	_reg_room(kick_btn, Vector2(310, 306), "center", 0.05)
+	_reg_room(start_btn, Vector2(470, 306), "center", 0.05)
+	_reg_room(leave_btn, Vector2(630, 306), "center", 0.05)
+	_reg_room(rules_lbl, Vector2(830, 66), "right")
+	_reg_room(chk_joker, Vector2(830, 100), "right")
+	_reg_room(chk_revolution, Vector2(830, 140), "right")
+	_reg_room(stakes_lbl, Vector2(830, 184), "right")
+	_reg_room(stakes_option, Vector2(880, 180), "right")
+	_reg_room(rounds_lbl, Vector2(830, 224), "right")
+	_reg_room(rounds_option, Vector2(880, 220), "right")
+	_reg_room(save_settings_btn, Vector2(830, 264), "right")
 	for i in _emoji_btns.size():
-		_reg(_emoji_btns[i], "right", 1.0)  # 表情栏贴底缘(平板加高时跟随)
-	_reg(fill_btn, "center", 0.45)
-	_reg(kick_btn, "center", 0.45)
-	_reg(start_btn, "center", 0.45)
-	_reg(leave_btn, "center", 0.45)
-	_reg(copy_btn, "center", 0.45)
+		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
 
 	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, leave_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
 	host_btn.disabled = false
 	connect_btn.disabled = false
 	paste_btn.disabled = false
-	_set_room_ui(false)
+	_apply_view("entry")
 
 
 ## 打开 Tailscale 下载(两个下载按钮共用)。
@@ -833,23 +883,41 @@ func _on_room_state(state: Dictionary) -> void:
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	_enter_room()
-	hide_host_panel()
-	kick_btn.visible = net.in_room and int(state.get("host_seat", -1)) == net.my_seat
-	var lines: Array = []
+	var host_seat := int(state.get("host_seat", -1))
+	kick_btn.visible = net.in_room and host_seat == net.my_seat
+	# 房间页标题 + 邀请行
+	room_title_lbl.text = "房间  %s" % (_last_room_code if _last_room_code != "" else "——")
+	var ip_txt := ""
 	if host_invite_ip != "":
-		lines.append("服务器IP: %s  (发朋友)" % host_invite_ip)
-	lines.append("房间码: %s  (发给朋友)" % _last_room_code)
-	for p in state["players"]:
-		if bool(p.get("empty", false)):
-			lines.append("  座位%d:(空位)" % (int(p["seat"]) + 1))
-			continue
-		var mark := "房主 " if int(p["seat"]) == int(state.get("host_seat", 0)) else ""
-		var on := "" if bool(p.get("online", true)) else "(AI)"
-		var bot := "[AI] " if bool(p.get("is_bot", false)) else ""
-		lines.append("  座位%d: %s%s%s%s" % [
-			int(p["seat"]) + 1, mark, bot, str(p.get("name", "")), on])
-	room_label.text = "\n".join(lines)
-	var host: bool = int(state.get("host_seat", -1)) == int(net.my_seat)
+		ip_txt = "服务器 %s · " % host_invite_ip
+	invite_lbl.text = ip_txt + "点【复制邀请码】发给朋友 → 朋友点【粘贴邀请码, 一键加入】"
+	# 座位卡
+	for i in 4:
+		var nm: Label = _seat_cards[i]["name"]
+		var tag: Label = _seat_cards[i]["tag"]
+		nm.text = "(空位)"
+		nm.add_theme_color_override("font_color", COLOR_DIM)
+		tag.text = "等待加入"
+		tag.add_theme_color_override("font_color", COLOR_DIM)
+		for p in state.get("players", []):
+			if int(p.get("seat", -1)) != i:
+				continue
+			if bool(p.get("empty", true)):
+				break
+			nm.text = str(p.get("name", ""))
+			nm.add_theme_color_override("font_color", COLOR_WHITE)
+			var bits: Array = []
+			if i == host_seat:
+				bits.append("房主")
+			if bool(p.get("is_bot", false)):
+				bits.append("AI")
+			elif not bool(p.get("online", true)):
+				bits.append("离线·AI 代管")
+			tag.text = " · ".join(bits)
+			tag.add_theme_color_override("font_color",
+					COLOR_GOLD if i == host_seat else COLOR_DIM)
+			break
+	var host: bool = host_seat == int(net.my_seat)
 	fill_btn.disabled = not host
 	start_btn.disabled = not host
 	leave_btn.disabled = false
