@@ -37,6 +37,8 @@ var _at_game_end := false
 var _emoji_cd := 0.0
 var _chat_cd := 0.0
 var _emoji_btns: Array = []
+var _emoji_toggle: Button        # 表情栏折叠切换钮
+var _emoji_open := false         # 表情栏是否展开
 var _prev_tick := -1
 var _timer_shown := -1           # 倒计时已显示的整数秒(文字门控)
 var _auto_pass_done := false     # 本回合已自动"不要"(防重复)
@@ -88,6 +90,9 @@ var btn_leave: Button
 
 func _ready() -> void:
 	_build_ui()
+	# 自适应重排: 本地/联机都要(原先连接在 _new_match, 联机永不触发)
+	resized.connect(_relayout)
+	_relayout.call_deferred()
 	if mode == "online":
 		_bind_net()
 		_refresh()
@@ -169,8 +174,6 @@ func _unhandled_input(event: InputEvent) -> void:
 # ---------------------------------------------------------------- 驱动（本地）
 
 func _new_match() -> void:
-	resized.connect(_relayout)
-	_relayout.call_deferred()
 	for child in fx_layer.get_children():
 		child.queue_free()  # 关闭上一场的结算面板/特效
 	state = GameStateGd.new_match({}, -1)
@@ -717,6 +720,7 @@ func _build_ui() -> void:
 		ops_row.add_child(b)
 
 	# 快捷表情（仅联机模式; 44px 触控热区）
+	# 折叠交互: 底部只显示一个表情切换钮, 点击展开全部, 再点收起
 	for i in EMOJIS.size():
 		var id := i
 		var eb := AppTheme.make_button(EMOJIS[i],
@@ -732,9 +736,15 @@ func _build_ui() -> void:
 				net.send_emoji(id))
 		add_child(eb)
 		_emoji_btns.append(eb)
-	if mode == "local":
-		for eb: Button in _emoji_btns:
-			eb.visible = false
+	_emoji_toggle = AppTheme.make_button("😀",
+			Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
+	_emoji_toggle.position = Vector2(16, 664)
+	_emoji_toggle.pressed.connect(func() -> void:
+		Audio.play("pop")
+		_emoji_open = not _emoji_open
+		_update_emoji_vis())
+	add_child(_emoji_toggle)
+	_update_emoji_vis()
 
 	# 文本聊天（仅联机模式）
 	chat_log = _make_label(14, AppTheme.WHITE)
@@ -743,15 +753,15 @@ func _build_ui() -> void:
 	chat_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(chat_log)
 	chat_edit = LineEdit.new()
-	chat_edit.position = Vector2(440, 666)
+	chat_edit.position = Vector2(360, 666)
 	chat_edit.custom_minimum_size = Vector2(340, 36)
 	chat_edit.placeholder_text = "说点什么…"
-	chat_edit.max_length = 80
+	chat_edit.max_length = 60
 	chat_edit.add_theme_font_size_override("font_size", 15)
 	chat_edit.text_submitted.connect(func(_t: String) -> void: _on_chat_send())
 	add_child(chat_edit)
 	chat_btn = _button("发送")
-	chat_btn.position = Vector2(788, 666)
+	chat_btn.position = Vector2(708, 662)
 	# 紧凑小钮: 覆盖 _button 的触屏放大(与表情/操作行同排, 宽度受聊天区约束)
 	var cb_min := Vector2(64, 48) if Responsive.is_touch() else Vector2(56, 36)
 	chat_btn.custom_minimum_size = cb_min
@@ -843,6 +853,14 @@ func _sfx(sfx_name: String) -> void:
 func _vibrate(ms: int) -> void:
 	if Responsive.is_touch() and GameSettings.vibration:
 		Input.vibrate_handheld(ms)
+
+
+## 表情区显隐: 联机=切换钮常显、表情随展开态; 本地=全部隐藏
+func _update_emoji_vis() -> void:
+	var online := mode == "online"
+	_emoji_toggle.visible = online
+	for eb: Button in _emoji_btns:
+		eb.visible = online and _emoji_open
 
 
 func _flash_error(msg: String) -> void:
@@ -958,13 +976,17 @@ func _relayout() -> void:
 	# 紧凑时输入行挪到顶部空带。发送钮尺寸在入树后补设(入树前赋值不生效)
 	chat_btn.size = Vector2(64, 48) if touch else Vector2(56, 36)
 	chat_log.position = Vector2(16, 120.0 if compact else h - 258.0)
-	chat_edit.position = Vector2(440.0 if not compact else 240.0,
+	# 表情展开时聊天输入/发送右移让位(表情区 60..468)
+	var chat_ex := 480.0 if _emoji_open else 440.0
+	var send_x := 784.0 if _emoji_open else 744.0
+	chat_edit.position = Vector2(chat_ex if not compact else 240.0,
 			(8.0 if compact else (h - 58)))
-	chat_btn.position = Vector2(744.0 if not compact else 592.0,
+	chat_btn.position = Vector2(send_x if not compact else 592.0,
 			(8.0 if compact else (h - 58)))
-	# 快捷表情(联机): 贴底缘
+	# 快捷表情(联机): 折叠态仅切换钮; 展开时表情排在切换钮右侧
+	_emoji_toggle.position = Vector2(16, h - 58)
 	for i in _emoji_btns.size():
-		_emoji_btns[i].position = Vector2(16 + i * 52, h - 58)
+		_emoji_btns[i].position = Vector2(60 + i * 52, h - 58)
 	# 虚拟键盘避让: 聚焦聊天时底部整行抬到键盘上方
 	if _kbd_shift > 0.0:
 		chat_log.position.y -= _kbd_shift * 0.6
