@@ -98,6 +98,10 @@ func _process(delta: float) -> void:
 		_client_process(delta)
 
 
+## 健康检查 + 内置下载服务: GET / → JSON 状态; GET /download → 安装包列表页;
+## GET /download/<文件名> → 分块下发 download 文件夹中的安装包。
+## 用途: "发现新版本"按钮直接从联机主机获取新版(走既有 Tailscale/局域网
+## 通路, 国内无需访问任何外部站点)。
 func _poll_health(delta: float) -> void:
 	_log_accum += delta
 	if _log_accum >= 60.0:
@@ -109,22 +113,135 @@ func _poll_health(delta: float) -> void:
 	if _health.is_listening():
 		while _health.is_connection_available():
 			var s: StreamPeerTCP = _health.take_connection()
-			var body := "{\"status\":\"ok\",\"rooms\":%d,\"players\":%d,\"uptime\":%d,\"mem_mb\":%.1f,\"soak_matches\":%d}" % [
-				manager.rooms.size(), manager.peer_room.size(),
-				int(Time.get_ticks_msec() / 1000.0),
-				OS.get_static_memory_usage() / 1048576.0, manager.soak_matches]
-			var resp := "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
-				body.to_utf8_buffer().size(), body]
-			s.put_data(resp.to_utf8_buffer())
-			_health_peers.append({"s": s, "t": 0.3})
+			s.set_no_delay(true)
+			_health_peers.append({"s": s, "t": 10.0, "file": null, "sent": false})
 	var keep: Array = []
 	for e in _health_peers:
-		e["t"] -= delta
-		if e["t"] > 0.0:
-			keep.append(e)
+		var s: StreamPeerTCP = e["s"]
+		var done := false
+		if e["file"] != null:
+			# 文件下发: 每帧 256KB, 不阻塞主线程
+			var f: FileAccess = e["file"]
+			var chunk := f.get_buffer(262144)
+			if chunk.size() > 0:
+				s.put_data(chunk)
+			if f.get_position() >= f.get_length():
+				done = true
+			e["t"] = 30.0  # 传输中放宽空闲超时
 		else:
-			(e["s"] as StreamPeerTCP).disconnect_from_host()
+			e["t"] -= delta
+			s.poll()
+			var avail := s.get_available_bytes()
+			if avail > 0 and avail < 65536:
+				var req := s.get_utf8_string(mini(avail, 8192))
+				var path := "/"
+				var lines := req.split("\r\n")
+				if lines.size() > 0 and lines[0].begins_with("GET "):
+					var parts := lines[0].split(" ", false)
+					if parts.size() >= 2:
+						path = parts[1].split("?")[0]
+				if path == "/" or path == "/status":
+					_http_send_status(s)
+					done = true
+				elif path.begins_with("/download"):
+					var name := path.trim_prefix("/download").trim_prefix("/")
+					if name == "":
+						_http_send_download_page(s)
+						done = true
+					else:
+						var f := _open_download_file(name)
+						if f != null:
+							var len_bytes := f.get_length()
+							var head := ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
+									+ "Content-Length: %d\r\n"
+									+ "Content-Disposition: attachment; filename=\"%s\"\r\n"
+									+ "Connection: close\r\n\r\n") % [len_bytes, name]
+							s.put_data(head.to_utf8_buffer())
+							e["file"] = f
+						else:
+							_http_send_simple(s, 404, "no such file: %s (放到服务器 download/ 文件夹)" % name)
+							done = true
+				else:
+					_http_send_simple(s, 404, "not found")
+					done = true
+			elif e["t"] <= 0.0:
+				done = true
+		if done:
+			s.disconnect_from_host()
+		else:
+			keep.append(e)
 	_health_peers = keep
+
+
+func _http_send_status(s: StreamPeerTCP) -> void:
+	var body := "{\"status\":\"ok\",\"rooms\":%d,\"players\":%d,\"uptime\":%d,\"mem_mb\":%.1f,\"soak_matches\":%d}" % [
+		manager.rooms.size(), manager.peer_room.size(),
+		int(Time.get_ticks_msec() / 1000.0),
+		OS.get_static_memory_usage() / 1048576.0, manager.soak_matches]
+	var resp := "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
+		body.to_utf8_buffer().size(), body]
+	s.put_data(resp.to_utf8_buffer())
+
+
+func _http_send_simple(s: StreamPeerTCP, code: int, msg: String) -> void:
+	var resp := "HTTP/1.1 %d OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
+		code, msg.to_utf8_buffer().size(), msg]
+	s.put_data(resp.to_utf8_buffer())
+
+
+## download 文件夹: 服务器可执行文件旁的 download/(部署), 或工程 res://deploy(开发)
+static func _download_dir() -> String:
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	if DirAccess.dir_exists_absolute(exe_dir.path_join("download")):
+		return exe_dir.path_join("download")
+	if DirAccess.dir_exists_absolute("res://deploy/download"):
+		return "res://deploy/download"
+	return ""
+
+
+func _download_file_names() -> Array:
+	var names: Array = []
+	var dir := _download_dir()
+	if dir == "":
+		return names
+	var d := DirAccess.open(dir)
+	if d == null:
+		return names
+	d.list_dir_begin()
+	var n := d.get_next()
+	while n != "":
+		if not d.current_is_dir() and (n.ends_with(".apk") or n.ends_with(".exe")):
+			names.append(n)
+		n = d.get_next()
+	d.list_dir_end()
+	names.sort()
+	return names
+
+
+func _open_download_file(name: String) -> FileAccess:
+	if "/" in name or "\\" in name or ".." in name:
+		return null  # 路径穿越防护
+	var dir := _download_dir()
+	if dir == "":
+		return null
+	var f := FileAccess.open(dir.path_join(name), FileAccess.READ)
+	return f
+
+
+func _http_send_download_page(s: StreamPeerTCP) -> void:
+	var names := _download_file_names()
+	var rows := ""
+	for n in names:
+		rows += "<p><a href=\"/download/%s\" style=\"font-size:20px\">⬇ %s</a></p>" % [n, n]
+	if rows == "":
+		rows = "<p>服务器 download 文件夹中暂无安装包(把新版 Tycoon.apk / Tycoon.exe 放入即可)。</p>"
+	var html := "<html><head><meta charset=\"utf-8\"><title>Tycoon 更新</title></head>" \
+			+ "<body style=\"background:#14142b;color:#f0f0f0;font-family:sans-serif;padding:32px\">" \
+			+ "<h1 style=\"color:#e0a83c\">Tycoon 大富豪 — 版本更新</h1>" + rows \
+			+ "<p style=\"color:#8a8ab0\">下载后直接安装覆盖即可, 存档与设置保留。</p></body></html>"
+	var resp := "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s" % [
+		html.to_utf8_buffer().size(), html]
+	s.put_data(resp.to_utf8_buffer())
 
 
 func _on_peer_disconnected(peer: int) -> void:

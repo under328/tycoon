@@ -455,8 +455,17 @@ func _build_ui() -> void:
 	update_btn.visible = false
 	update_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		OS.shell_open(GameSettings.DOWNLOAD_URL))
+		OS.shell_open(_update_url()))
 	add_child(update_btn)
+
+
+## 版本更新地址: 优先从当前联机主机的内置下载服务获取
+## (http://主机:健康端口/download — 与联机同一条 Tailscale/局域网通路,
+## 国内无障碍); 无主机信息时退回配置的 DOWNLOAD_URL。
+func _update_url() -> String:
+	if net != null and str(net.address) != "":
+		return "http://%s:%d/download" % [str(net.address), int(net.port) + 1]
+	return GameSettings.DOWNLOAD_URL
 
 	# 联机帮助(图文, 四页: 三步开房/朋友加入/主机须知/常见问题)
 	help_btn = AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)

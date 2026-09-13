@@ -93,8 +93,8 @@ func _ready() -> void:
 	add_child(next)
 	_next_btn = next
 
-	var close := _label(16, AppTheme.DIM)
-	close.text = "关闭 ✕"
+	var close := _label(20, AppTheme.DIM)
+	close.text = "✕"
 	close.position = Vector2(size.x - 110, 24)
 	close.mouse_filter = Control.MOUSE_FILTER_STOP
 	close.gui_input.connect(func(ev: InputEvent) -> void:

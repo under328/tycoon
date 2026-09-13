@@ -5,7 +5,9 @@ const SAVE_PATH := "user://settings.cfg"
 ## 默认服务器: 本机(大厅可改; 没有官方 VPS 前保证"本机开房/局域网"开箱即用)
 const DEFAULT_HOST := "127.0.0.1"
 const DEFAULT_PORT := 24565
-## 部署时改成实际下载页地址; 版本不符的客户端会收到此提示
+## 版本更新的兜底地址(仅在客户端没有主机信息时使用)。
+## 正式分发建议用主机内置下载服务: 把新版安装包放到服务器 download/ 文件夹,
+## 客户端"发现新版本"会直接从联机主机获取(国内友好, 无需外部站点)。
 const DOWNLOAD_URL := "https://tycoon.example.com/download"
 
 var nickname := "玩家"
