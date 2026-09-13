@@ -107,7 +107,7 @@ func _process(delta: float) -> void:
 					AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
 			if remain <= 5.0 and cur >= 1 and cur != _prev_tick:
 				_prev_tick = cur
-				Audio.play("tick")
+				_sfx("tick")
 
 
 ## ESC / 安卓返回键 = 返回菜单(联机对局中沿用 3 秒二次确认的弃局语义)
@@ -243,7 +243,7 @@ func _human_apply(action: Dictionary) -> void:
 	if advancing or state.is_empty():
 		return
 	if str(action["t"]) == "pass":
-		Audio.play("pass")
+		_sfx("pass")
 	var r := GameStateGd.apply(state, action)
 	if not bool(r["ok"]):
 		_flash_error(GameStateGd.error_msg(str(r["error"])))
@@ -256,7 +256,7 @@ func _human_apply(action: Dictionary) -> void:
 
 
 func _on_play_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	# 换牌阶段: 确认返还所选牌
 	var cur_view: Dictionary = _current_view()
 	if str(cur_view.get("phase", "")) == "exchange":
@@ -288,7 +288,7 @@ func _on_play_pressed() -> void:
 
 ## 提示: 用 AI 策略自动选中一手合理牌型, 玩家确认后打出; 压不过则自动不要。
 func _on_hint_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	var view: Dictionary
 	if mode == "online" and net != null:
 		view = net.latest_view
@@ -306,7 +306,7 @@ func _on_hint_pressed() -> void:
 
 
 func _on_pass_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	if mode == "online":
 		net.pass_turn()
 		return
@@ -314,17 +314,17 @@ func _on_pass_pressed() -> void:
 
 
 func _on_next_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	_human_apply({"t": "next_round"})
 
 
 func _on_rematch_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	_new_match()
 
 
 func _on_leave_pressed() -> void:
-	Audio.play("click")
+	_sfx("click")
 	# 联机对局中离开=弃局交给 AI, 需 3 秒内二次确认; 本地模式直接返回
 	if mode == "online" and not _at_game_end:
 		var now := Time.get_ticks_msec()
@@ -359,7 +359,7 @@ func _bind_net() -> void:
 				_turn_total = float(int(view["rules"]["turn_seconds"]))
 				_turn_remain = _turn_total
 				if new_turn == int(view["my_seat"]):
-					Audio.play("turn")
+					_sfx("turn")
 		_refresh())
 	net.game_event.connect(_on_game_event)
 	net.errored.connect(func(code: String, msg: String) -> void:
@@ -386,7 +386,7 @@ func _bind_net() -> void:
 func _on_game_event(event: String, data: Dictionary) -> void:
 	if event == "emoji":
 		_show_emoji(int(data.get("seat", 0)), int(data.get("id", 0)))
-		Audio.play("pop")
+		_sfx("pop")
 	elif event == "chat":
 		_append_chat(int(data.get("seat", 0)), str(data.get("text", "")))
 	elif event == "played" and bool(data.get("eight_cut", false)):
@@ -469,7 +469,7 @@ func _build_ui() -> void:
 	rules_btn.custom_minimum_size = Vector2(72, 32)
 	rules_btn.add_theme_font_size_override("font_size", 15)
 	rules_btn.pressed.connect(func() -> void:
-		Audio.play("click")
+		_sfx("click")
 		var tut := TutorialScript.new()
 		add_child(tut))
 	add_child(rules_btn)
@@ -574,7 +574,7 @@ func _build_ui() -> void:
 				_flash_error("表情发太快了")
 				return
 			_emoji_cd = 1.0
-			Audio.play("pop")
+			_sfx("pop")
 			if mode == "online" and net != null:
 				net.send_emoji(id))
 		add_child(eb)
@@ -671,6 +671,12 @@ func _button(text: String) -> Button:
 	b.custom_minimum_size = Vector2(96, 44)
 	b.add_theme_font_size_override("font_size", 19)
 	return b
+
+
+## 音效统一入口: 隐藏的后台托管牌桌不发声 — 页面在首页时只应听到首页音乐
+func _sfx(sfx_name: String) -> void:
+	if visible:
+		Audio.play(sfx_name)
 
 
 func _flash_error(msg: String) -> void:
@@ -868,7 +874,7 @@ func _refresh_view(view: Dictionary) -> void:
 	if phase == "game_end" and not _end_shown \
 			and (view["identities"] as Array).size() == 4:
 		_end_shown = true
-		Audio.play("result")
+		_sfx("result")
 		var reward: Dictionary = {}
 		if mode == "local":
 			var seat_me := int(view["my_seat"])
@@ -995,7 +1001,7 @@ func _refresh_field(view: Dictionary) -> void:
 	for child in field_box.get_children():
 		child.queue_free()
 	if emptied:
-		Audio.play("clear")
+		_sfx("clear")
 		return
 	for i in field.size():
 		var entry: Dictionary = field[i]
@@ -1021,7 +1027,7 @@ func _refresh_field(view: Dictionary) -> void:
 			tw.tween_property(holder, "modulate:a", 1.0, 0.22)
 			tw.tween_property(holder, "scale", Vector2.ONE, 0.22)\
 					.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			Audio.play("play_card")
+			_sfx("play_card")
 
 
 func _make_card(card_id: int, w: float, h: float, is_selected: bool, clickable := true) -> Control:
@@ -1040,7 +1046,7 @@ func _on_hand_card_picked(card: int) -> void:
 		selected.erase(card)
 	else:
 		selected.append(card)
-	Audio.play("click")
+	_sfx("click")
 	# 更新所有手牌卡的选中态
 	for child in hand_box.get_children():
 		if "selected" in child:
@@ -1083,7 +1089,7 @@ func _refresh_hand(view: Dictionary) -> void:
 		i += 1
 	_layout_hand()
 	if i > 0:
-		Audio.play("deal")
+		_sfx("deal")
 
 
 ## 手牌排布: 排得下就等距, 排不下适当重叠(右牌压左牌, 露出左上点数)。
@@ -1118,7 +1124,7 @@ func _spawn_fx(fx_type: String) -> void:
 		"revolution": "revolution", "anti_revolution": "revolution",
 		"eight_cut": "eight_cut", "fall": "fall", "exchange": "exchange",
 	}
-	Audio.play(str(sounds.get(fx_type, "pop")))
+	_sfx(str(sounds.get(fx_type, "pop")))
 	if fx_layer != null:
 		fx_layer.add_child(FxOverlayScript.create(fx_type))
 
