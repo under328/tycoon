@@ -10,12 +10,13 @@ const GameStateGd = preload("res://src/rules/game_state.gd")
 
 
 ## 为座位 seat 决定下一步动作（返回可传入 GameState.apply 的 action）。
-static func decide(st: Dictionary, seat: int) -> Dictionary:
+## level: normal=策略 v2 / easy=合法选项中随机(新手友好, 不保证最优)。
+static func decide(st: Dictionary, seat: int, level: String = "normal") -> Dictionary:
 	match str(st["phase"]):
 		"exchange":
 			return _decide_exchange_return(st, seat)
 		"play":
-			return _decide_play(st, seat)
+			return _decide_play(st, seat, level)
 	return {"t": "pass", "seat": seat}
 
 
@@ -30,12 +31,13 @@ static func _decide_exchange_return(st: Dictionary, seat: int) -> Dictionary:
 	return {"t": "pass", "seat": seat}
 
 
-static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
+static func _decide_play(st: Dictionary, seat: int, level: String = "normal") -> Dictionary:
 	var hand: Array = st["hands"][seat]
 	var lead: Dictionary = st["lead"]
 	var combos := all_combos(hand, st["cfg"],
 			hand.size() == 1 and CardsGd.is_joker(hand[0]) and not lead.is_empty())
 	var must_include := int(st["must_include"])
+	var easy := level == "easy"
 	# 一手清盘 = 直接获胜, 立即打出(受 must_include 约束; 跟牌时还须压过场牌)
 	for combo in combos:
 		if must_include >= 0 and not combo["cards"].has(must_include):
@@ -45,22 +47,32 @@ static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
 		if lead.is_empty() or ComboGd.beats(combo, lead, st["revolution"]):
 			return {"t": "play", "seat": seat, "cards": combo["cards"]}
 	if lead.is_empty():
-		var best := {}
+		var cands := []
 		for combo in combos:
 			if must_include >= 0 and not combo["cards"].has(must_include):
 				continue
+			cands.append(combo)
+		if cands.is_empty():
+			return {"t": "pass", "seat": seat}
+		if easy:
+			var pick: Dictionary = cands[randi() % cands.size()]
+			return {"t": "play", "seat": seat, "cards": pick["cards"]}
+		var best := {}
+		for combo in cands:
 			if best.is_empty() or _prefer_lead(combo, best, bool(st["revolution"])):
 				best = combo
-		if best.is_empty():
-			return {"t": "pass", "seat": seat}
 		return {"t": "play", "seat": seat, "cards": best["cards"]}
 	var beat := {}
 	var lead_eff := ComboGd.eff_key(float(lead["key"]), st["revolution"])
 	var beat_d := INF
 	var beat_jokers := 99
 	var beat_len := 99
+	var beaters := []
 	for combo in combos:
 		if not ComboGd.beats(combo, lead, st["revolution"]):
+			continue
+		if easy:
+			beaters.append(combo)
 			continue
 		var d: float = absf(ComboGd.eff_key(float(combo["key"]), st["revolution"]) - lead_eff)
 		var jc := _joker_count(combo)
@@ -71,6 +83,9 @@ static func _decide_play(st: Dictionary, seat: int) -> Dictionary:
 			beat_jokers = jc
 			beat_len = int(combo["len"])
 	if beat.is_empty():
+		if not beaters.is_empty():
+			var pick2: Dictionary = beaters[randi() % beaters.size()]
+			return {"t": "play", "seat": seat, "cards": pick2["cards"]}
 		return {"t": "pass", "seat": seat}
 	return {"t": "play", "seat": seat, "cards": beat["cards"]}
 

@@ -149,6 +149,24 @@ func _build_title() -> void:
 			Wallet.local_wins, Wallet.local_matches]
 	_rank_lbl.reset_size()
 	badge_box.add_child(_rank_lbl)
+	var ops := HBoxContainer.new()
+	ops.add_theme_constant_override("separation", 6)
+	badge_box.add_child(ops)
+	var sign_btn := AppTheme.make_button("签到", Vector2(64, 30), 14)
+	sign_btn.visible = Wallet.can_sign_today()
+	sign_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_show_signin(sign_btn))
+	ops.add_child(sign_btn)
+	var prof_btn := AppTheme.make_button("成就·战绩", Vector2(120, 30), 14)
+	prof_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
+		pp.closed.connect(func() -> void:
+			pp.queue_free()
+			_refresh_balance())
+		add_child(pp))
+	ops.add_child(prof_btn)
 
 	# 版本号(锚左下)
 	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
@@ -275,6 +293,29 @@ func _show_mode_select() -> void:
 		rh.closed.connect(func() -> void: rh.queue_free())
 		add_child(rh))
 	head.add_child(help)
+	# AI 难度行(本地两种模式共用)
+	var diff_row := HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", 10)
+	box.add_child(diff_row)
+	var diff_lbl := AppTheme.make_label(16, AppTheme.WHITE)
+	diff_lbl.text = "AI 难度"
+	diff_lbl.custom_minimum_size = Vector2(70, 0)
+	diff_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	diff_row.add_child(diff_lbl)
+	var diff_btns: Array = []
+	for lv: Array in [["简单", "easy"], ["普通", "normal"]]:
+		var b := AppTheme.make_button(str(lv[0]), Vector2(120, 40), 16)
+		b.toggle_mode = true
+		b.button_pressed = GameSettings.ai_level == str(lv[1])
+		b.pressed.connect(func() -> void:
+			Audio.play("click")
+			GameSettings.ai_level = str(lv[1])
+			GameSettings.save_settings()
+			for other: Button in diff_btns:  # 单选互斥
+				if other != b:
+					other.set_pressed_no_signal(false))
+		diff_btns.append(b)
+		diff_row.add_child(b)
 	# 普通模式
 	var normal := AppTheme.make_button("普通模式", Vector2(420, 64), 22)
 	normal.pressed.connect(func() -> void:
@@ -298,6 +339,103 @@ func _show_mode_select() -> void:
 	box.add_child(d2)
 	_mode_dlg = dlg
 	add_child(dlg)
+
+
+## 每日签到弹窗: 7 天奖励轨道 + 今日领取
+func _show_signin(sign_btn: Button) -> void:
+	if not Wallet.can_sign_today():
+		return
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	dlg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dlg.add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 36
+	sb.content_margin_right = 36
+	sb.content_margin_top = 24
+	sb.content_margin_bottom = 26
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var title := AppTheme.make_label(26, AppTheme.GOLD)
+	title.text = "每日签到 · 连续 %d 天" % Wallet.sign_streak
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	# 7 天轨道(高亮今日可领的那格)
+	var track := HBoxContainer.new()
+	track.add_theme_constant_override("separation", 8)
+	track.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(track)
+	var next_idx := Wallet.sign_streak % Wallet.SIGN_REWARDS.size()
+	for i in Wallet.SIGN_REWARDS.size():
+		var rw: Dictionary = Wallet.SIGN_REWARDS[i]
+		var txt := "第%d天
+%s" % [i + 1, _signin_reward_text(rw)]
+		var cell := AppTheme.make_label(14,
+				AppTheme.GOLD if i == next_idx else AppTheme.DIM)
+		cell.text = txt
+		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cell.custom_minimum_size = Vector2(76, 52)
+		var wrap := PanelContainer.new()
+		wrap.add_theme_stylebox_override("panel", AppTheme.flat(
+				Color(0.10, 0.10, 0.22) if i == next_idx else Color(0.07, 0.07, 0.16),
+				AppTheme.GOLD if i == next_idx else Color(1, 1, 1, 0.1), 8, 1))
+		wrap.add_child(cell)
+		track.add_child(wrap)
+	var claim := AppTheme.make_button("签 到 领 取", Vector2(240, 50), 19)
+	claim.pressed.connect(func() -> void:
+		var r: Dictionary = Wallet.claim_signin()
+		if r.is_empty():
+			return
+		Audio.play("win")
+		_refresh_balance()
+		sign_btn.visible = false
+		dlg.queue_free()
+		_toast_msg("签到成功: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])])
+	)
+	var wrap2 := CenterContainer.new()
+	wrap2.add_child(claim)
+	box.add_child(wrap2)
+	add_child(dlg)
+
+
+func _signin_reward_text(rw: Dictionary) -> String:
+	var parts: Array = []
+	if int(rw.get("gold", 0)) > 0:
+		parts.append("%d金币" % int(rw["gold"]))
+	if int(rw.get("diamonds", 0)) > 0:
+		parts.append("%d钻石" % int(rw["diamonds"]))
+	return " ".join(PackedStringArray(parts))
+
+
+func _toast_msg(text: String) -> void:
+	# 复用底部提示行(临时浮现)
+	if _hint_lbl == null:
+		return
+	var prev := _hint_lbl.text
+	var prev_color := _hint_lbl.get_theme_color("font_color")
+	_hint_lbl.text = text
+	_hint_lbl.add_theme_color_override("font_color", AppTheme.GOLD)
+	_hint_lbl.reset_size()
+	_hint_lbl.position = Vector2((size.x - _hint_lbl.size.x) / 2.0, size.y - 36)
+	var tw := create_tween()
+	tw.tween_interval(2.4)
+	tw.tween_callback(func() -> void:
+		_hint_lbl.text = prev
+		_hint_lbl.add_theme_color_override("font_color", prev_color)
+		_hint_lbl.reset_size()
+		_hint_lbl.position = Vector2((size.x - _hint_lbl.size.x) / 2.0, size.y - 36))
 
 
 func _close_mode_select() -> void:

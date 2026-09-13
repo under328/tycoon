@@ -10,6 +10,7 @@ func run(t) -> void:
 	_rush_lead(t)
 	_rush_follow_must_beat(t)
 	_follow_save_jokers_then_len(t)
+	_easy_level_legal(t)
 
 
 ## id: value = 3 + id/4 (3=0..3, 5=8..11, 6=12..15, 7=16..19, A14=44..47); 王=52,53
@@ -66,6 +67,29 @@ func _follow_save_jokers_then_len(t) -> void:
 	var st2 := _st([12, 13, 52], lead)  # 66 + 王
 	var act2 := BotPlayerGd.decide(st2, 0)
 	t.expect_eq(_jokers(act2), 0, "同距 → 0 王天然对优先")
+
+
+## 简单难度: 随机选择也必须永远合法(种子化抽样 200 次)
+func _easy_level_legal(t) -> void:
+	seed(20260914)
+	var bad := 0
+	for trial in 200:
+		var hand := []
+		for i in randi_range(1, 13):
+			hand.append(randi() % 56)
+		var lead := {}
+		if randf() < 0.5:
+			var vals := [3, 5, 7, 10, 13]
+			var v: int = vals[randi() % vals.size()]
+			var base: int = (v - 3) * 4
+			lead = {"type": 0, "key": float(v), "len": 1, "cards": [base + randi() % 4]}
+		var st := _st(hand.duplicate(), lead)
+		var act: Dictionary = BotPlayerGd.decide(st, 0, "easy")
+		if str(act["t"]) == "play":
+			for c in act["cards"]:
+				if not hand.has(int(c)):
+					bad += 1
+	t.expect_eq(bad, 0, "简单难度 200 抽样全部合法(bad=%d)" % bad)
 
 
 func _jokers(action: Dictionary) -> int:

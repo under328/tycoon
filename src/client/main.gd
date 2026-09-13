@@ -213,7 +213,7 @@ func _show_resume_dialog() -> void:
 	new_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close_resume_dialog()
-		_launch_new_local(mode == "rogue"))
+		menu._show_mode_select())
 	row.add_child(new_btn)
 	var cancel := AppTheme.make_button("取消", Vector2(96, 46), 15)
 	cancel.pressed.connect(func() -> void:
@@ -237,7 +237,7 @@ func _close_resume_dialog() -> void:
 func _resume_local_game() -> void:
 	_close_resume_dialog()
 	if table == null or not is_instance_valid(table):
-		_launch_new_local(mode == "rogue")
+		menu._show_mode_select()
 		return
 	table.auto_pilot = false  # 重新接管自己的座位
 	table.advancing = false   # 后台驱动循环由代际机制自动让位

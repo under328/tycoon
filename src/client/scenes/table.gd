@@ -219,7 +219,7 @@ func _advance() -> void:
 			if seat_to_act == 0 and not auto_pilot:
 				# 停靠在玩家回合: 压不过也自动"不要"(无需等玩家手动)
 				if not (state["lead"] as Dictionary).is_empty():
-					var act: Dictionary = BotPlayerGd.decide(state, 0)
+					var act: Dictionary = BotPlayerGd.decide(state, 0, GameSettings.ai_level)
 					if str(act.get("t")) == "pass":
 						_auto_pass()
 						continue
@@ -233,7 +233,7 @@ func _advance() -> void:
 			# 否则 AI 动作打在错误座位上(not_your_turn)导致循环死亡
 			if str(state["phase"]) != "play" or int(state["turn"]) != seat_to_act:
 				continue
-			var action := BotPlayerGd.decide(state, seat_to_act)
+			var action := BotPlayerGd.decide(state, seat_to_act, GameSettings.ai_level)
 			var r := _local_apply(action)
 			if not bool(r["ok"]):
 				push_error("local table: AI 非法动作 %s" % str(r["error"]))
@@ -252,7 +252,7 @@ func _advance() -> void:
 				return
 			if str(state["phase"]) != "exchange":
 				continue
-			var action := BotPlayerGd.decide(state, int(state["turn"]))
+			var action := BotPlayerGd.decide(state, int(state["turn"]), GameSettings.ai_level)
 			var r2 := GameStateGd.apply(state, action)
 			if not bool(r2["ok"]):
 				push_error("local table: 换牌返还非法 %s" % str(r2["error"]))
@@ -1260,6 +1260,12 @@ func _refresh_view(view: Dictionary) -> void:
 			reward = Wallet.grant_match_reward(pts, my_rank, stake_n)
 			reward["wallet_gold"] = Wallet.gold
 			reward["wallet_diamonds"] = Wallet.diamonds
+			Wallet.push_history({
+				"day": Time.get_date_string_from_system(),
+				"mode": "肉鸽" if rogue else "本地",
+				"rank": my_rank, "points": pts,
+				"gold": int(reward["gold"]), "diamonds": int(reward["diamonds"]),
+			})
 		var panel := GameEndPanelScript.new()
 		panel.setup(view, func(s: int) -> String: return _seat_name(view, s), reward)
 		fx_layer.add_child(panel)

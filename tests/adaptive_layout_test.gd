@@ -20,6 +20,7 @@ const SCENE_PATHS := [
 	"res://src/client/ui/settings_panel.gd",
 	"res://src/client/ui/game_end_panel.gd",
 	"res://src/client/ui/rogue_help.gd",
+	"res://src/client/ui/profile_panel.gd",
 ]
 
 const PROFILES := [
@@ -233,6 +234,12 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					"rogue_help 下一页未居中右")
 			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0,
 					"rogue_help 关闭未锚右缘")
+		9:  # 个人档案(页签/返回/滚动区)
+			expect(s._scroll.size.x == w - 80.0, "profile 商品区宽度未随窗口")
+			expect(s._back_btn.position.x + s._back_btn.size.x <= w - 20.0,
+					"profile 返回按钮未锚右缘")
+			expect(s._tab_ach_btn.visible and s._tab_hist_btn.visible,
+					"profile 双页签可见")
 
 
 func _initialize() -> void:
@@ -257,6 +264,10 @@ func _next() -> void:
 		quit(0)
 		return
 	cur = _make_scene(scene_idx)
+	if cur == null:
+		printerr("[adaptive] FAIL: 场景加载失败 %s" % SCENE_PATHS[scene_idx])
+		quit(1)
+		return
 	cur.name = "AdaptiveCap%d" % scene_idx
 	root.add_child(cur)
 	if scene_idx == 7:

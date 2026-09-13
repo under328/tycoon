@@ -91,6 +91,16 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 		dia.text("·", AppTheme.DIM)
 		dia.amount("gem", str(int(reward.get("wallet_diamonds", 0))), AppTheme.WHITE)
 		box.add_child(dia)
+		# 成就解锁提示(结算时由钱包求值)
+		var achs: Array = reward.get("achievements", [])
+		if not achs.is_empty():
+			var names: Array = []
+			for a in achs:
+				names.append(str(a["name"]))
+			var al := AppTheme.make_label(17, AppTheme.GOLD)
+			al.text = "🏆 成就解锁: %s" % " · ".join(PackedStringArray(names))
+			al.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			box.add_child(al)
 
 	# 演出: 暗幕淡入 + 大字弹入 + 内容淡入
 	big.pivot_offset = Vector2(200, 65)

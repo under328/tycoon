@@ -22,6 +22,9 @@ func run(t) -> void:
 	_server_pool(t)
 	_special_items(t)
 	_rank_title(t)
+	_signin(t)
+	_achievements(t)
+	_history(t)
 
 
 func _registry(t) -> void:
@@ -144,6 +147,65 @@ func _special_items(t) -> void:
 	t.expect_eq(int(r4["diamonds"]), 2, "无卡: 大富豪 +2 不翻倍")
 	t.expect(not bool(r4["doubled"]), "无卡不标记 doubled")
 	t.expect_eq(int(r4["bonus"]), 3, "新的一日首胜名额重置")
+	w.queue_free()
+
+
+## 每日签到: 领取入账/当日去重/连续计数/7天循环
+func _signin(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_sign_wallet.cfg"
+	t.expect(w.can_sign_today(), "新档可签到")
+	var r: Dictionary = w.claim_signin()
+	t.expect(not r.is_empty(), "签到成功")
+	t.expect_eq(int(r["day_index"]), 0, "首日 = 第 1 格")
+	t.expect_eq(int(w.gold), 500 + 100, "第 1 天奖励 100 金币")
+	t.expect(not w.can_sign_today(), "当日不可重复签到")
+	t.expect(w.claim_signin().is_empty(), "重复领取返回空")
+	# 连续: 昨日签到过 → streak +1, 循环取模
+	w.sign_day = "2000-01-01"  # 断签 → streak 重置为 1
+	var r2: Dictionary = w.claim_signin()
+	t.expect_eq(int(w.sign_streak), 1, "断签后 streak 重置")
+	# 连续 7 天 → 风雨无阻(最近签到=昨日 → streak 6+1=7)
+	w.sign_streak = 6
+	w.sign_day = w._days_shift(Time.get_date_string_from_system(), -1)
+	w.claim_signin()
+	t.expect(w.unlocked.has("signer_7"), "连签 7 天解锁风雨无阻")
+	w.queue_free()
+
+
+## 成就: 阈值解锁/不重复解锁/信号
+func _achievements(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_ach_wallet.cfg"
+	var got: Array = []
+	w.achievements_changed.connect(func(newly: Array) -> void:
+		got.append(newly.size()))
+	var r: Dictionary = w.grant_match_reward(10, 1, 1)  # 首胜
+	t.expect((r["achievements"] as Array).any(
+			func(a: Dictionary) -> bool: return str(a["id"]) == "first_win"),
+			"首胜解锁初阵告捷")
+	t.expect_eq(int(got[0]), (r["achievements"] as Array).size(), "信号广播新增数")
+	var again: Dictionary = w.grant_match_reward(10, 1, 1)
+	t.expect_eq((again["achievements"] as Array).size(), 0, "不重复解锁")
+	t.expect(w.unlocked.has("first_win"), "已解锁持久在列")
+	# 收藏家: 8 件装扮
+	for i in 7:
+		w.owned_skins.append("skin_x%d" % i)
+	w.check_achievements()
+	t.expect(w.unlocked.has("collector"), "8 件装扮解锁收藏家")
+	w.queue_free()
+
+
+## 对局记录: 推入/截断 20 条
+func _history(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_hist_wallet.cfg"
+	for i in 25:
+		w.push_history({"day": "d%d" % i, "rank": 1, "points": 10,
+				"gold": 20, "diamonds": 2, "mode": "本地"})
+	t.expect_eq(int(w.history.size()), 20, "记录截断至 20 条")
+	t.expect_eq(str((w.history[0] as Dictionary)["day"]), "d5", "最旧被挤出")
+	t.expect_eq(str((w.history[19] as Dictionary)["day"]), "d24", "最新在尾")
 	w.queue_free()
 
 

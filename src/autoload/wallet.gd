@@ -6,6 +6,7 @@ extends Node
 
 signal balance_changed
 signal equipped_changed
+signal achievements_changed(newly: Array)
 
 const SAVE_PATH := "user://wallet.cfg"
 const AUTOSAVE_SEC := 10.0
@@ -14,6 +15,27 @@ const AUTOSAVE_SEC := 10.0
 const GOLD_PER_POINT := 2        # 1 积分 = 2 金币(再乘输赢倍率)
 
 const FIRST_WIN_DIAMONDS := 3   # 每日首胜奖励钻石数
+const HISTORY_MAX := 20         # 对局记录保留条数
+
+## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
+const SIGN_REWARDS := [
+	{"gold": 100}, {"gold": 150}, {"diamonds": 1}, {"gold": 200},
+	{"gold": 250}, {"diamonds": 2}, {"diamonds": 5},
+]
+
+## 成就目录: cond 在 check_achievements 里按 id 求值(基于持久化统计)
+const ACHIEVEMENTS := [
+	{"id": "first_win", "name": "初阵告捷", "desc": "赢得第一场胜利"},
+	{"id": "wins_10", "name": "渐入佳境", "desc": "累计获胜 10 场"},
+	{"id": "wins_30", "name": "牌桌老手", "desc": "累计获胜 30 场"},
+	{"id": "wins_50", "name": "所向披靡", "desc": "累计获胜 50 场"},
+	{"id": "matches_30", "name": "常客", "desc": "完成 30 场对局"},
+	{"id": "diamonds_50", "name": "小有积蓄", "desc": "累计获得 50 颗钻石"},
+	{"id": "gold_1000", "name": "腰缠万贯", "desc": "金币持有量达到 1000"},
+	{"id": "collector", "name": "收藏家", "desc": "拥有 8 件装扮(皮肤+卡面)"},
+	{"id": "gambler", "name": "赌性坚强", "desc": "购入一张双倍钻石卡"},
+	{"id": "signer_7", "name": "风雨无阻", "desc": "连续签到满 7 天"},
+]
 
 ## 特殊道具(消耗型/限时增益, 非装扮): currency=购买所用货币
 const SPECIALS := [
@@ -29,6 +51,13 @@ var equipped_skin := "skin_default"
 var equipped_card := "card_washi"
 var double_diamond_day := ""   # 双倍钻石卡生效日期(YYYY-MM-DD, 当地时区)
 var first_win_day := ""        # 每日首胜已领取日期(空=今日未领)
+var sign_day := ""             # 最近一次签到日期
+var sign_streak := 0           # 连续签到天数(7 天一循环)
+var sign_total := 0            # 累计签到天数
+var diamonds_earned := 0       # 累计获得钻石(成就统计)
+var special_bought := 0        # 累计购入特殊道具数(成就统计)
+var unlocked: Array = []       # 已解锁成就 id
+var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
 
 ## 本地战绩统计
 var local_matches := 0
@@ -69,6 +98,13 @@ func _reset_defaults() -> void:
 	equipped_card = "card_washi"
 	double_diamond_day = ""
 	first_win_day = ""
+	sign_day = ""
+	sign_streak = 0
+	sign_total = 0
+	diamonds_earned = 0
+	special_bought = 0
+	unlocked = []
+	history = []
 	local_matches = 0
 	local_wins = 0
 
@@ -106,6 +142,15 @@ func _read_into(path: String) -> bool:
 	local_wins = int(cf.get_value("wallet", "local_wins", 0))
 	double_diamond_day = str(cf.get_value("wallet", "dd_day", ""))
 	first_win_day = str(cf.get_value("wallet", "fw_day", ""))
+	sign_day = str(cf.get_value("wallet", "sign_day", ""))
+	sign_streak = int(cf.get_value("wallet", "sign_streak", 0))
+	sign_total = int(cf.get_value("wallet", "sign_total", 0))
+	diamonds_earned = int(cf.get_value("wallet", "diamonds_earned", 0))
+	special_bought = int(cf.get_value("wallet", "special_bought", 0))
+	var ul: Array = cf.get_value("wallet", "unlocked", [])
+	unlocked = ul
+	var hs: Array = cf.get_value("wallet", "history", [])
+	history = hs
 	return true
 
 
@@ -123,6 +168,13 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "local_wins", local_wins)
 	cf.set_value("wallet", "dd_day", double_diamond_day)
 	cf.set_value("wallet", "fw_day", first_win_day)
+	cf.set_value("wallet", "sign_day", sign_day)
+	cf.set_value("wallet", "sign_streak", sign_streak)
+	cf.set_value("wallet", "sign_total", sign_total)
+	cf.set_value("wallet", "diamonds_earned", diamonds_earned)
+	cf.set_value("wallet", "special_bought", special_bought)
+	cf.set_value("wallet", "unlocked", unlocked)
+	cf.set_value("wallet", "history", history)
 	if cf.save(tmp) == OK:
 		DirAccess.rename_absolute(
 				ProjectSettings.globalize_path(tmp),
@@ -156,13 +208,16 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1) -> Dictionary:
 		bonus = FIRST_WIN_DIAMONDS
 		first_win_day = _today()
 	diamonds += dia_delta + bonus
+	diamonds_earned += dia_delta + bonus
 	local_matches += 1
 	if rank == 1:
 		local_wins += 1
+	var newly := check_achievements()
 	_mark_dirty()
 	balance_changed.emit()
 	return {"gold": gold_delta, "diamonds": dia_delta, "points": points,
-			"stakes": stakes, "doubled": doubled, "bonus": bonus}
+			"stakes": stakes, "doubled": doubled, "bonus": bonus,
+			"achievements": newly}
 
 
 ## 购买: 成功扣钻石并加入拥有, 返回 true。
@@ -191,10 +246,95 @@ func buy_special(item_id: String) -> bool:
 			return false
 		gold -= price
 		double_diamond_day = _today()  # 双倍钻石卡: 当日起效
+		special_bought += 1
+		check_achievements()
 		_mark_dirty()
 		balance_changed.emit()
 		return true
 	return false
+
+
+## ── 每日签到(7 天一循环) ──
+
+func can_sign_today() -> bool:
+	return sign_day != _today()
+
+
+## 领取今日签到: 奖励入账, 连续/累计计数推进, 返回 {day_index, gold, diamonds}
+func claim_signin() -> Dictionary:
+	if not can_sign_today():
+		return {}
+	var yesterday := _days_shift(_today(), -1)
+	sign_streak = sign_streak + 1 if sign_day == yesterday else 1
+	sign_day = _today()
+	sign_total += 1
+	var idx := (sign_streak - 1) % SIGN_REWARDS.size()
+	var rw: Dictionary = SIGN_REWARDS[idx]
+	var g := int(rw.get("gold", 0))
+	var d := int(rw.get("diamonds", 0))
+	gold += g
+	diamonds += d
+	diamonds_earned += d
+	var newly := check_achievements()  # 签到可解锁『风雨无阻』
+	_mark_dirty()
+	balance_changed.emit()
+	return {"day_index": idx, "gold": g, "diamonds": d, "achievements": newly}
+
+
+func _days_shift(day: String, delta: int) -> String:
+	# 昨日/明日日期串(本地时区): 直接用当前日推算, 与 _today() 同基准
+	var now := Time.get_unix_time_from_system() as int
+	var offset := int(Time.get_time_zone_from_system().get("offset", 0))
+	return Time.get_date_string_from_unix_time(now + offset + delta * 86400)
+
+
+## ── 成就 ──
+
+## 按当前统计求值全部成就, 新解锁的入列并广播; 返回本次新解锁列表
+func check_achievements() -> Array:
+	var stats := {
+		"wins": local_wins, "matches": local_matches,
+		"diamonds_earned": diamonds_earned, "gold": gold,
+		"skins": owned_skins.size(), "cards": owned_cards.size(),
+		"special_bought": special_bought, "sign_streak": sign_streak,
+	}
+	var newly: Array = []
+	for a in ACHIEVEMENTS:
+		var id := str(a["id"])
+		if unlocked.has(id):
+			continue
+		if _ach_met(str(id), stats):
+			unlocked.append(id)
+			newly.append(a)
+	if not newly.is_empty():
+		_mark_dirty()
+		achievements_changed.emit(newly)
+	return newly
+
+
+func _ach_met(id: String, s: Dictionary) -> bool:
+	match id:
+		"first_win": return int(s["wins"]) >= 1
+		"wins_10": return int(s["wins"]) >= 10
+		"wins_30": return int(s["wins"]) >= 30
+		"wins_50": return int(s["wins"]) >= 50
+		"matches_30": return int(s["matches"]) >= 30
+		"diamonds_50": return int(s["diamonds_earned"]) >= 50
+		"gold_1000": return int(s["gold"]) >= 1000
+		"collector": return int(s["skins"]) + int(s["cards"]) >= 8
+		"gambler": return int(s["special_bought"]) >= 1
+		"signer_7": return int(s["sign_streak"]) >= 7
+	return false
+
+
+## ── 对局记录 ──
+
+## 追加一条本地对局记录(只留最近 HISTORY_MAX 条)
+func push_history(entry: Dictionary) -> void:
+	history.append(entry)
+	while history.size() > HISTORY_MAX:
+		history.pop_front()
+	_mark_dirty()
 
 
 ## 称号随本地胜场晋升(留存成长线, 主菜单徽章展示)
