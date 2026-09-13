@@ -299,6 +299,8 @@ func _process(_d: float) -> bool:
 				cur.size = root.get_visible_rect().size
 				if scene_idx == 2 and cur._leave_dlg == null:
 					cur._show_leave_dialog()  # 提前一帧开框: 容器布局完成后再断言
+				if scene_idx == 6 and not cur.visible:
+					cur.open()  # 设置页默认隐藏(open 后容器才排序), 打开后再断言
 				prof_sub = 3
 			3:
 				prof_sub = 4  # 等一帧: resized→_relayout 在下一帧生效

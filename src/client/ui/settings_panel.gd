@@ -15,50 +15,48 @@ var _fullscreen_btn: CheckButton
 var _vsync_btn: CheckButton
 var _resolution_btn: OptionButton
 var _toast: Label
+var _back_btn: Button
+var _scroll: ScrollContainer
 
 
 func _ready() -> void:
-	# 全屏模态层
-	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级,
-	# 不再手动赋视口尺寸(那会溢出父级边界, 手机上按钮超界)
+	# 独立全屏页(同商城/档案): 不透明背景, 不再透出主菜单;
+	# 页眉 + 返回 + 滚动内容, 手机紧凑视口下整页可滚
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.45)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(dim)
+	var bg := ColorRect.new()
+	bg.color = AppTheme.BG
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
 
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(center)
+	var header: Control = preload("res://src/client/ui/p5_header.gd").new()
+	header.text = "设  置"
+	header.icon = "gear"
+	header.position = Vector2(36, 22)
+	header.custom_minimum_size = Vector2(240, 54)
+	header.size = Vector2(240, 54)
+	add_child(header)
 
-	var panel := PanelContainer.new()
-	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 14, 2)
-	sb.content_margin_left = 32
-	sb.content_margin_right = 32
-	sb.content_margin_top = 24
-	sb.content_margin_bottom = 24
-	panel.add_theme_stylebox_override("panel", sb)
-	# 内容整体可滚动: 手机紧凑视口下设置项超出面板高度时上下滚动
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(scroll)
+	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
+	_back_btn.position = Vector2(1150, 24)
+	_back_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_save_all()
+		_close())
+	add_child(_back_btn)
+
+	# 内容整体可滚动: 手机紧凑视口下设置项超出屏高时上下滚动
+	_scroll = ScrollContainer.new()
+	_scroll.position = Vector2(40, 100)
+	_scroll.custom_minimum_size = Vector2(1200, 560)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(box)
-
-	# 标题
-	var title := AppTheme.make_label(24, AppTheme.GOLD)
-	title.text = "设  置"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	box.add_child(HSeparator.new())
+	_scroll.add_child(box)
 
 	# ── 昵称 ──
 	box.add_child(_section("昵称"))
@@ -155,8 +153,20 @@ func _ready() -> void:
 	_toast.text = ""
 	box.add_child(_toast)
 
+	Responsive.watch(self, _relayout)
 	visible = false
 	_load_settings()
+
+
+## 多设备自适应: 返回锚右上, 滚动区随窗口伸缩
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
+		return
+	_back_btn.position = Vector2(w - 130.0, 24)
+	_scroll.position = Vector2(40, 100)
+	_scroll.size = Vector2(w - 80.0, h - 140.0)
 
 
 ## 打开面板: 重新读取当前设置并置顶显示

@@ -39,7 +39,7 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
-	bg.color = AppTheme.OVERLAY_BG
+	bg.color = AppTheme.BG  # 不透明全屏页: 不透出主菜单背景
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 

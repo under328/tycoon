@@ -16,8 +16,9 @@ const SCENE_PATHS := [
 	"res://src/client/ui/shop.gd",
 	"res://src/client/ui/lobby_help.gd",
 	"res://src/client/scenes/tutorial.gd",
+	"res://src/client/ui/settings_panel.gd",
 ]
-const SCENE_NAMES := ["menu", "lobby", "shop", "help", "tutorial"]
+const SCENE_NAMES := ["menu", "lobby", "shop", "help", "tutorial", "settings"]
 
 var step := 0    # 分辨率档
 var sidx := -1   # 场景序号
@@ -53,6 +54,11 @@ func _next() -> void:
 		cur = (load(path) as GDScript).new()
 	cur.name = "Cap%d%d" % [step, sidx]
 	root.add_child(cur)
+	# 根窗口直挂的 Control 锚点不随窗口自动生效(与真机挂 Control 父不同)
+	cur.position = Vector2.ZERO
+	cur.size = root.get_visible_rect().size
+	if SCENE_NAMES[sidx] == "settings":
+		cur.open()  # 设置页默认隐藏, open 后容器才布局
 
 
 func _process(_d: float) -> bool:
