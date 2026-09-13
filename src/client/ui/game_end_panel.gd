@@ -6,6 +6,7 @@ extends Control
 const ScoringGd = preload("res://src/rules/scoring.gd")
 const Wallet = preload("res://src/autoload/wallet.gd")
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
+const Icons = preload("res://src/client/ui/icons.gd")
 
 
 func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> void:
@@ -65,19 +66,20 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 	box.add_child(detail)
 
 	if not reward.is_empty():
-		var gain := AppTheme.make_label(24, AppTheme.GOLD)
-		gain.text = "结算: 积分 %+d × %d  =  💰 %+d" % [
-				int(reward.get("points", 0)), int(reward.get("stakes", 1)),
-				int(reward.get("gold", 0))]
-		gain.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var gain: HBoxContainer = Icons.CurrencyText.new(24)
 		gain.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		gain.text("结算: 积分 %+d × %d  =  " % [
+				int(reward.get("points", 0)), int(reward.get("stakes", 1))],
+				AppTheme.GOLD)
+		gain.amount("coin", "%+d" % int(reward.get("gold", 0)), AppTheme.GOLD)
 		box.add_child(gain)
-		var dia := AppTheme.make_label(19, AppTheme.WHITE)
-		dia.text = "💎 +%d    钱包: 💰 %d · 💎 %d" % [
-				int(reward.get("diamonds", 0)),
-				int(reward.get("wallet_gold", 0)), int(reward.get("wallet_diamonds", 0))]
-		dia.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var dia: HBoxContainer = Icons.CurrencyText.new(19)
 		dia.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		dia.amount("gem", "+%d" % int(reward.get("diamonds", 0)), AppTheme.WHITE)
+		dia.text("    钱包:", AppTheme.DIM)
+		dia.amount("coin", str(int(reward.get("wallet_gold", 0))), AppTheme.WHITE)
+		dia.text("·", AppTheme.DIM)
+		dia.amount("gem", str(int(reward.get("wallet_diamonds", 0))), AppTheme.WHITE)
 		box.add_child(dia)
 
 	# 演出: 暗幕淡入 + 大字弹入 + 内容淡入

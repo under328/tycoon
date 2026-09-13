@@ -9,11 +9,12 @@ const SkinsLib = preload("res://src/client/ui/skins.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
+const Icons = preload("res://src/client/ui/icons.gd")
 
 const COLOR_BG := Color(0.94, 0.94, 0.96, 0.98)
 
 var _tab := "skin"
-var _balance_lbl: Label
+var _bal_row: HBoxContainer
 var _toast: Label
 var _grid: GridContainer
 var _tab_skin_btn: Button
@@ -34,16 +35,17 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var header := P5Header.new()
+	var header: Control = P5Header.new()
 	header.text = "商  城"
+	header.icon = "bag"
 	header.position = Vector2(36, 22)
 	header.custom_minimum_size = Vector2(300, 54)
 	header.size = Vector2(300, 54)
 	add_child(header)
 
-	_balance_lbl = AppTheme.make_label(20, AppTheme.WHITE)
-	_balance_lbl.position = Vector2(980, 30)
-	add_child(_balance_lbl)
+	_bal_row = Icons.CurrencyText.new(20)
+	_bal_row.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
+	add_child(_bal_row)
 
 	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
 	_back_btn.position = Vector2(1150, 24)
@@ -91,7 +93,7 @@ func _relayout() -> void:
 	var h := size.y
 	if w < 100.0 or h < 100.0:
 		return
-	_balance_lbl.position = Vector2(w - _balance_lbl.size.x - 176.0, 30)
+	_bal_row.position = Vector2(w - _bal_row.get_combined_minimum_size().x - 190.0, 30)
 	_back_btn.position = Vector2(w - _back_btn.size.x - 30.0, 24)
 	_scroll.position = Vector2(40, 170)
 	_scroll.size = Vector2(w - 80.0, h - 236.0)
@@ -106,7 +108,7 @@ func _set_tab(tab: String) -> void:
 
 
 func _refresh() -> void:
-	_balance_lbl.text = "💰 %d    💎 %d" % [Wallet.gold, Wallet.diamonds]
+	_bal_row.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
 	for child in _grid.get_children():
 		child.queue_free()
 	var items: Array = SkinsLib.SKINS if _tab == "skin" else SkinsLib.CARDS
@@ -193,12 +195,12 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 10)
 	v.add_child(foot)
-	var price_lbl := AppTheme.make_label(16, AppTheme.WHITE if not owned else AppTheme.DIM)
-	price_lbl.text = "已拥有" if owned else "💎 %d" % price
-	price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	price_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	foot.add_child(price_lbl)
 	if owned:
+		var price_lbl := AppTheme.make_label(16, AppTheme.DIM)
+		price_lbl.text = "已拥有"
+		price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		price_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		foot.add_child(price_lbl)
 		var act := AppTheme.make_button(
 				"使用中" if equipped else "装 备", Vector2(128, 40), 15)
 		act.disabled = equipped
@@ -208,6 +210,11 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 			_refresh())
 		foot.add_child(act)
 	else:
+		var price_row: HBoxContainer = Icons.CurrencyText.new(16)
+		price_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+		price_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		price_row.amount("gem", str(price), AppTheme.WHITE)
+		foot.add_child(price_row)
 		var buy := AppTheme.make_button("购 买", Vector2(112, 40), 15)
 		buy.disabled = Wallet.diamonds < price
 		buy.pressed.connect(func() -> void:

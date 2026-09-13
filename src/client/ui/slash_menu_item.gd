@@ -1,10 +1,11 @@
-## P5 风斜切菜单项: 平行四边形面板 + 悬停滑移 + 红色侧块。
+## P5 风斜切菜单项: 平行四边形面板 + 悬停滑移 + 左侧线性图标。
 extends Control
 
 signal pressed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const Wafu = preload("res://src/client/ui/wafu_paint.gd")
+const Icons = preload("res://src/client/ui/icons.gd")
 
 var text := "":
 	set(v):
@@ -13,6 +14,11 @@ var text := "":
 var badge := "":
 	set(v):
 		badge = v
+		queue_redraw()
+## 左侧线性图标种类(card/net/bag/gear/scroll/exit), 空 = 不画
+var icon := "":
+	set(v):
+		icon = v
 		queue_redraw()
 var hovered := false:
 	set(v):
@@ -53,12 +59,23 @@ func _draw() -> void:
 	var fill := Color(0.07, 0.07, 0.16, 0.88).lerp(Color(0.14, 0.13, 0.32, 0.97), _hover_t)
 	draw_colored_polygon(PackedVector2Array(pts), fill)
 
-	# 左侧红色斜块(悬停加宽)
-	var rw := 12.0 + _hover_t * 12.0
-	var red := PackedVector2Array([
-		Vector2(0, 2), Vector2(rw, 2), Vector2(rw - 9.0, size.y - 2), Vector2(-9.0, size.y - 2),
+	# 图标位: 淡金斜切底 + 线性图标(悬停点亮, 取代旧红色斜块)
+	var px := 12.0
+	var pw := 44.0
+	var sk2 := 8.0
+	var pl := PackedVector2Array([
+		Vector2(px + sk2, 9), Vector2(px + pw + sk2, 9),
+		Vector2(px + pw, size.y - 9), Vector2(px, size.y - 9),
 	])
-	draw_colored_polygon(red, Color(0.88, 0.31, 0.24, 0.92))
+	draw_colored_polygon(pl, Color(Wafu.GOLD, 0.10 + 0.16 * _hover_t))
+	var pl_line := pl.duplicate()
+	pl_line.append(pl[0])
+	draw_polyline(pl_line, Color(Wafu.GOLD, 0.30 + 0.40 * _hover_t), 1.2, true)
+	if icon != "":
+		var col := Color.WHITE.lerp(Color(Wafu.GOLD, 1.0), _hover_t)
+		Icons.menu_icon(self, icon,
+				Vector2(px + pw * 0.5 + sk2 * 0.5 + _hover_t * 3.0, size.y / 2.0),
+				12.0, col)
 
 	# 描金边
 	var closed := pts.duplicate()
@@ -67,7 +84,7 @@ func _draw() -> void:
 
 	# 文字
 	var f := AppTheme.display_font()
-	draw_string(f, Vector2(skew + rw + 4, size.y / 2.0 + 10), text,
+	draw_string(f, Vector2(px + pw + sk2 + 16, size.y / 2.0 + 10), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 25, AppTheme.WHITE)
 	if badge != "":
 		var bf := AppTheme.accent_font()
