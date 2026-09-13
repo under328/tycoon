@@ -200,6 +200,29 @@ func leave(peer: int) -> Array:
 	return out
 
 
+## 局域网发现: 对外可见的房间概览(压测房间不公开;
+## 有空位且未开局才标 open — 客户端只把 open 房间列为可点)
+func discovery_snapshot() -> Array:
+	var out: Array = []
+	for code in rooms:
+		var room = rooms[code]
+		if room.soak:
+			continue
+		var players := 0
+		for s in room.seats:
+			if s != null:
+				players += 1
+		if players >= 4:
+			continue
+		out.append({
+			"code": code,
+			"players": players,
+			"cap": 4,
+			"open": room.match_ctl == null,
+		})
+	return out
+
+
 ## 快捷表情：广播给房内所有在线人类（大厅和对局中都可发）。限速 500ms。
 func emoji(peer: int, id: int, now_ms: int = -1) -> Array:
 	var out := []

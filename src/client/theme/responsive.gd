@@ -19,16 +19,33 @@ static func ui_scale() -> float:
 	return 1.25 if is_touch() else 1.0
 
 
-## Tailscale 虚拟网 IP(CGNAT 段 100.64.0.0/10, 而非任意 100.x 公网地址)
-static func tailscale_ips() -> Array:
-	var out: Array = []
+## 本机地址分类: lan=私网 IPv4(192.168/10./172.16-31, 含手机热点/USB共享),
+## ts=Tailscale(CGNAT); 回环与 IPv6 不参与联机, 一律排除。
+static func local_ips() -> Dictionary:
+	var lan: Array = []
+	var ts: Array = []
 	for ip in IP.get_local_addresses():
 		var s := str(ip)
-		var parts := s.split(".")
-		if parts.size() == 4 and parts[0] == "100" \
-				and int(parts[1]) >= 64 and int(parts[1]) <= 127:
-			out.append(s)
-	return out
+		var p := s.split(".")
+		if p.size() != 4:
+			continue
+		if p[0] == "100" and int(p[1]) >= 64 and int(p[1]) <= 127:
+			ts.append(s)
+		elif p[0] == "10" or (p[0] == "192" and p[1] == "168") \
+				or (p[0] == "172" and int(p[1]) >= 16 and int(p[1]) <= 31):
+			lan.append(s)
+	return {"lan": lan, "ts": ts}
+
+
+## Tailscale 虚拟网 IP(CGNAT 段 100.64.0.0/10, 而非任意 100.x 公网地址)
+static func tailscale_ips() -> Array:
+	return local_ips()["ts"]
+
+
+## 邀请码/主机面板的地址候选: 局域网优先(同 WiFi 延迟最低), Tailscale 兜底(跨网)
+static func host_ips() -> Array:
+	var d := local_ips()
+	return d["lan"] + d["ts"]
 
 
 ## 当前设备的 Tailscale 下载直达页

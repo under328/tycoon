@@ -279,10 +279,9 @@ func _start_host() -> void:
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to("127.0.0.1", port)
-	var ts: Array = Responsive.tailscale_ips()
-	lobby.host_invite_ip = "" if ts.is_empty() else str(ts[0])
 	lobby.auto_create_room = true  # 连上后自动创建房间, 房主直接复制邀请码
-	lobby.show_host_panel(lobby.host_invite_ip)
+	# 全部对外地址(局域网优先+Tailscale 兜底): 同 WiFi 朋友可直接一键加入
+	lobby.show_host_panel(Responsive.host_ips())
 
 
 func _stop_host() -> void:

@@ -9,6 +9,7 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const NetNodeGd = preload("res://src/protocol/net_node.gd")
 const LobbyHelpScript = preload("res://src/client/ui/lobby_help.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
+const LanDisc = preload("res://src/protocol/lan_discovery.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
 
@@ -43,6 +44,7 @@ var paste_btn: Button
 var _emoji_btns: Array = []
 var host_panel: PanelContainer
 var host_ip_value: Label
+var host_hint_lbl: Label      # 主机信息卡: 加入指引(随有无 Tailscale 变化)
 var host_dl_btn: Button      # 未检测到 Tailscale 时显示的下载入口
 var _ts_chip: PanelContainer   # 联机准备条: Tailscale 就绪状态 + 一键下载
 var _ts_dot: ColorRect
@@ -51,10 +53,20 @@ var _ts_dl_btn: Button
 var _ts_apk_url := ""          # 运行时解析的 Android APK 直链(缓存)
 
 const TS_PKGS_URL := "https://pkgs.tailscale.com/stable/"
-var host_invite_ip := ""   # 本机开房时对外可用的 Tailscale IP
+var host_invite_ip := ""   # 本机开房对外地址(逗号分隔候选: 局域网优先+Tailscale)
+var host_invite_ips: Array = []  # 同上, 数组形式(展示用)
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
 var _invite_code := ""        # 当前房间的完整邀请码
+# 局域网发现(同 WiFi 一键加入): 广播查询 → 主机回房间概览
+var _disc: PacketPeerUDP = null
+var _found := {}              # ip -> {"port": int, "rooms": Array, "seen": ms}
+var _found_rows: Array = []   # found_panel 内动态行按钮
+var found_panel: PanelContainer
+var found_box: VBoxContainer
+var discover_btn: Button
+var _join_seq := 0            # 候选探测序号(用户发起新连接时作废陈旧回调)
+var _cand := {"ips": [], "port": 0, "i": 0, "seq": -1}  # 多地址加入进度
 var kick_btn: Button
 var help_btn: Button
 var back_btn: Button
@@ -103,6 +115,11 @@ func _ready() -> void:
 	ts_timer.timeout.connect(_refresh_ts_chip)
 	add_child(ts_timer)
 	ts_timer.start()
+	var scan_timer := Timer.new()
+	scan_timer.wait_time = 3.0
+	scan_timer.timeout.connect(_scan_tick)
+	add_child(scan_timer)
+	scan_timer.start()
 	_auto_connect()
 
 
@@ -213,6 +230,7 @@ func _auto_connect() -> void:
 	var port: int = AppMode.port if AppMode.port_from_cli else GameSettings.host_port
 	_conn_fails = 0
 	_loopback_hint = false
+	_join_seq += 1  # 作废在途的候选探测(手动连接优先)
 	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
 	net.auto_reconnect = true
 	net.connect_to(host, port)
@@ -253,7 +271,7 @@ func _probe_reachable(host: String, http_port: int) -> void:
 		if result == HTTPRequest.RESULT_SUCCESS and code == 200:
 			_set_status("主机在线, 联机协商中… 若 15 秒后仍未进入, 请点【连接】重试", COLOR_GOLD)
 		else:
-			_set_status("暂时无法到达 %s(仍在自动重试)—— 请确认:\n① 对方已点【本机开房】(服务器需在运行)\n② 双方 Tailscale 已连接(联机准备条均为 ✓)\n③ 对方防火墙已放行 UDP %d" % [host, int(net.port)], COLOR_RED))
+			_set_status("暂时无法到达 %s(仍在自动重试)—— 请确认:\n① 对方已点【本机开房】(服务器需在运行)\n② 同一 WiFi/局域网, 或双方 Tailscale 已连接\n③ 对方防火墙已放行 UDP %d" % [host, int(net.port)], COLOR_RED))
 	var err := http.request("http://%s:%d/status" % [host, http_port])
 	if err != OK:
 		http.queue_free()
@@ -271,7 +289,7 @@ func _show_loopback_hint_for(ready: bool) -> void:
 	if ready:
 		_set_status("Tailscale 已就绪 — 点【本机开房】创建房间, 把邀请码发给朋友;\n或点【粘贴邀请码, 一键加入】朋友的主机。", COLOR_GOLD)
 	else:
-		_set_status("未连接服务器(127.0.0.1 只是本机地址)。\n先在【联机准备】安装并登录 Tailscale, 再【本机开房】或【粘贴邀请码】开局。", COLOR_GOLD)
+		_set_status("未连接服务器(127.0.0.1 只是本机地址)。\n同一 WiFi: 点【本机开房】, 朋友在【搜索附近主机】一键加入;\n跨网联机: 安装并登录 Tailscale 后用邀请码开局。", COLOR_GOLD)
 
 
 ## 供 main(本机开房) 推送状态/主机 IP 信息
@@ -279,7 +297,8 @@ func show_status(text: String, color: Color = COLOR_GOLD) -> void:
 	_set_status(text, color)
 
 
-## 解析邀请码文本: 返回 {ip, port, code} 或 {}(无效)。
+## 解析邀请码文本: 返回 {ips:[...], ip:首个, port, code} 或 {}(无效)。
+## 地址段支持逗号分隔多候选(TC|局域网IP,TailscaleIP|端口|房码), 单地址向后兼容。
 static func parse_invite(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	var parts := t.split("|")
@@ -289,19 +308,73 @@ static func parse_invite(text: String) -> Dictionary:
 			port = int(parts[2]) if parts[2].is_valid_int() else 0
 		if port < 1 or port > 65535:
 			return {}
-		return {"ip": parts[1], "port": port, "code": parts[3]}
+		var ips: Array = []
+		for a in parts[1].split(",", false):
+			var s := a.strip_edges()
+			if s != "" and not ips.has(s):
+				ips.append(s)
+		if ips.is_empty():
+			return {}
+		return {"ips": ips, "ip": ips[0], "port": port, "code": parts[3]}
 	return {}
 
 
-## 粘贴邀请码(TC|IP|端口|房间码) → 自动连接主机并加入房间
+## 粘贴邀请码(TC|多地址|端口|房间码) → 找到可达地址后自动连接并进房
 func _paste_join() -> void:
 	var inv := parse_invite(DisplayServer.clipboard_get())
 	if inv.is_empty():
 		_set_status("剪贴板中没有有效的邀请码(请先复制房主发的邀请信息)", COLOR_RED)
 		return
-	var ip: String = str(inv["ip"])
-	var port: int = int(inv["port"])
-	var code: String = str(inv["code"])
+	_save_nickname()
+	_join_candidates(inv["ips"], int(inv["port"]), str(inv["code"]))
+
+
+## 多地址加入: 邀请码可含多个候选 IP(局域网优先, Tailscale 兜底)。
+## 用主机内置 HTTP 探测(游戏端口+1)逐个快速试, 命中即 ENet 连接;
+## 全部探测失败仍按首个地址发起连接(探测不通≠游戏端口不通)。
+func _join_candidates(ips: Array, port: int, code: String) -> void:
+	_auto_join_code = code
+	_conn_fails = 0
+	_loopback_hint = false
+	host_edit.text = str(ips[0])
+	port_edit.text = str(port)
+	_join_seq += 1
+	_cand = {"ips": ips, "port": port, "i": 0, "seq": _join_seq}
+	_try_next_candidate()
+
+
+func _try_next_candidate() -> void:
+	var ips: Array = _cand["ips"]
+	var i := int(_cand["i"])
+	var port := int(_cand["port"])
+	if i >= ips.size():
+		_connect_join(str(ips[0]), port,
+				"未能确认主机可达, 仍尝试连接 %s:%d …" % [ips[0], port])
+		return
+	var ip := str(ips[i])
+	_set_status("正在寻找主机…(%d/%d: %s)" % [i + 1, ips.size(), ip], COLOR_DIM)
+	var http := HTTPRequest.new()
+	http.timeout = 3.0
+	add_child(http)
+	var seq := int(_cand["seq"])
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		http.queue_free()
+		if seq != _join_seq or not is_inside_tree():
+			return  # 用户已发起新的连接, 陈旧探测结果作废
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+			_connect_join(ip, port, "已找到主机 %s, 连接中, 连上后自动进房…" % ip)
+		else:
+			_cand["i"] = i + 1
+			_try_next_candidate())
+	var err := http.request("http://%s:%d/status" % [ip, port + 1])
+	if err != OK:
+		http.queue_free()
+		_cand["i"] = i + 1
+		_try_next_candidate()
+
+
+## 候选定案: 保存地址并发起 ENet 连接(连上后由 connected_ok 自动进房)
+func _connect_join(ip: String, port: int, msg: String) -> void:
 	var g := get_node_or_null("/root/GameSettings")
 	if g != null:
 		g.host = ip
@@ -309,16 +382,14 @@ func _paste_join() -> void:
 		g.save_settings()
 	host_edit.text = ip
 	port_edit.text = str(port)
-	_auto_join_code = code
-	_conn_fails = 0
-	_loopback_hint = false
+	_join_seq += 1  # 作废仍在途的探测回调
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to(ip, port)
-	_set_status("正在连接主机 %s:%d, 连上后自动进房…" % [ip, port], COLOR_DIM)
+	_set_status(msg, COLOR_DIM)
 
 
-## 生成本房间邀请码(本机开房时用 Tailscale IP; 连远程服务器时用服务器地址)
+## 生成本房间邀请码(地址段=全部对外地址: 局域网优先+Tailscale, 客户端逐个试)
 func _refresh_invite(state: Dictionary) -> void:
 	var code := str(state.get("room_code", ""))
 	if code == "":
@@ -343,14 +414,28 @@ func _exit_room() -> void:
 	show_status("", COLOR_GOLD)
 
 
-## 本机开房信息卡(替代多行状态文字)
-func show_host_panel(ip: String) -> void:
+## 本机开房信息卡(替代多行状态文字): 列出全部对外地址(局域网+Tailscale)
+func show_host_panel(ips: Array) -> void:
 	_host_panel_wanted = true
+	host_invite_ips = ips
+	var pas := PackedStringArray()
+	for a in ips:
+		pas.append(str(a))
+	host_invite_ip = ",".join(pas)
 	host_panel.visible = true
 	status_label.visible = false
-	host_ip_value.text = ip if ip != "" else "未检测到 Tailscale\n(请安装并登录 Tailscale)"
-	host_dl_btn.visible = ip == ""
-	host_dl_btn.text = "⬇ 一键下载\n(%s)" % Responsive.platform_label()
+	var ts_set := {}
+	for ip in Responsive.tailscale_ips():
+		ts_set[str(ip)] = true
+	var lines: Array = []
+	for ip in ips:
+		lines.append(("Tailscale  %s" if ts_set.has(str(ip)) else "局域网  %s") % str(ip))
+	host_ip_value.text = "\n".join(PackedStringArray(lines)) \
+			if lines.size() > 0 else "未检测到局域网/Tailscale 地址"
+	host_hint_lbl.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)"
+	var ts := Responsive.tailscale_ips()
+	host_dl_btn.visible = ts.is_empty()
+	host_dl_btn.text = "⬇ 异地联机装 Tailscale\n(%s)" % Responsive.platform_label()
 
 
 func hide_host_panel() -> void:
@@ -375,6 +460,7 @@ func _manual_connect() -> void:
 		gs.host_port = port
 		gs.save_settings()
 	_conn_fails = 0
+	_join_seq += 1  # 作废在途的候选探测(手动连接优先)
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to(host, port)
@@ -525,6 +611,33 @@ func _build_ui() -> void:
 		Audio.play("click")
 		_manual_connect())
 	add_child(connect_btn)
+
+	# 局域网发现: 同 WiFi 主机自动列出, 点击即加(无 Tailscale 也能联机)
+	discover_btn = AppTheme.make_button("🔍 搜索附近主机", Vector2(300, 40), 15)
+	discover_btn.position = Vector2(830, 182)
+	discover_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_scan_tick())
+	add_child(discover_btn)
+
+	# 附近主机结果列表(扫描到才有内容; 每行=一个可加入的房间)
+	found_panel = PanelContainer.new()
+	var fp_sb := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.92), Color(AppTheme.GOLD, 0.4), 10, 1)
+	fp_sb.content_margin_left = 12
+	fp_sb.content_margin_right = 12
+	fp_sb.content_margin_top = 10
+	fp_sb.content_margin_bottom = 10
+	found_panel.add_theme_stylebox_override("panel", fp_sb)
+	found_panel.position = Vector2(830, 232)
+	found_panel.custom_minimum_size = Vector2(300, 0)
+	found_panel.visible = false
+	add_child(found_panel)
+	found_box = VBoxContainer.new()
+	found_box.add_theme_constant_override("separation", 6)
+	found_panel.add_child(found_box)
+	var fp_title := AppTheme.make_label(14, COLOR_GOLD)
+	fp_title.text = "附近主机(同一 WiFi)"
+	found_box.add_child(fp_title)
 
 	# ── 房间页: 标题 / 邀请行 / 座位卡 ──
 	room_title_lbl = AppTheme.make_label(26, COLOR_GOLD)
@@ -711,7 +824,8 @@ func _build_ui() -> void:
 	host_ip_value.custom_minimum_size = Vector2(328, 0)  # 自动换行必须有宽度约束, 否则容器测高爆炸
 	hp_box.add_child(host_ip_value)
 	var hp_hint := AppTheme.make_label(14, COLOR_DIM)
-	hp_hint.text = "把上面的 IP 发给朋友\n朋友在右上【服务器】填 IP 点【连接】\n再输房间码【加入】"
+	host_hint_lbl = hp_hint
+	hp_hint.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)"
 	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hp_hint.custom_minimum_size = Vector2(328, 0)
 	hp_box.add_child(hp_hint)
@@ -740,6 +854,8 @@ func _build_ui() -> void:
 	_reg(host_edit, "right")
 	_reg(port_edit, "right")
 	_reg(connect_btn, "right")
+	_reg(discover_btn, "right")
+	_reg(found_panel, "right")
 	_reg(help_btn, "right")
 
 	# ── 房间页锚定(独立子页面布局) ──
@@ -808,6 +924,110 @@ func _open_ts_download() -> void:
 
 func _open_ts_fallback() -> void:
 	OS.shell_open(TS_PKGS_URL + "#android")  # 列表页锚点, 用户手点 APK 链接
+
+
+## ── 局域网发现(同 WiFi 一键加入) ──
+## 每 3 秒广播一次查询, 主机(游戏端口+2)单播回房间概览; 超时 12s 未回包移除。
+## 本机开房/已进房时不搜(不列自己; 房间页也不需要)。
+func _scan_tick() -> void:
+	_scan_send()
+	_scan_read()
+	_rebuild_found_rows()
+
+
+func _scan_send() -> void:
+	if _view != "entry" or _host_panel_wanted or auto_create_room:
+		return
+	var dport: int = int(GameSettings.host_port) + LanDisc.PORT_OFFSET
+	if _disc == null:
+		_disc = PacketPeerUDP.new()
+		if _disc.bind(0) != OK:
+			_disc = null
+			return
+		_disc.set_broadcast_enabled(true)
+	var q := LanDisc.make_query()
+	# ① 全网广播: 同子网主机一次命中
+	_disc.set_dest_address("255.255.255.255", dport)
+	_disc.put_packet(q)
+	# ② 单播补盲: 广播在部分路由器(AP 隔离除外)与手机(组播过滤)上收不到,
+	#    对本机所在 /24 逐地址单播 + 本机回环。UDP 无连接一次性发出, 开销可忽略。
+	_disc.set_dest_address("127.0.0.1", dport)
+	_disc.put_packet(q)
+	for ip in Responsive.local_ips()["lan"]:
+		var p: PackedStringArray = str(ip).split(".")
+		if p.size() != 4:
+			continue
+		for h in range(1, 255):
+			_disc.set_dest_address("%s.%s.%s.%d" % [p[0], p[1], p[2], h], dport)
+			_disc.put_packet(q)
+
+
+func _scan_read() -> void:
+	if _disc == null:
+		return
+	while _disc.get_available_packet_count() > 0:
+		var pkt := _disc.get_packet()
+		var ip := _disc.get_packet_ip()
+		var r := LanDisc.parse_reply(pkt)
+		if r.is_empty():
+			continue
+		_found[ip] = {"port": int(r["port"]), "rooms": r["rooms"],
+				"seen": Time.get_ticks_msec()}
+
+
+## 重建附近主机列表(行数封顶 5, 过期条目清除; 全空则整卡隐藏)
+func _rebuild_found_rows() -> void:
+	var now := Time.get_ticks_msec()
+	for ip in _found.keys():
+		if now - int(_found[ip]["seen"]) > LanDisc.TTL_MS:
+			_found.erase(ip)
+	for r in _found_rows:
+		(r as Control).queue_free()
+	_found_rows.clear()
+	var shown := 0
+	for ip in _found.keys():
+		if shown >= 5:
+			break
+		var e: Dictionary = _found[ip]
+		for room in e["rooms"]:
+			if shown >= 5:
+				break
+			var open := bool(room["open"])
+			var txt := "🏠 %s  %d/%d人  %s" % [room["code"], room["players"], room["cap"], ip]
+			if not open:
+				txt += " · 游戏中"
+			var b := AppTheme.make_button(txt, Vector2(272, 42), 13)
+			b.disabled = not open
+			var rip := str(ip)
+			var rport := int(e["port"])
+			var rcode := str(room["code"])
+			b.pressed.connect(func() -> void:
+				Audio.play("click")
+				_join_found(rip, rport, rcode))
+			found_box.add_child(b)
+			_found_rows.append(b)
+			shown += 1
+	found_panel.visible = shown > 0
+
+
+## 点击附近主机: 发现应答本身已证明可达, 直接发起 ENet 连接并自动进房
+func _join_found(ip: String, port: int, room_code: String) -> void:
+	_save_nickname()
+	_auto_join_code = room_code
+	_conn_fails = 0
+	_loopback_hint = false
+	var g := get_node_or_null("/root/GameSettings")
+	if g != null:
+		g.host = ip
+		g.host_port = port
+		g.save_settings()
+	host_edit.text = ip
+	port_edit.text = str(port)
+	_join_seq += 1
+	net.disconnect_all()
+	net.auto_reconnect = true
+	net.connect_to(ip, port)
+	_set_status("正在连接附近主机 %s:%d, 连上后自动进房 %s…" % [ip, port, room_code], COLOR_DIM)
 
 
 ## 房主可移除的第一个人类座位(不能移除自己/机器人)
@@ -905,9 +1125,12 @@ func _on_room_state(state: Dictionary) -> void:
 	# 房间页标题 + 邀请行
 	room_title_lbl.text = "房间  %s" % (_last_room_code if _last_room_code != "" else "——")
 	var ip_txt := ""
-	if host_invite_ip != "":
-		ip_txt = "服务器 %s · " % host_invite_ip
-	invite_lbl.text = ip_txt + "点【复制邀请码】发给朋友 → 朋友点【粘贴邀请码, 一键加入】"
+	if host_invite_ips.size() > 0:
+		var ip_show := str(host_invite_ips[0])
+		if host_invite_ips.size() > 1:
+			ip_show += " 等%d个地址" % host_invite_ips.size()
+		ip_txt = "服务器 %s · " % ip_show
+	invite_lbl.text = ip_txt + "点【复制邀请码】发给朋友 → 朋友点【粘贴邀请码, 一键加入】或【搜索附近主机】"
 	# 座位卡
 	for i in 4:
 		var nm: Label = _seat_cards[i]["name"]

@@ -20,6 +20,7 @@ const MsgC = preload("res://src/protocol/msg.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
 const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 const CardsGd = preload("res://src/rules/cards.gd")
+const LanDisc = preload("res://src/protocol/lan_discovery.gd")
 
 var is_server := false
 var server_port := 0   # >0 时 _ready 用它, 否则读 AppMode(专用服务器 CLI)
@@ -29,6 +30,8 @@ var manager = null
 var _health := TCPServer.new()
 var _health_peers: Array = []
 var _log_accum := 0.0
+var _listen_port := 24565     # 实际监听端口(发现应答里告知客户端直连端口)
+var _disc: PacketPeerUDP = null   # 局域网发现应答(游戏端口+2)
 
 # --- 客户端侧 ---
 var latest_view: Dictionary = {}
@@ -77,6 +80,7 @@ func _ready() -> void:
 			push_error("服务器启动失败 port=%d err=%d" % [port_v, err])
 			return
 		multiplayer.multiplayer_peer = peer
+		_listen_port = port_v
 		manager = ManagerGd.new()
 		manager.ai_delay_ms = ai_ms
 		manager.phase_delay_ms = phase_ms
@@ -85,6 +89,11 @@ func _ready() -> void:
 		# 健康检查: HTTP GET http://<host>:%d/ → JSON 状态（运维探活用）
 		if _health.listen(port_v + 1) == OK:
 			print("[server] 健康检查端口 http=%d" % (port_v + 1))
+		# 局域网发现: 回应同 WiFi 客户端的 UDP 广播(端口+2), 无 Tailscale 也能一键加入
+		_disc = PacketPeerUDP.new()
+		if _disc.bind(port_v + LanDisc.PORT_OFFSET) != OK:
+			_disc = null
+			push_warning("局域网发现端口 %d 绑定失败(不影响游戏联机)" % (port_v + LanDisc.PORT_OFFSET))
 		print("[server] Tycoon 服务器已启动 端口=%d ai_delay=%dms phase_delay=%dms" % [
 			port_v, ai_ms, phase_ms])
 
@@ -94,8 +103,21 @@ func _process(delta: float) -> void:
 		if manager != null:
 			_flush(manager.tick(Time.get_ticks_msec()))
 		_poll_health(delta)
+		_poll_discovery()
 	else:
 		_client_process(delta)
+
+
+## 局域网发现应答: 收到 QUERY → 单播回房间概览+游戏端口
+func _poll_discovery() -> void:
+	if _disc == null:
+		return
+	while _disc.get_available_packet_count() > 0:
+		var pkt := _disc.get_packet()
+		if not LanDisc.is_query(pkt):
+			continue
+		_disc.set_dest_address(_disc.get_packet_ip(), _disc.get_packet_port())
+		_disc.put_packet(LanDisc.make_reply(manager.discovery_snapshot(), _listen_port))
 
 
 ## 健康检查 + 内置下载服务: GET / → JSON 状态; GET /download → 安装包列表页;
