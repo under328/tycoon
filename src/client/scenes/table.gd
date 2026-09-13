@@ -376,6 +376,9 @@ func _auto_pass() -> void:
 		net.pass_turn()
 		return
 	var r := GameStateGd.apply(state, {"t": "pass", "seat": 0})
+	print("[auto] pass ok=%s passes=%d turn=%d" % [str(r["ok"]),
+			int(r["state"].get("passes", -9)) if bool(r["ok"]) else -9,
+			int(r["state"].get("turn", -9)) if bool(r["ok"]) else -9])
 	if not bool(r["ok"]):
 		return
 	state = r["state"]
@@ -584,10 +587,10 @@ func _build_ui() -> void:
 	self_label.bbcode_enabled = true
 	self_label.scroll_active = false
 	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	self_label.custom_minimum_size = Vector2(140, 52)
+	self_label.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 52)
 	# 触屏设备信息文字加大一档(手机 720p 逻辑画布物理密度高, 14/15px 偏小)
 	self_label.add_theme_font_size_override("normal_font_size",
-			17 if Responsive.is_touch() else 15)
+			18 if Responsive.is_touch() else 15)
 	sp_row.add_child(self_label)
 
 	info_label = _make_label(20, AppTheme.GOLD)
@@ -803,7 +806,7 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.custom_minimum_size = Vector2(140, 48)
+	lb.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 48)
 	lb.add_theme_font_size_override("normal_font_size",
 			16 if Responsive.is_touch() else 14)
 	row.add_child(lb)
@@ -922,8 +925,10 @@ func _relayout() -> void:
 	var field_w := 760.0 if touch else 640.0
 	var field_h := 280.0 if touch else 248.0
 	if compact:
+		field_w = 640.0   # 收窄让位两侧座位面板(面板 ~268 宽 + 左右余量)
 		field_h = 236.0 if touch else 232.0
 	var ops_h := 52.0 if touch else 44.0
+	var ops_w := 494.0 if touch else 414.0   # 操作行满编宽度(4 钮 + 间距)
 	# 顶部
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
@@ -939,6 +944,8 @@ func _relayout() -> void:
 	# 操作行(先定位: 手牌让位) — 卡底不得压按钮; 且不与左侧聊天行重叠
 	var ops_y := h - ops_h - 14.0
 	var ops_x := maxf(w - 16.0 - (640.0 if touch else 420.0), 860.0)
+	if compact:
+		ops_x = w - 16.0 - ops_w   # 紧凑档右锚实宽, 4 触屏钮不溢出屏幕
 	ops_row.position = Vector2(ops_x, ops_y)
 	# 手牌区
 	var hand_y := ops_y - 6.0 - 18.0 - card_h
@@ -952,6 +959,12 @@ func _relayout() -> void:
 	field_panel.size = Vector2(field_w, field_h)
 	field_box.position = Vector2(20, 36)
 	field_box.size = Vector2(field_w - 40, field_h - 64)
+	# 紧凑档: 两侧座位面板上移至顶部带(避开出牌区), 牌背列上移至顶角(避开面板)
+	if compact:
+		_seat_panels[2].position = Vector2(16, 220)
+		_seat_panels[0].position = Vector2(w - 284, 220)
+		_opp_hands[2].position = Vector2(16, 8)
+		_opp_hands[0].position = Vector2(w - 56, 8)
 	# 底部: 自己面板 / 状态 / 错误
 	self_panel.position = Vector2(16, h - 164)
 	var status_y := h - 224.0
