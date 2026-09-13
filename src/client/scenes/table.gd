@@ -1136,7 +1136,8 @@ func _refresh_field(view: Dictionary) -> void:
 		var entry: Dictionary = field[i]
 		var holder := VBoxContainer.new()
 		holder.add_theme_constant_override("separation", 2)
-		var name_lb := _make_label(14, AppTheme.DIM)
+		var is_latest := i == field.size() - 1
+		var name_lb := _make_label(14, AppTheme.GOLD if is_latest else AppTheme.DIM)
 		name_lb.text = _seat_name(view, int(entry["seat"]))
 		name_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		holder.add_child(name_lb)
@@ -1148,7 +1149,10 @@ func _refresh_field(view: Dictionary) -> void:
 			hz.add_child(_make_card(int(c), fw, fh, false, false))
 		holder.add_child(hz)
 		field_box.add_child(holder)
-		if i == field.size() - 1 and grew:
+		# 只突出最后一手: 先前的牌做旧(降透明+偏冷), 视线聚焦当前须压的牌
+		if not is_latest:
+			holder.modulate = Color(0.75, 0.78, 0.92, 0.5)
+		if is_latest and grew:
 			# 最新一手: 淡入 + 弹性缩放（容器托管布局，位置不可直接动画）
 			holder.pivot_offset = Vector2(120, 60)
 			holder.modulate.a = 0.0
