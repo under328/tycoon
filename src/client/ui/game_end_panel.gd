@@ -11,7 +11,13 @@ const Icons = preload("res://src/client/ui/icons.gd")
 
 func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 吸收点击(面板弹出期间不穿透到牌桌) + 点击空白区域关闭结算弹窗
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			accept_event()
+			queue_free())
 
 	var my_rank := int(view["identities"][int(view["my_seat"])])
 	Audio.play("win" if my_rank <= 1 else "lose")
