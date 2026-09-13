@@ -6,7 +6,7 @@ extends RefCounted
 
 const GRID := 32
 const ART_IDS := ["skin_default", "skin_aka", "skin_ao", "skin_kitsu",
-		"skin_oiran", "skin_tengu"]
+		"skin_oiran", "skin_tengu", "skin_dball", "skin_ninja", "skin_rx"]
 
 ## 每角色调色板: o描边 s皮肤 S皮肤暗 b腮红 w眼白 p瞳 m嘴/红 h发 H发高光
 ## a 配件主色 A 配件暗 c 衣 C 衣暗 l 领/内衬 g 金 r 红
@@ -47,6 +47,27 @@ const PALETTES := {
 		"A" = Color("10101c"), "c" = Color("5a2020"), "C" = Color("3e1414"),
 		"l" = Color("2a0a0a"), "g" = Color("e0a83c"), "r" = Color("f2e0b8"),
 		"b" = Color("e07a6a")},
+	# 龙珠战士: 刺状黑发 + 橙色武道服 + 蓝内衬腰带
+	"skin_dball": {"o" = Color("1c141c"), "s" = Color("f2c8a0"), "S" = Color("d4a880"),
+		"b" = Color("f0a890"), "w" = Color("f8f6f0"), "p" = Color("241c26"),
+		"m" = Color("b06850"), "h" = Color("241c26"), "H" = Color("3c3440"),
+		"c" = Color("f28020"), "C" = Color("c05810"), "l" = Color("2868c8"),
+		"a" = Color("1c4890"), "A" = Color("143566"), "g" = Color("e0a83c"),
+		"r" = Color("c93a3a")},
+	# 木叶忍者: 金色刺发 + 护额(蓝带钢牌) + 颊须 + 橙色运动服
+	"skin_ninja": {"o" = Color("1c1810"), "s" = Color("f2d0a8"), "S" = Color("d0a878"),
+		"b" = Color("f0b090"), "w" = Color("f8f6f0"), "p" = Color("2858a8"),
+		"m" = Color("b06850"), "h" = Color("e8c840"), "H" = Color("f8e888"),
+		"a" = Color("98a4b4"), "A" = Color("6a7488"), "c" = Color("f07818"),
+		"C" = Color("c05808"), "l" = Color("2858a8"), "g" = Color("e0a83c"),
+		"r" = Color("c93a3a"), "d" = Color("b89060")},
+	# RX骑士: 全黑头盔 + 绿色复眼 + 额心红晶 + 银色口栅 + 红围巾
+	"skin_rx": {"o" = Color("0c0c12"), "s" = Color("d8dce0"), "S" = Color("a8b0b8"),
+		"b" = Color("d8dce0"), "w" = Color("f8f6f0"), "p" = Color("0c0c12"),
+		"m" = Color("000000"), "h" = Color("1a1a24"), "H" = Color("30303e"),
+		"a" = Color("3ddc6c"), "A" = Color("1fa848"), "c" = Color("14141c"),
+		"C" = Color("0e0e14"), "l" = Color("b8c0c8"), "g" = Color("e0a83c"),
+		"r" = Color("ff4040")},
 }
 
 static var _cache := {}
@@ -82,6 +103,12 @@ static func _grid(skin_id: String) -> Dictionary:
 			_comp_oiran(g)
 		"skin_tengu":
 			_comp_tengu(g)
+		"skin_dball":
+			_comp_dball(g)
+		"skin_ninja":
+			_comp_ninja(g)
+		"skin_rx":
+			_comp_rx(g)
 		_:
 			_comp_momoso(g)
 	_outline(g)
@@ -324,3 +351,100 @@ static func _comp_tengu(g: Dictionary) -> void:
 	_rect(g, 12, 21, 14, 23, "w")
 	_rect(g, 18, 21, 20, 23, "w")
 	_rect(g, 9, 28, 22, 29, "C")
+
+
+## 龙珠战士: 全头刺状黑发(上缘锯齿) + 战意怒眉 + 橙武道服蓝内衬 + 蓝腰带
+static func _comp_dball(g: Dictionary) -> void:
+	_ell(g, 16, 14, 7, 7.5, "s")
+	_rect(g, 14, 21, 17, 25, "S")
+	_rect(g, 10, 25, 21, 31, "c")
+	_rect(g, 8, 28, 23, 31, "c")
+	_rect(g, 15, 25, 16, 28, "l")            # 蓝内衬 V 领
+	_px(g, 14, 26, "l")
+	_px(g, 17, 26, "l")
+	# 发基座 + 全头刺(锯齿向天, 侧刺外斜)
+	_ell(g, 16, 9.5, 7.2, 4.2, "h")
+	for tip: Array in [[6, 6], [10, 2], [14, 1], [19, 2], [23, 3], [26, 6]]:
+		var tx: int = int(tip[0])
+		var ty: int = int(tip[1])
+		for i in 9 - ty:
+			var half := (i + 1) / 2
+			_rect(g, tx - half, ty + i, tx + half, ty + i, "h")
+	_px(g, 12, 3, "H")                       # 刺尖高光
+	_px(g, 19, 4, "H")
+	_px(g, 8, 7, "H")
+	_face(g, "h", 1)                         # 战意怒眉
+	_rect(g, 9, 30, 22, 31, "l")             # 蓝腰带
+	_px(g, 15, 30, "g")
+	_px(g, 16, 30, "g")                      # 腰带金扣
+
+
+## 木叶忍者: 金色刺发 + 蓝带钢牌护额 + 颊须三道 + 橙色运动服
+static func _comp_ninja(g: Dictionary) -> void:
+	_ell(g, 16, 14, 7, 7.5, "s")
+	_rect(g, 14, 21, 17, 25, "S")
+	_rect(g, 10, 25, 21, 31, "c")
+	_rect(g, 8, 28, 23, 31, "c")
+	_rect(g, 10, 25, 21, 26, "C")            # 深橙衣领
+	_rect(g, 16, 27, 16, 31, "C")            # 中缝拉链
+	# 金发基座 + 刺状发梢
+	_ell(g, 16, 8.5, 7.2, 4.0, "h")
+	for tip: Array in [[7, 5], [11, 2], [16, 1], [21, 2], [25, 5]]:
+		var tx: int = int(tip[0])
+		var ty: int = int(tip[1])
+		for i in 8 - ty:
+			var half := (i + 1) / 2
+			_rect(g, tx - half, ty + i, tx + half, ty + i, "h")
+	_px(g, 13, 2, "H")
+	_px(g, 19, 3, "H")
+	# 护额: 蓝带横缠 + 钢牌(叶纹刻痕) — 牌窄于脸, 与眼睛留一行的呼吸空隙
+	_rect(g, 8, 12, 23, 13, "l")
+	_rect(g, 13, 10, 18, 13, "a")
+	_px(g, 15, 11, "A")
+	_px(g, 16, 11, "A")
+	_px(g, 14, 12, "A")
+	_px(g, 16, 12, "A")
+	_px(g, 15, 10, "w")                      # 牌面反光
+	_face(g, "l")                            # 眉被护额压住, 留蓝瞳
+	# 颊须三道(左右)
+	for i in 3:
+		_rect(g, 9, 16 + i * 2, 10, 16 + i * 2, "S")
+		_rect(g, 21, 16 + i * 2, 22, 16 + i * 2, "S")
+
+
+## RX骑士: 全黑头盔 + 额心红晶 + 双绿色复眼 + 银口栅 + 红围巾
+static func _comp_rx(g: Dictionary) -> void:
+	_rect(g, 14, 21, 17, 24, "C")            # 颈甲
+	_rect(g, 10, 25, 21, 31, "c")
+	_rect(g, 8, 28, 23, 31, "c")
+	_rect(g, 15, 25, 16, 28, "l")            # 银色领口
+	# 盔体(全包, 无面部皮肤)
+	_ell(g, 16, 13, 7.2, 7.8, "h")
+	_rect(g, 12, 19, 19, 21, "C")            # 口部护甲
+	# 盔顶脊线 + 侧缘高光
+	_rect(g, 16, 4, 16, 7, "H")
+	_px(g, 11, 8, "H")
+	_px(g, 21, 8, "H")
+	# 额心红晶(菱形)
+	_px(g, 16, 6, "r")
+	_rect(g, 15, 7, 17, 7, "r")
+	_rect(g, 14, 8, 17, 8, "r")
+	_rect(g, 15, 9, 16, 9, "r")
+	_px(g, 15, 7, "w")                       # 晶面反光
+	# 双复眼(大椭圆绿) + 眼内高光
+	_ell(g, 12.5, 15, 2.7, 2.5, "a")
+	_ell(g, 19.5, 15, 2.7, 2.5, "a")
+	_px(g, 11, 14, "w")
+	_px(g, 18, 14, "w")
+	_rect(g, 13, 17, 14, 17, "A")            # 眼下暗部
+	_rect(g, 18, 17, 19, 17, "A")
+	# 银色口栅(双横条)
+	_rect(g, 13, 20, 18, 20, "l")
+	_rect(g, 14, 21, 17, 21, "S")
+	# 红围巾(颈间环 + 左侧飘尾)
+	_rect(g, 9, 23, 22, 24, "r")
+	_rect(g, 6, 25, 9, 29, "r")
+	_px(g, 6, 29, "A")
+	_px(g, 9, 25, "A")
+	_rect(g, 9, 30, 22, 31, "C")
+

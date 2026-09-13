@@ -7,12 +7,15 @@ var f := 0
 
 func _process(_d: float) -> bool:
 	f += 1
+	if f == 1:
+		var skins0: Array = load("res://src/client/ui/skins.gd").SKINS
+		root.size = Vector2i(int(skins0.size() * 190 + 40), 300)
 	if f == 3:
 		var skins: Array = load("res://src/client/ui/skins.gd").SKINS
 		var avatar_script: GDScript = load("res://src/client/ui/avatar.gd")
 		var bg := ColorRect.new()
 		bg.color = Color("14142b")
-		bg.size = Vector2(6 * 190 + 40, 280)
+		bg.size = Vector2(skins.size() * 190 + 40, 280)
 		bg.position = Vector2.ZERO
 		root.add_child(bg)
 		for i in skins.size():

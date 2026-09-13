@@ -10,7 +10,7 @@ const ViewGd = preload("res://src/protocol/view.gd")
 const StatsGd = preload("res://src/server/stats.gd")
 const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 ## AI 随机皮肤池
-const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default"]
+const SKINS := ["skin_aka", "skin_ao", "skin_kitsu", "skin_oiran", "skin_tengu", "skin_default", "skin_dball", "skin_ninja", "skin_rx"]
 ## 房间总数上限: 空房不会自动销毁(等待房主回房), 防异常客户端刷爆内存
 const MAX_ROOMS := 200
 

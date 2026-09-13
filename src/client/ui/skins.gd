@@ -15,6 +15,9 @@ const SKINS := [
 	{"id": "skin_kitsu", "name": "狐妖", "price": 60},
 	{"id": "skin_oiran", "name": "花魁", "price": 60},
 	{"id": "skin_tengu", "name": "天狗", "price": 80},
+	{"id": "skin_dball", "name": "龙珠战士", "price": 100},
+	{"id": "skin_ninja", "name": "木叶忍者", "price": 100},
+	{"id": "skin_rx", "name": "RX骑士", "price": 100},
 ]
 
 ## 卡面皮肤(整套牌面+牌背配色主题)
@@ -43,6 +46,18 @@ const CARDS := [
 		"border": Color("30e0df"), "red": Color("ff2e88"), "black": Color("fcee0a"),
 		"shadow": Color(0, 0, 0, 0.5), "back": Color("0d0f16"),
 		"speckle": Color(0.2, 0.9, 0.9, 0.08)},
+	{"id": "card_dball", "motif": "dball", "name": "七龙珠", "price": 100, "face": Color("f5b942"),
+		"border": Color("2858a8"), "red": Color("d43a2a"), "black": Color("2b2416"),
+		"shadow": Color(0.35, 0.18, 0.05, 0.4), "back": Color("8a2f20"),
+		"speckle": Color(1.0, 0.85, 0.4, 0.12)},
+	{"id": "card_ninja", "motif": "ninja", "name": "火影", "price": 100, "face": Color("1a2338"),
+		"border": Color("f08828"), "red": Color("e0563c"), "black": Color("e8e0d0"),
+		"shadow": Color(0, 0, 0, 0.45), "back": Color("111827"),
+		"speckle": Color(0.95, 0.55, 0.15, 0.10)},
+	{"id": "card_rx", "motif": "rx", "name": "RX骑士", "price": 100, "face": Color("16161e"),
+		"border": Color("3ddc6c"), "red": Color("ff4040"), "black": Color("e8e8f0"),
+		"shadow": Color(0, 0, 0, 0.5), "back": Color("0c0c12"),
+		"speckle": Color(0.25, 0.9, 0.45, 0.08)},
 ]
 
 

@@ -337,6 +337,12 @@ func _draw_joker() -> void:
 			_pixel_art(PIX_WUKONG, _pix_pal_wukong(), c, size)
 		"cyber":
 			_pixel_art(PIX_CYBER, _pix_pal_cyber(), c, size)
+		"dball":
+			_pixel_art(PIX_DBALL, _pix_pal_dball(), c, size)
+		"ninja":
+			_pixel_art(PIX_NINJA, _pix_pal_ninja(), c, size)
+		"rx":
+			_pixel_art(PIX_RX, _pix_pal_rx(), c, size)
 		_:
 			_pixel_art(PIX_DARUMA, _pix_pal_daruma(), c, size)
 	# 角标: JOKER
@@ -390,6 +396,19 @@ func _pix_pal_wukong() -> Dictionary:
 func _pix_pal_cyber() -> Dictionary:
 	return {"D": Color("23262e"), "V": Color("fcee0a"), "E": Color("ffffff"),
 		"C": Color("30e0df"), "B": Color("0d0f16"), "M": Color("ff2e88")}
+
+
+func _pix_pal_dball() -> Dictionary:
+	return {"O": Color("f5a623"), "Y": Color("ffe9a0"), "R": Color("d43a2a")}
+
+
+func _pix_pal_ninja() -> Dictionary:
+	return {"D": Color("30303c"), "S": Color("b8c0c8"), "E": Color("6a7280")}
+
+
+func _pix_pal_rx() -> Dictionary:
+	return {"B": Color("1a1a24"), "G": Color("3ddc6c"), "R": Color("ff4040"),
+		"S": Color("b8c0c8"), "T": Color("8a94a4"), "W": Color("d8fce4")}
 
 
 const PIX_DARUMA := [
@@ -484,6 +503,54 @@ const PIX_CYBER := [
 	"............",
 ]
 
+## 四星球: 橙色晶球 + 2x2 排布的四枚红星 + 左上高光
+const PIX_DBALL := [
+	"....OOOO....",
+	"..OOYYOOOO..",
+	".OOYOOOOOOO.",
+	".OOROOOOROO.",
+	".ORRROORRRO.",
+	".OOROOOOROO.",
+	".OOOOOOOOOO.",
+	".OOROOOOROO.",
+	".ORRROORRRO.",
+	".OOROOOOROO.",
+	"..OOOOOOOO..",
+	"....OOOO....",
+]
+
+## 风魔手里剑: 四刃回旋镖 + 中心铆钉
+const PIX_NINJA := [
+	"DD........DD",
+	"DDD......DDD",
+	".DDD.DD.DDD.",
+	"..DDDDDDDD..",
+	"....DDDD....",
+	".DDDEDDEDDD.",
+	".DDDEDDEDDD.",
+	"....DDDD....",
+	"..DDDDDDDD..",
+	".DDD.DD.DDD.",
+	"DDD......DDD",
+	"DD........DD",
+]
+
+## RX骑士头盔: 银缘黑盔 + 额心红晶 + 双绿复眼 + 银口栅(银缘勾轮廓, 防融进深色卡底)
+const PIX_RX := [
+	"....TTTT....",
+	"..TTBBBBTT..",
+	".TTBBBBBBTT.",
+	".TBBBBRBBBT.",
+	".TBBBRRRBBT.",
+	".TBBBBRBBBT.",
+	"TBGGGBBGGGBT",
+	"TBGWGBBWGBGT",
+	".TBBSSSSBBT.",
+	"..TTBBBBTT..",
+	"............",
+	"............",
+]
+
 
 ## 数字牌中心主题纹环(低饱和, 不干扰识别)。
 func _draw_center_ring(motif: String, c: Vector2, r: float, col: Color) -> void:
@@ -521,6 +588,30 @@ func _draw_center_ring(motif: String, c: Vector2, r: float, col: Color) -> void:
 			draw_line(c + Vector2(r * 0.1, r * 0.15), c + Vector2(r * 0.5, r * 0.15),
 					Color(_pal["red"], col.a), 1.8, true)
 			draw_circle(c, r * 0.16, col)
+		"dball":  # 珠环 + 内嵌四星(红)
+			draw_arc(c, r, 0, TAU, 36, col, 2.4, true)
+			draw_arc(c, r * 0.85, 0, TAU, 32, Color(col, col.a * 0.5), 1.2, true)
+			for p: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var sp := c + p * r * 0.42
+				draw_line(sp + Vector2(-r * 0.12, 0), sp + Vector2(r * 0.12, 0),
+						Color(_pal["red"], col.a), 1.6, true)
+				draw_line(sp + Vector2(0, -r * 0.12), sp + Vector2(0, r * 0.12),
+						Color(_pal["red"], col.a), 1.6, true)
+		"ninja":  # 查克拉螺旋(内起外放)
+			var pts := PackedVector2Array()
+			for i in 46:
+				var t := float(i) / 45.0
+				pts.append(c + Vector2.from_angle(t * TAU * 1.75) * (r * (0.15 + 0.85 * t)))
+			draw_polyline(pts, col, 2.0, true)
+		"rx":  # 复眼环: 双眼弧 + 额心红晶
+			draw_arc(c + Vector2(-r * 0.45, 0), r * 0.52, PI * 0.5, PI * 1.5, 18,
+					col, 2.2, true)
+			draw_arc(c + Vector2(r * 0.45, 0), r * 0.52, -PI * 0.5, PI * 0.5, 18,
+					col, 2.2, true)
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(0, -r * 0.3), c + Vector2(r * 0.18, 0),
+				c + Vector2(0, r * 0.3), c + Vector2(-r * 0.18, 0),
+			]), Color(_pal["red"], col.a))
 		_:  # washi 樱花五瓣
 			for i in 5:
 				var ang := TAU * i / 5.0 - PI * 0.5
@@ -603,6 +694,42 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 			draw_line(c + Vector2(-s * 0.35, s * 0.12), c + Vector2(s * 0.3, s * 0.12),
 					Color(_pal["face"], 0.7), s * 0.06, true)
 			draw_circle(c, s * 0.14, col)
+		"dball":
+			# 龙珠纹章: 大晶珠 + 内嵌四星(红) + 左上高光弧
+			draw_circle(c, s * 0.95, col)
+			draw_arc(c, s * 0.72, PI * 1.05, PI * 1.6, 14, light, s * 0.08, true)
+			for p: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var sp := c + p * s * 0.4
+				draw_line(sp + Vector2(-s * 0.14, 0), sp + Vector2(s * 0.14, 0),
+						Color(_pal["red"], col.a), s * 0.09, true)
+				draw_line(sp + Vector2(0, -s * 0.14), sp + Vector2(0, s * 0.14),
+						Color(_pal["red"], col.a), s * 0.09, true)
+		"ninja":
+			# 苦无: 斜置菱刃 + 直柄 + 环首
+			var dir := Vector2(0.707, 0.707)
+			var tip2 := c + dir * s * 1.0
+			var root := c - dir * s * 0.15
+			var wid := Vector2(0.707, -0.707) * s * 0.17
+			draw_colored_polygon(PackedVector2Array([
+				tip2, root + wid, c - dir * s * 0.35 - wid, root - wid,
+			]), col)
+			draw_line(root, c - dir * s * 0.8, col, s * 0.13, true)
+			draw_arc(c - dir * s * 1.0, s * 0.16, 0, TAU, 12, col, s * 0.07, true)
+		"rx":
+			# 骑士头盔: 盔体剪影 + 双复眼(亮) + 额心红晶
+			var helm := PackedVector2Array([
+				c + Vector2(-s * 0.7, -s * 0.2), c + Vector2(-s * 0.45, -s * 0.85),
+				c + Vector2(s * 0.45, -s * 0.85), c + Vector2(s * 0.7, -s * 0.2),
+				c + Vector2(s * 0.5, s * 0.55), c + Vector2(0, s * 0.9),
+				c + Vector2(-s * 0.5, s * 0.55),
+			])
+			draw_colored_polygon(helm, col)
+			draw_circle(c + Vector2(-s * 0.3, 0), s * 0.2, light)
+			draw_circle(c + Vector2(s * 0.3, 0), s * 0.2, light)
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(0, -s * 0.62), c + Vector2(s * 0.12, -s * 0.45),
+				c + Vector2(0, -s * 0.3), c + Vector2(-s * 0.12, -s * 0.45),
+			]), Color(_pal["red"], col.a))
 		_:
 			var body := PackedVector2Array([
 				c + Vector2(-s * 0.7, s * 0.1), c + Vector2(-s * 0.2, -s * 0.35),
@@ -743,6 +870,50 @@ func _draw_back_pattern(host: CanvasItem) -> void:
 					Color(_pal["red"], 0.35))
 			host.draw_rect(Rect2(size.x * 0.62, size.y * 0.66, size.x * 0.38,
 					size.y * 0.014), Color(_pal["black"], 0.4))
+		"dball":
+			# 龙珠牌背: 环形气浪 + 中央四星球
+			for i in 4:
+				var yy := size.y * (0.14 + 0.22 * i)
+				var cc := Vector2(size.x * (0.5 if i % 2 == 0 else 0.06), yy)
+				host.draw_arc(cc, size.y * 0.15, 0, TAU, 20,
+						Color(border_c, 0.16 + 0.06 * i), size.x * 0.02, true)
+			var cb := size / 2.0
+			host.draw_circle(cb, size.y * 0.17, Color(_pal["face"], 0.7))
+			for p: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var sp: Vector2 = cb + p * size.y * 0.075
+				host.draw_line(sp + Vector2(-size.y * 0.026, 0),
+						sp + Vector2(size.y * 0.026, 0),
+						Color(_pal["red"], 0.9), size.y * 0.016, true)
+				host.draw_line(sp + Vector2(0, -size.y * 0.026),
+						sp + Vector2(0, size.y * 0.026),
+						Color(_pal["red"], 0.9), size.y * 0.016, true)
+		"ninja":
+			# 火影牌背: 木叶漩涡 + 四向刃角
+			var cn := size / 2.0
+			var pts := PackedVector2Array()
+			for i in 40:
+				var t := float(i) / 39.0
+				pts.append(cn + Vector2.from_angle(t * TAU * 1.6 + PI * 0.4)
+						* (size.y * (0.03 + 0.14 * t)))
+			host.draw_polyline(pts, Color(border_c, 0.55), size.x * 0.028, true)
+			for q in 4:
+				var ang := TAU * q / 4.0 + PI / 4.0
+				var tip2 := cn + Vector2.from_angle(ang) * size.y * 0.31
+				var b1 := cn + Vector2.from_angle(ang + 0.55) * size.y * 0.20
+				var b2 := cn + Vector2.from_angle(ang - 0.55) * size.y * 0.20
+				host.draw_colored_polygon(PackedVector2Array([tip2, b1, b2]),
+						Color(border_c, 0.35))
+			host.draw_circle(cn, size.y * 0.035, Color(_pal["red"], 0.8))
+		"rx":
+			# RX牌背: 蝉翼斜线速纹 + 腰带红灯(三层同心)
+			for i in 6:
+				var xx := size.x * (0.08 + 0.16 * i)
+				host.draw_line(Vector2(xx, 0), Vector2(xx + size.x * 0.07, size.y),
+						Color(border_c, 0.13), size.x * 0.022, true)
+			var cr := size / 2.0
+			host.draw_circle(cr, size.y * 0.14, Color(border_c, 0.28))
+			host.draw_circle(cr, size.y * 0.085, Color(_pal["red"], 0.85))
+			host.draw_circle(cr, size.y * 0.032, Color(_pal["black"], 0.9))
 		_:
 			# 小牌(对手牌背扇 40px): 单环大格纹样, 绘制量 -70%
 			var small := size.x < 60.0
