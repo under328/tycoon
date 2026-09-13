@@ -22,6 +22,17 @@ const SkinsLib = preload("res://src/client/ui/skins.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
 const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
+## 快捷短语(短标 → 全句): 热门牌类游戏标配的社交快捷语音包
+const QUICK_PHRASES := [
+	["快点吧", "快点吧，我等到花儿都谢了"],
+	["大家好", "大家好，很高兴见到各位"],
+	["打得好", "你的牌打得太好了"],
+	["别走", "不要走，决战到天亮"],
+	["底牌多", "底牌留太多了吧"],
+	["手气差", "唉，手气太差了"],
+	["稳住", "稳住，我们能赢"],
+	["关照", "大家好，多多关照"],
+]
 const AI_THINK_SEC := 0.7
 
 
@@ -64,6 +75,11 @@ var _had_field := false         # 出牌区是否有过牌(区分清桌音效与
 var _trick_texts: Array = []    # 本轮已出各手文本(清桌时整体转上轮)
 var _last_trick: Array = []     # 上一轮完整出牌回顾(清桌后常显)
 var trick_lbl: Label = null     # 上轮回顾标签(出牌区空时显示)
+var counter_lbl: Label = null   # 记牌器 HUD(按点数显示未被出的牌数)
+var counter_toggle: Button = null
+var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
+var _counter_totals := {}       # 点数值 -> 总张数(王受命运卡影响)
+var phrase_row: HBoxContainer = null  # 快捷短语行(表情弹开时显示)
 var _turn_total := -1.0
 var _turn_remain := -1.0
 var _last_turn_seat := -99
@@ -272,6 +288,7 @@ func _advance() -> void:
 			var r := GameStateGd.apply(state, {"t": "next_round"})
 			if bool(r["ok"]):
 				state = r["state"]
+				_counter_reset()
 				if rogue:
 					# 揭示期间停循环, 关闭后重启。必须同步清 advancing:
 					# gen 已自增, 循环尾部的清位不会执行, 否则关闭弹窗时
@@ -311,7 +328,10 @@ func _my_pending_return(view: Dictionary) -> Dictionary:
 
 
 func _local_apply(action: Dictionary) -> Dictionary:
-	return GameStateGd.apply(state, action)
+	var r := GameStateGd.apply(state, action)
+	if bool(r["ok"]) and int(action.get("seat", -1)) == 0 			and str(action["t"]) == "play" 			and (action["cards"] as Array).size() == 4:
+		Wallet.note_mission("m_quad")  # 我方四条=炸弹(本规则集 4 张组合仅四条)
+	return r
 
 
 func _human_apply(action: Dictionary) -> void:
@@ -323,6 +343,8 @@ func _human_apply(action: Dictionary) -> void:
 	if not bool(r["ok"]):
 		_flash_error(GameStateGd.error_msg(str(r["error"])))
 		return
+	if str(action["t"]) == "play" and (action["cards"] as Array).size() == 4:
+		Wallet.note_mission("m_quad")  # 我方四条
 	_detect_local_eight_cut(action, r["state"])
 	state = r["state"]
 	selected.clear()
@@ -650,8 +672,11 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 		_sfx("pop")
 	elif event == "chat":
 		_append_chat(int(data.get("seat", 0)), str(data.get("text", "")))
-	elif event == "played" and bool(data.get("eight_cut", false)):
-		_spawn_fx("eight_cut")
+	elif event == "played":
+		if int(data.get("seat", -1)) == int(net.latest_view.get("my_seat", -1)) 				and (data.get("combo", {}) as Dictionary).get("cards", []).size() == 4:
+			Wallet.note_mission("m_quad")
+		if bool(data.get("eight_cut", false)):
+			_spawn_fx("eight_cut")
 
 
 func _append_chat(seat: int, text: String) -> void:
@@ -660,6 +685,32 @@ func _append_chat(seat: int, text: String) -> void:
 	var keep := lines.slice(maxi(lines.size() - 4, 0))
 	keep.append("%s: %s" % [_seat_name(view, seat), text])
 	chat_log.text = "\n".join(keep)
+
+
+## 快捷短语发送: 本地=进聊天行+随机 AI 回应; 联机=聊天广播
+func _send_phrase(full: String) -> void:
+	if mode == "online" and net != null:
+		net.send_chat(full)
+		var view: Dictionary = net.latest_view
+		_append_chat(int(view.get("my_seat", 0)), full)
+	else:
+		_append_chat(0, full)
+		_bot_reply()
+
+
+## 本地 AI 回应: 60% 概率一位随机 AI 回一句随机短语
+func _bot_reply() -> void:
+	if randf() > 0.6:
+		return
+	var full: String = str(QUICK_PHRASES[randi() % QUICK_PHRASES.size()][1])
+	get_tree().create_timer(randf_range(0.8, 2.0)).timeout.connect(func() -> void:
+		if is_inside_tree():
+			_bot_say(full))
+
+
+func _bot_say(full: String) -> void:
+	var seat := 1 + randi() % 3
+	_append_chat(seat, full)
 
 
 func _on_chat_send() -> void:
@@ -796,6 +847,23 @@ func _build_ui() -> void:
 	field_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_hint.position = Vector2(20, 6)
 	field_hint.custom_minimum_size = Vector2(600, 24)
+	# 记牌器开关(顶栏)
+	counter_toggle = _button("记牌")
+	counter_toggle.custom_minimum_size = Vector2(84, 44)
+	counter_toggle.toggle_mode = true
+	counter_toggle.button_pressed = GameSettings.card_counter
+	counter_toggle.pressed.connect(func() -> void:
+		Audio.play("click")
+		GameSettings.card_counter = counter_toggle.button_pressed
+		GameSettings.save_settings()
+		_update_counter())
+	add_child(counter_toggle)
+	# 记牌器 HUD(出牌区底部一行)
+	counter_lbl = _make_label(13, Color("9fd8e8"))
+	counter_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	counter_lbl.add_theme_constant_override("shadow_offset_x", 1)
+	counter_lbl.add_theme_constant_override("shadow_offset_y", 1)
+	field_panel.add_child(counter_lbl)
 	trick_lbl = _make_label(13, Color("c9b06a"))
 	trick_lbl.position = Vector2(20, 30)
 	trick_lbl.custom_minimum_size = Vector2(600, 22)
@@ -868,6 +936,23 @@ func _build_ui() -> void:
 				net.send_emoji(id))
 		add_child(eb)
 		_emoji_btns.append(eb)
+	# 快捷短语行(热门牌类标配: 预设语音包, 本地=气泡+AI回应, 联机=聊天广播)
+	phrase_row = HBoxContainer.new()
+	phrase_row.add_theme_constant_override("separation", 6)
+	phrase_row.position = Vector2(16, 712)
+	add_child(phrase_row)
+	for ph: Array in QUICK_PHRASES:
+		var short: String = str(ph[0])
+		var full: String = str(ph[1])
+		var pb := AppTheme.make_button(short, Vector2(86, 38), 13)
+		pb.visible = false
+		pb.pressed.connect(func() -> void:
+			if _chat_cd > 0.0:
+				_flash_error("说太快了")
+				return
+			_chat_cd = 1.0
+			_send_phrase(full))
+		phrase_row.add_child(pb)
 	_emoji_toggle = AppTheme.make_button("😀",
 			Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
 	_emoji_toggle.position = Vector2(16, 664)
@@ -877,6 +962,12 @@ func _build_ui() -> void:
 		_update_emoji_vis())
 	add_child(_emoji_toggle)
 	_update_emoji_vis()
+	# 开局问候: 本地模式随机一位 AI 打招呼(氛围)
+	if mode == "local":
+		var greet := func() -> void:
+			if is_inside_tree() and not state.is_empty() 					and str(state.get("phase", "")) in ["play", "exchange"]:
+				_bot_say("大家好，很高兴见到各位")
+		get_tree().create_timer(1.6).timeout.connect(greet)
 
 	# 文本聊天（仅联机模式）
 	chat_log = _make_label(14, AppTheme.WHITE)
@@ -987,12 +1078,15 @@ func _vibrate(ms: int) -> void:
 		Input.vibrate_handheld(ms)
 
 
-## 表情区显隐: 联机=切换钮常显、表情随展开态; 本地=全部隐藏
+## 表情/快捷短语区: 切换钮常显(两种模式), 展开后显示表情+短语行;
+## 本地模式同样可用(纯客户端气泡 + AI 随机回应), 联机走聊天广播。
 func _update_emoji_vis() -> void:
-	var online := mode == "online"
-	_emoji_toggle.visible = online
+	_emoji_toggle.visible = true
 	for eb: Button in _emoji_btns:
-		eb.visible = online and _emoji_open
+		eb.visible = _emoji_open
+	if phrase_row != null:
+		for pb: Button in phrase_row.get_children():
+			pb.visible = _emoji_open
 
 
 func _flash_error(msg: String) -> void:
@@ -1071,6 +1165,10 @@ func _relayout() -> void:
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
 	rules_btn.position = Vector2(w - 204, 10)
+	counter_toggle.position = Vector2(w - 308, 10)  # 与规则钮(96宽)留 8px 间距
+	if counter_lbl != null:
+		counter_lbl.position = Vector2(20, field_panel.size.y - 30.0)
+		counter_lbl.size = Vector2(field_panel.size.x - 40.0, 22.0)
 	if rogue_lbl != null:
 		rogue_lbl.position = Vector2(w / 2.0 - 330.0, 12.0)
 		rogue_lbl.custom_minimum_size = Vector2(660.0, 0)
@@ -1395,6 +1493,36 @@ func _round_end_text(view: Dictionary) -> String:
 	return "  ".join(parts)
 
 
+## 记牌器: 局初基数为各点数 4 张(命运卡『王者归来』王 4 张);
+## 扣除本局已打出的, 余数=所有未出牌(含各家手牌与死牌)
+func _counter_reset() -> void:
+	_counter_played.clear()
+	for v in range(3, 16):
+		_counter_totals[v] = 4
+	_counter_totals[16] = 4 if _rogue_mod_id_safe() == "joker_x2" else 2
+	_update_counter()
+
+
+func _rogue_mod_id_safe() -> String:
+	if rogue and not state.is_empty():
+		return str(state["cfg"].get("rogue_mod", ""))
+	return ""
+
+
+func _update_counter() -> void:
+	if counter_lbl == null:
+		return
+	counter_lbl.visible = GameSettings.card_counter 			and str(state.get("phase", "")) in ["play", "exchange"]
+	if not counter_lbl.visible:
+		return
+	var parts: Array = []
+	for v in range(3, 16):
+		var left := int(_counter_totals.get(v, 4)) - int(_counter_played.get(v, 0))
+		parts.append("%s×%d" % [CardsGd.rank_label(v), left])
+	parts.append("王×%d" % (int(_counter_totals.get(16, 2)) - int(_counter_played.get(16, 0))))
+	counter_lbl.text = "  ".join(PackedStringArray(parts))
+
+
 ## 上轮回顾: 清桌后空场阶段常显上一轮各手(信息不因清桌丢失)
 func _show_trick_recap() -> void:
 	if trick_lbl == null:
@@ -1432,6 +1560,10 @@ func _refresh_field(view: Dictionary) -> void:
 	# 增量追加: 出牌只加最新一手(整排重建会闪一帧鬼影 — queue_free 延迟移除)
 	if grew:
 		var entry: Dictionary = field[field.size() - 1]
+		for c in entry["combo"]["cards"]:
+			var v := CardsGd.value(int(c))
+			_counter_played[v] = int(_counter_played.get(v, 0)) + 1
+		_update_counter()
 		var labels: Array = []
 		for c in entry["combo"]["cards"]:
 			labels.append(CardsGd.label(int(c)))

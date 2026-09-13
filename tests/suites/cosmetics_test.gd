@@ -25,6 +25,7 @@ func run(t) -> void:
 	_signin(t)
 	_achievements(t)
 	_history(t)
+	_missions(t)
 
 
 func _registry(t) -> void:
@@ -206,6 +207,29 @@ func _history(t) -> void:
 	t.expect_eq(int(w.history.size()), 20, "记录截断至 20 条")
 	t.expect_eq(str((w.history[0] as Dictionary)["day"]), "d5", "最旧被挤出")
 	t.expect_eq(str((w.history[19] as Dictionary)["day"]), "d24", "最新在尾")
+	w.queue_free()
+
+
+## 每日任务: 进度/领取/去重/跨日重置
+func _missions(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_mission_wallet.cfg"
+	w.grant_match_reward(10, 2, 1)  # 完成 1 场(m_play 进度 1/2)
+	t.expect_eq(int(w.mission_state("m_play")["progress"]), 1, "对局任务进度 1/2")
+	t.expect(w.claim_mission("m_play").is_empty(), "未达标领取被拒")
+	w.grant_match_reward(10, 3, 1)  # 第 2 场 → 达标
+	t.expect_eq(int(w.mission_state("m_play")["progress"]), 2, "进度封顶 2/2")
+	var r: Dictionary = w.claim_mission("m_play")
+	t.expect_eq(int(r["gold"]), 150, "领取 150 金币")
+	t.expect(w.mission_state("m_play")["claimed"], "领取状态记录")
+	t.expect(w.claim_mission("m_play").is_empty(), "重复领取被拒")
+	w.note_mission("m_quad")
+	t.expect(w.mission_state("m_quad")["claimed"] == false
+			and int(w.mission_state("m_quad")["progress"]) == 1, "四条事件计入")
+	# 跨日重置
+	w.mission_day = "2000-01-01"
+	t.expect_eq(int(w.mission_state("m_play")["progress"]), 0, "跨日进度重置")
+	t.expect(not w.mission_state("m_play")["claimed"], "跨日领取状态重置")
 	w.queue_free()
 
 

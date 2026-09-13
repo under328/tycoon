@@ -23,6 +23,13 @@ const SIGN_REWARDS := [
 	{"gold": 250}, {"diamonds": 2}, {"diamonds": 5},
 ]
 
+## 每日任务(按日重置): target 达成后可领奖励
+const MISSIONS := [
+	{"id": "m_win", "name": "赢得一场胜利", "target": 1, "reward_diamonds": 3},
+	{"id": "m_play", "name": "完成 2 场对局", "target": 2, "reward_gold": 150},
+	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 2},
+]
+
 ## 成就目录: cond 在 check_achievements 里按 id 求值(基于持久化统计)
 const ACHIEVEMENTS := [
 	{"id": "first_win", "name": "初阵告捷", "desc": "赢得第一场胜利"},
@@ -58,6 +65,9 @@ var diamonds_earned := 0       # 累计获得钻石(成就统计)
 var special_bought := 0        # 累计购入特殊道具数(成就统计)
 var unlocked: Array = []       # 已解锁成就 id
 var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
+var mission_day := ""          # 任务所属日期
+var mission_progress := {}     # id -> 进度
+var mission_claimed := {}      # id -> true(已领取)
 
 ## 本地战绩统计
 var local_matches := 0
@@ -105,6 +115,9 @@ func _reset_defaults() -> void:
 	special_bought = 0
 	unlocked = []
 	history = []
+	mission_day = ""
+	mission_progress = {}
+	mission_claimed = {}
 	local_matches = 0
 	local_wins = 0
 
@@ -151,6 +164,11 @@ func _read_into(path: String) -> bool:
 	unlocked = ul
 	var hs: Array = cf.get_value("wallet", "history", [])
 	history = hs
+	mission_day = str(cf.get_value("wallet", "mission_day", ""))
+	var mp = cf.get_value("wallet", "mission_progress", {})
+	mission_progress = mp if mp is Dictionary else {}
+	var mc = cf.get_value("wallet", "mission_claimed", {})
+	mission_claimed = mc if mc is Dictionary else {}
 	return true
 
 
@@ -175,6 +193,9 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "special_bought", special_bought)
 	cf.set_value("wallet", "unlocked", unlocked)
 	cf.set_value("wallet", "history", history)
+	cf.set_value("wallet", "mission_day", mission_day)
+	cf.set_value("wallet", "mission_progress", mission_progress)
+	cf.set_value("wallet", "mission_claimed", mission_claimed)
 	if cf.save(tmp) == OK:
 		DirAccess.rename_absolute(
 				ProjectSettings.globalize_path(tmp),
@@ -212,6 +233,9 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1) -> Dictionary:
 	local_matches += 1
 	if rank == 1:
 		local_wins += 1
+	_mission_add("m_play", 1)
+	if rank == 1:
+		_mission_add("m_win", 1)
 	var newly := check_achievements()
 	_mark_dirty()
 	balance_changed.emit()
@@ -252,6 +276,65 @@ func buy_special(item_id: String) -> bool:
 		balance_changed.emit()
 		return true
 	return false
+
+
+## ── 每日任务 ──
+
+## 跨日重置任务(惰性)
+func _ensure_mission_day() -> void:
+	if mission_day != _today():
+		mission_day = _today()
+		mission_progress = {}
+		mission_claimed = {}
+		_mark_dirty()
+
+
+## 推进任务进度(封顶 target)
+func _mission_add(id: String, n: int) -> void:
+	_ensure_mission_day()
+	var cur := int(mission_progress.get(id, 0))
+	for m in MISSIONS:
+		if str(m["id"]) == id:
+			mission_progress[id] = mini(cur + n, int(m["target"]))
+	_mark_dirty()
+
+
+## 外部事件推进(如打出一枚四条)
+func note_mission(id: String, n: int = 1) -> void:
+	_mission_add(id, n)
+
+
+func mission_state(id: String) -> Dictionary:
+	_ensure_mission_day()
+	var m := {}
+	for it in MISSIONS:
+		if str(it["id"]) == id:
+			m = it
+	return {"meta": m, "progress": int(mission_progress.get(id, 0)),
+			"claimed": bool(mission_claimed.get(id, false))}
+
+
+## 领取任务奖励(进度满且未领)。返回 {gold, diamonds} 或 {}
+func claim_mission(id: String) -> Dictionary:
+	_ensure_mission_day()
+	if bool(mission_claimed.get(id, false)):
+		return {}
+	var meta := {}
+	for m in MISSIONS:
+		if str(m["id"]) == id:
+			meta = m
+	if meta.is_empty() or int(mission_progress.get(id, 0)) < int(meta["target"]):
+		return {}
+	mission_claimed[id] = true
+	var g := int(meta.get("reward_gold", 0))
+	var d := int(meta.get("reward_diamonds", 0))
+	gold += g
+	diamonds += d
+	diamonds_earned += d
+	check_achievements()
+	_mark_dirty()
+	balance_changed.emit()
+	return {"gold": g, "diamonds": d}
 
 
 ## ── 每日签到(7 天一循环) ──

@@ -11,6 +11,7 @@ const Responsive = preload("res://src/client/theme/responsive.gd")
 var _tab := "ach"
 var _tab_ach_btn: Button
 var _tab_hist_btn: Button
+var _tab_mission_btn: Button
 var _scroll: ScrollContainer
 var _grid: VBoxContainer
 var _toast: Label
@@ -51,6 +52,11 @@ func _ready() -> void:
 	_tab_hist_btn.toggle_mode = true
 	_tab_hist_btn.pressed.connect(func() -> void: _set_tab("hist"))
 	add_child(_tab_hist_btn)
+	_tab_mission_btn = AppTheme.make_button("每日任务", Vector2(200, 46), 18)
+	_tab_mission_btn.position = Vector2(470, 110)
+	_tab_mission_btn.toggle_mode = true
+	_tab_mission_btn.pressed.connect(func() -> void: _set_tab("mission"))
+	add_child(_tab_mission_btn)
 
 	_scroll = ScrollContainer.new()
 	_scroll.position = Vector2(40, 170)
@@ -92,6 +98,8 @@ func _refresh() -> void:
 		child.queue_free()
 	if _tab == "ach":
 		_build_achievements()
+	elif _tab == "mission":
+		_build_missions()
 	else:
 		_build_history()
 
@@ -146,6 +154,59 @@ func _ach_row(a: Dictionary, unlocked: bool) -> Control:
 	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	h.add_child(tag)
 	return panel
+
+
+## 每日任务行: 进度/奖励/领取
+func _build_missions() -> void:
+	var day_lbl := AppTheme.make_label(15, AppTheme.DIM)
+	day_lbl.text = "每日 0 点重置 · 完成对局与任务可获金币钻石"
+	_grid.add_child(day_lbl)
+	for m in WalletGd.MISSIONS:
+		var st: Dictionary = Wallet.mission_state(str(m["id"]))
+		var prog := int(st["progress"])
+		var target := int(m["target"])
+		var claimed := bool(st["claimed"])
+		var done := prog >= target and not claimed
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(1180, 0)
+		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
+				AppTheme.GOLD if claimed else Color(1, 1, 1, 0.12), 10, 1)
+		sb.content_margin_left = 18
+		sb.content_margin_right = 18
+		sb.content_margin_top = 10
+		sb.content_margin_bottom = 10
+		panel.add_theme_stylebox_override("panel", sb)
+		_grid.add_child(panel)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		panel.add_child(h)
+		var v := VBoxContainer.new()
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_theme_constant_override("separation", 2)
+		h.add_child(v)
+		var nm := AppTheme.make_label(17, AppTheme.WHITE)
+		nm.text = str(m["name"])
+		v.add_child(nm)
+		var ds := AppTheme.make_label(13, AppTheme.DIM)
+		var rw: Array = []
+		if int(m.get("reward_gold", 0)) > 0:
+			rw.append("%d金币" % int(m["reward_gold"]))
+		if int(m.get("reward_diamonds", 0)) > 0:
+			rw.append("%d钻石" % int(m["reward_diamonds"]))
+		ds.text = "奖励: %s · 进度 %d/%d" % [" + ".join(PackedStringArray(rw)), prog, target]
+		v.add_child(ds)
+		var btn := AppTheme.make_button(
+				"已领取" if claimed else ("领 取" if done else "未完成"),
+				Vector2(110, 40), 14)
+		btn.disabled = claimed or not done
+		var mid := str(m["id"])
+		btn.pressed.connect(func() -> void:
+			var r: Dictionary = Wallet.claim_mission(mid)
+			if not r.is_empty():
+				Audio.play("win")
+				_toast.text = "任务奖励: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])]
+			_refresh())
+		h.add_child(btn)
 
 
 ## 战绩: 头部汇总 + 最近记录行(模式/名次/积分/奖励)
