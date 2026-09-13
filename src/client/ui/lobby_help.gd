@@ -104,7 +104,8 @@ func _ready() -> void:
 	Responsive.watch(self, _relayout)
 
 
-## 多设备自适应: 内容列(960 宽)水平居中, 平板加高时整块下移居中, 关闭锚右上。
+## 多设备自适应: 内容列(960 宽)水平居中, 高度富余下移居中;
+## 紧凑高度(手机)时底部控件钳到屏内。
 func _relayout() -> void:
 	var w := size.x
 	var h := size.y
@@ -112,14 +113,18 @@ func _relayout() -> void:
 		return
 	var cx := (w - 960.0) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
+	var sq := h < 660.0   # 紧凑: 图示/圆点/按钮整体上收
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, 120 + dy)
-	_fig.position = Vector2(cx, 300 + dy)
+	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
+	_body.size = Vector2(960, (150.0 if not sq else 132.0))
+	_fig.position = Vector2(cx, (218.0 if sq else 300.0) + dy)
+	_fig.size = Vector2(960, (210.0 if sq else 280.0))
 	for i in _dots.size():
-		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0, 610 + dy)
-	_prev_btn.position = Vector2(w / 2.0 - 300.0, 646 + dy)
-	_next_btn.position = Vector2(w / 2.0 + 120.0, 646 + dy)
+		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
+				(h - 132.0 if sq else 610.0) + dy)
+	_prev_btn.position = Vector2(w / 2.0 - 300.0, (h - 78.0 if sq else 646.0) + dy)
+	_next_btn.position = Vector2(w / 2.0 + 120.0, (h - 78.0 if sq else 646.0) + dy)
 	_close_lbl.position = Vector2(w - 110.0, 24)
 
 

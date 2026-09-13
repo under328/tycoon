@@ -656,7 +656,8 @@ func _build_ui() -> void:
 	# 快捷表情（仅联机模式; 44px 触控热区）
 	for i in EMOJIS.size():
 		var id := i
-		var eb := AppTheme.make_button(EMOJIS[i], Vector2(44, 44), 20)
+		var eb := AppTheme.make_button(EMOJIS[i],
+				Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
 		eb.position = Vector2(16 + i * 52, 664)
 		eb.pressed.connect(func() -> void:
 			if _emoji_cd > 0.0:
@@ -758,8 +759,10 @@ func _make_label(size: int, color: Color) -> Label:
 func _button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(96, 44)
-	b.add_theme_font_size_override("font_size", 19)
+	var sz := Vector2(116, 52) if Responsive.is_touch() else Vector2(96, 44)
+	b.custom_minimum_size = sz
+	b.size = sz
+	b.add_theme_font_size_override("font_size", 21 if Responsive.is_touch() else 19)
 	return b
 
 
@@ -830,6 +833,15 @@ func _relayout() -> void:
 	var h: float = size.y
 	if w < 100.0 or h < 100.0:
 		return
+	# 触屏加大尺寸 + 紧凑高度(手机逻辑视口 ~1248x576)双档布局
+	var touch: bool = Responsive.is_touch()
+	var compact: bool = h < 660.0
+	var card_h := 134.0 if touch else 100.0
+	var field_w := 760.0 if touch else 640.0
+	var field_h := 280.0 if touch else 248.0
+	if compact:
+		field_h = 236.0 if touch else 232.0
+	var ops_h := 52.0 if touch else 44.0
 	# 顶部
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
@@ -842,19 +854,39 @@ func _relayout() -> void:
 	_opp_hands[2].position = Vector2(30, 50)
 	_seat_panels[0].position = Vector2(w - 284, h * 0.41)
 	_opp_hands[0].position = Vector2(w - 150, 108)
-	# 中央出牌区(水平居中, 垂直随高度)
-	field_panel.position = Vector2((w - 640) / 2.0, 204 + (h - 720) * 0.5)
-	# 底部: 自己面板 / 手牌 / 状态 / 错误 / 操作行
+	# 操作行(先定位: 手牌让位) — 卡底不得压按钮
+	var ops_y := h - ops_h - 14.0
+	ops_row.position = Vector2(w - 16.0 - (640.0 if touch else 420.0), ops_y)
+	# 手牌区
+	var hand_y := ops_y - 6.0 - 18.0 - card_h
+	hand_box.position = Vector2(w - 1014, hand_y)
+	hand_box.size = Vector2(1010, 28.0 + card_h)
+	# 中央出牌区(水平居中; 顶不越过手牌抬起位)
+	var field_x := (w - field_w) / 2.0
+	var field_y: float = minf(204.0 + (h - 720.0) * 0.5, hand_y + 12.0 - field_h)
+	field_panel.position = Vector2(field_x, field_y)
+	field_panel.custom_minimum_size = Vector2(field_w, field_h)
+	field_panel.size = Vector2(field_w, field_h)
+	field_box.position = Vector2(20, 36)
+	field_box.size = Vector2(field_w - 40, field_h - 64)
+	# 底部: 自己面板 / 状态 / 错误
 	self_panel.position = Vector2(16, h - 164)
-	hand_box.position = Vector2(w - 1014, h - 186)
-	status_label.position = Vector2((w - 640) / 2.0, h - 224)
-	error_label.position = Vector2((w - 640) / 2.0, h - 250)
-	ops_row.position = Vector2(w - 454, h - 58)
-	# 联机聊天(仅联机创建)
-	chat_log.position = Vector2(16, h - 258)
-	chat_edit.position = Vector2(w - 840, h - 58)
-	chat_btn.position = Vector2(w - 488, h - 58)
-	# 快捷表情(联机): 与聊天/操作行同排贴底
+	var status_y := h - 224.0
+	var error_y := h - 250.0
+	if field_y + field_h > status_y - 4.0:   # 高度不足: 状态/错误挪到场上方
+		status_y = field_y - 30.0
+		error_y = field_y - 56.0
+	status_label.position = Vector2(field_x, status_y)
+	status_label.custom_minimum_size = Vector2(field_w, 26)
+	error_label.position = Vector2(field_x, error_y)
+	error_label.custom_minimum_size = Vector2(field_w, 22)
+	# 联机聊天(仅联机创建); 紧凑时记录在左上空带, 输入行挪到顶部
+	chat_log.position = Vector2(16, 120.0 if compact else h - 258.0)
+	chat_edit.position = Vector2((240.0 if compact else (w - 840.0)),
+			(8.0 if compact else (h - 58)))
+	chat_btn.position = Vector2((592.0 if compact else (w - 488.0)),
+			(8.0 if compact else (h - 58)))
+	# 快捷表情(联机): 贴底缘
 	for i in _emoji_btns.size():
 		_emoji_btns[i].position = Vector2(16 + i * 52, h - 58)
 	# 虚拟键盘避让: 聚焦聊天时底部整行抬到键盘上方
@@ -1110,8 +1142,10 @@ func _refresh_field(view: Dictionary) -> void:
 		holder.add_child(name_lb)
 		var hz := HBoxContainer.new()
 		hz.add_theme_constant_override("separation", 4)
+		var fw := 70.0 if Responsive.is_touch() else 56.0
+		var fh := 98.0 if Responsive.is_touch() else 78.0
 		for c in entry["combo"]["cards"]:
-			hz.add_child(_make_card(int(c), 56, 78, false, false))
+			hz.add_child(_make_card(int(c), fw, fh, false, false))
 		holder.add_child(hz)
 		field_box.add_child(holder)
 		if i == field.size() - 1 and grew:
@@ -1222,10 +1256,12 @@ func _refresh_hand(view: Dictionary) -> void:
 	# 手牌已变化: 清掉已不在手中的陈旧选牌(避免把不存在的牌发给服务器)
 	selected = selected.filter(func(c: int) -> bool: return hand.has(c))
 	var i := 0
+	var hand_cw := 96.0 if Responsive.is_touch() else 72.0
+	var hand_ch := 134.0 if Responsive.is_touch() else 100.0
 	for c in hand:
 		var card_id: int = c
 		var is_sel := selected.has(card_id)
-		var cv := _make_card(card_id, 72, 100, is_sel)
+		var cv := _make_card(card_id, hand_cw, hand_ch, is_sel)
 		hand_box.add_child(cv)
 		_hand_cards.append(cv)
 		_apply_hand_card_state(cv, is_sel)

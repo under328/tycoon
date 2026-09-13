@@ -12,6 +12,13 @@ static func is_touch() -> bool:
 			or OS.has_feature("web_ios")
 
 
+## 触屏内容缩放: >1 = 逻辑视口更小 = 一切元素物理尺寸放大。
+## 1.25 → 20:9 手机(2340x1080)逻辑视口 1248x576, 牌/按钮物理 +25%,
+## 配合牌桌紧凑布局与触屏加大尺寸(牌 96x134)合计 +67%。
+static func ui_scale() -> float:
+	return 1.25 if is_touch() else 1.0
+
+
 ## Tailscale 虚拟网 IP(CGNAT 段 100.64.0.0/10, 而非任意 100.x 公网地址)
 static func tailscale_ips() -> Array:
 	var out: Array = []

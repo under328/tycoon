@@ -165,8 +165,9 @@ func _relayout() -> void:
 	var h := size.y
 	if w < 100.0 or h < 100.0:
 		return
-	var extra := maxf(w - 1280.0, 0.0)
-	var eh := maxf(h - 720.0, 0.0)
+	# 有符号压缩: 手机紧凑视口(高<720/宽<1280)时底部/右缘控件向内收
+	var extra := w - 1280.0
+	var eh := h - 720.0
 	var shift := extra * 0.45
 	for n in _layouts:
 		var lay: Array = _layouts[n].get(_view, [])

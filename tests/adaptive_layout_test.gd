@@ -19,6 +19,7 @@ const PROFILES := [
 	["pad4_3", Vector2(1280, 960)],
 	["phone20_9", Vector2(1600, 720)],
 	["ultrawide", Vector2(1770, 720)],
+	["phone_compact", Vector2(1248, 576)],   # 手机触屏 csf1.25 后的逻辑视口
 ]
 
 var checks := 0
@@ -102,6 +103,16 @@ func _check_scene(i: int, w: float, h: float) -> void:
 			_in_rect(s.ops_row, w, h, "table 操作行")
 			for sp in s._seat_panels:
 				_in_rect(sp, w, h, "table 座位面板")
+			# 手牌卡底不压操作行; 出牌区不压手牌区(紧凑/标准档都要成立)
+			var ops_top: float = s.ops_row.position.y
+			expect(ops_top >= s.hand_box.position.y + s.hand_box.size.y - 6.0,
+					"table 手牌与操作行重叠 hand=%s ops=%s" % [
+						s.hand_box.position.y + s.hand_box.size.y, ops_top])
+			expect(s.field_panel.position.y + s.field_panel.size.y
+					<= s.hand_box.position.y + 14.0,
+					"table 出牌区压手牌区 field_bottom=%s hand_top=%s" % [
+						s.field_panel.position.y + s.field_panel.size.y,
+						s.hand_box.position.y + 14.0])
 		3:  # 商城
 			expect(s._back_btn.position.x + s._back_btn.size.x <= w - 20.0,
 					"shop 返回按钮未锚右缘")

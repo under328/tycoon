@@ -115,14 +115,17 @@ func _relayout() -> void:
 		return
 	var cx := (w - 800.0) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
+	var sq := h < 660.0
 	_title.custom_minimum_size = Vector2(w, 50)
 	_title.size = Vector2(w, 50)
-	_fig.position = Vector2(cx, 140 + dy)
-	_body.position = Vector2(cx, 470 + dy)
+	_fig.position = Vector2(cx, (96.0 if sq else 140.0) + dy)
+	_fig.size = Vector2(800, (290.0 if sq else 300.0))
+	_body.position = Vector2(cx, (402.0 if sq else 470.0) + dy)
 	for i in _dots.size():
-		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0, 618 + dy)
-	_prev_btn.position = Vector2(w / 2.0 - 300.0, 650 + dy)
-	_next_btn.position = Vector2(w / 2.0 + 120.0, 650 + dy)
+		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
+				(502.0 if sq else 618.0) + dy)
+	_prev_btn.position = Vector2(w / 2.0 - 300.0, (522.0 if sq else 650.0) + dy)
+	_next_btn.position = Vector2(w / 2.0 + 120.0, (522.0 if sq else 650.0) + dy)
 	_close_lbl.position = Vector2(w - 110.0, 24)
 
 

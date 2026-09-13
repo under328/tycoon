@@ -33,6 +33,8 @@ func _ready() -> void:
 	_bleed_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bleed_bg)  # 第一个子节点 = 所有场景之下
 	_refit_bleed_bg()
+	# 触屏全局放大: 逻辑视口收小 → 牌/按钮物理尺寸 +25%(配合触屏加大尺寸)
+	get_window().content_scale_factor = Responsive.ui_scale()
 	menu = MainMenuScript.new()
 	menu.name = "Menu"
 	add_child(menu)
@@ -61,7 +63,10 @@ func _refit_safe_area() -> void:
 
 
 ## 启动时应用持久化的显示偏好(用户在设置里保存过的才生效)
+## 触屏设备跳过窗口尺寸/垂直同步(移动端由系统全屏管理)
 func _apply_display_prefs() -> void:
+	if Responsive.is_touch():
+		return
 	if GameSettings.window_size != Vector2i.ZERO:
 		DisplayServer.window_set_size(GameSettings.window_size)
 	DisplayServer.window_set_vsync_mode(
