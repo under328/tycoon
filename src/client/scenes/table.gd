@@ -38,6 +38,7 @@ var _emoji_cd := 0.0
 var _chat_cd := 0.0
 var _emoji_btns: Array = []
 var _prev_tick := -1
+var _pulse: Tween = null       # "轮到你"状态文字呼吸脉冲
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
 var self_panel: Control
@@ -185,6 +186,7 @@ func _advance() -> void:
 		var phase: String = state["phase"]
 		if phase == "play":
 			if int(state["turn"]) == 0 and not auto_pilot:
+				_vibrate(40)  # 轮到你(移动端触感)
 				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
 			await get_tree().create_timer(AI_THINK_SEC).timeout
@@ -202,6 +204,7 @@ func _advance() -> void:
 			# 返还选牌: 轮到玩家(座位0)且未托管时等待其确认; 托管中由 bot 代打
 			var er: Dictionary = _pending_return_for(0)
 			if not er.is_empty() and not auto_pilot:
+				_vibrate(40)  # 该你选牌返还(移动端触感)
 				break  # 等玩家选牌
 			await get_tree().create_timer(AI_THINK_SEC).timeout
 			if gen != _advance_gen or not is_inside_tree():
@@ -448,6 +451,7 @@ func _bind_net() -> void:
 				_turn_remain = _turn_total
 				if new_turn == int(view["my_seat"]):
 					_sfx("turn")
+					_vibrate(40)
 		_refresh())
 	net.game_event.connect(_on_game_event)
 	net.errored.connect(func(code: String, msg: String) -> void:
@@ -772,6 +776,12 @@ func _sfx(sfx_name: String) -> void:
 		Audio.play(sfx_name)
 
 
+## 触觉反馈(移动端): 轮到你/结算等关键时刻短震动
+func _vibrate(ms: int) -> void:
+	if Responsive.is_touch() and GameSettings.vibration:
+		Input.vibrate_handheld(ms)
+
+
 func _flash_error(msg: String) -> void:
 	error_label.text = _error_text(msg)
 	var tw := create_tween()
@@ -961,6 +971,17 @@ func _refresh_view(view: Dictionary) -> void:
 
 	var lead: Dictionary = view["lead"]
 	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
+	# 轮到你: 状态文字金色呼吸脉冲(移动端视线不在屏幕中央也能注意到)
+	if my_turn:
+		if _pulse == null or not _pulse.is_valid():
+			_pulse = create_tween().set_loops()
+			_pulse.tween_property(status_label, "modulate",
+					Color(1.4, 1.25, 0.75), 0.55)
+			_pulse.tween_property(status_label, "modulate", Color.WHITE, 0.55)
+	elif _pulse != null and _pulse.is_valid():
+		_pulse.kill()
+		_pulse = null
+		status_label.modulate = Color.WHITE
 	if phase != "play":
 		_turn_remain = -1.0
 		timer_label.text = ""
@@ -1004,6 +1025,7 @@ func _refresh_view(view: Dictionary) -> void:
 			and (view["identities"] as Array).size() == 4:
 		_end_shown = true
 		_sfx("result")
+		_vibrate(80)  # 对局结束(移动端触感)
 		var reward: Dictionary = {}
 		if mode == "local":
 			var seat_me := int(view["my_seat"])
@@ -1291,7 +1313,9 @@ func _layout_hand() -> void:
 		step = maxf((avail - cw) / float(n - 1), 34.0)
 	for i in n:
 		var cv: Control = _hand_cards[i]
-		var lift := 4.0 if selected.has(cv.card) else 18.0
+		# 触屏选中抬升更深(扫选状态更醒目)
+		var lift := (0.0 if Responsive.is_touch() else 4.0) \
+				if selected.has(cv.card) else 18.0
 		cv.position = Vector2(float(i) * step, lift)
 
 

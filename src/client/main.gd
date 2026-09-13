@@ -35,6 +35,9 @@ func _ready() -> void:
 	_refit_bleed_bg()
 	# 触屏全局放大: 逻辑视口收小 → 牌/按钮物理尺寸 +25%(配合触屏加大尺寸)
 	get_window().content_scale_factor = Responsive.ui_scale()
+	# 移动端锁 60fps: 高刷屏全速渲染徒增发热耗电
+	if Responsive.is_touch():
+		Engine.max_fps = 60
 	menu = MainMenuScript.new()
 	menu.name = "Menu"
 	add_child(menu)

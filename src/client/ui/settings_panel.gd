@@ -74,6 +74,19 @@ func _ready() -> void:
 	_bgm_slider = _slider(box, "音乐", _on_bgm_changed)
 	_sfx_slider = _slider(box, "音效", _on_sfx_changed)
 
+	# ── 触感(触屏专属): 震动反馈 ──
+	if Responsive.is_touch():
+		box.add_child(_section("触感"))
+		var vib := CheckButton.new()
+		vib.text = "震动反馈(轮到你/结算)"
+		vib.button_pressed = bool(gs_vibration())
+		vib.toggled.connect(func(on: bool) -> void:
+			var g := get_node_or_null("/root/GameSettings")
+			if g != null:
+				g.vibration = on
+				g.save_settings())
+		box.add_child(vib)
+
 	# ── 图像(桌面专属: 手机上全屏/垂直同步/分辨率均无意义, 整组隐藏) ──
 	var sec_img := _section("图像")
 	box.add_child(sec_img)
@@ -249,6 +262,11 @@ func _on_sfx_changed(v: float) -> void:
 
 func _is_fullscreen() -> bool:
 	return DisplayServer.window_get_mode() >= DisplayServer.WINDOW_MODE_FULLSCREEN
+
+
+func gs_vibration() -> bool:
+	var g := get_node_or_null("/root/GameSettings")
+	return bool(g.vibration) if g != null else true
 
 
 func _close() -> void:
