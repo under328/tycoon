@@ -557,8 +557,10 @@ func _build_ui() -> void:
 	add_child(error_label)
 
 	hand_box = Control.new()
-	hand_box.position = Vector2(258, 552)
-	hand_box.size = Vector2(1010, 104)
+	hand_box.position = Vector2(258, 534)
+	hand_box.size = Vector2(1010, 130)
+	hand_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	hand_box.gui_input.connect(_on_hand_gui_input)
 	add_child(hand_box)
 
 	ops_row = HBoxContainer.new()
@@ -775,7 +777,7 @@ func _relayout() -> void:
 	field_panel.position = Vector2((w - 640) / 2.0, 204 + (h - 720) * 0.5)
 	# 底部: 自己面板 / 手牌 / 状态 / 错误 / 操作行
 	self_panel.position = Vector2(16, h - 164)
-	hand_box.position = Vector2(w - 1014, h - 168)
+	hand_box.position = Vector2(w - 1014, h - 186)
 	status_label.position = Vector2((w - 640) / 2.0, h - 224)
 	error_label.position = Vector2((w - 640) / 2.0, h - 250)
 	ops_row.position = Vector2(w - 454, h - 58)
@@ -1056,30 +1058,80 @@ func _refresh_field(view: Dictionary) -> void:
 			_sfx("play_card")
 
 
-func _make_card(card_id: int, w: float, h: float, is_selected: bool, clickable := true) -> Control:
+func _make_card(card_id: int, w: float, h: float, is_selected: bool, _clickable := true) -> Control:
+	# 手牌输入统一由 hand_box 手势处理, 卡牌控件不接收鼠标(可整排拖动扫选)
 	var cv := CardViewScript.new(card_id)
 	cv.custom_minimum_size = Vector2(w, h)
 	cv.size = Vector2(w, h)
 	cv.selected = is_selected
-	if not clickable:
-		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cv.picked.connect(_on_hand_card_picked)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return cv
 
 
-func _on_hand_card_picked(card: int) -> void:
-	if selected.has(card):
-		selected.erase(card)
+## 手牌区统一手势(欢乐斗地主式):
+##   原地点击 = 单张翻转; 按住上滑横扫 = 连续选牌; 按住下滑横扫 = 连续取消。
+## 输入统一在 hand_box 处理(拖动事件只发给按下控件, 跨卡扫选必须容器层做),
+## 卡牌控件本身 mouse_filter=IGNORE。
+var _drag_pressed := false
+var _drag_active := false
+var _drag_from := -1
+var _drag_up := true
+var _press_gy := 0.0
+
+
+func _hand_index_at(local: Vector2) -> int:
+	# 右压左叠放: 取包含该点的最大 index = 视觉最上层
+	var best := -1
+	for i in _hand_cards.size():
+		var cv: Control = _hand_cards[i]
+		if Rect2(cv.position, cv.size).has_point(local):
+			best = i
+	return best
+
+
+func _set_card_selected(cv: Control, is_sel: bool) -> void:
+	if is_sel:
+		if not selected.has(cv.card):
+			selected.append(cv.card)
 	else:
-		selected.append(card)
-	_sfx("click")
-	# 更新所有手牌卡的选中态
-	for child in hand_box.get_children():
-		if "selected" in child:
-			var is_sel := selected.has(child.card)
-			child.selected = is_sel
-			_apply_hand_card_state(child, is_sel)
-	_layout_hand()
+		selected.erase(cv.card)
+	cv.selected = is_sel
+	_apply_hand_card_state(cv, is_sel)
+
+
+func _on_hand_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_drag_pressed = true
+			_drag_active = false
+			_drag_from = _hand_index_at(event.position)
+			_press_gy = event.global_position.y
+		else:
+			_drag_pressed = false
+			if not _drag_active and _drag_from >= 0:
+				var cv: Control = _hand_cards[_drag_from]
+				_set_card_selected(cv, not selected.has(cv.card))
+				_sfx("click")
+				_layout_hand()
+			_drag_from = -1
+			_drag_active = false
+	elif event is InputEventMouseMotion and _drag_pressed and _drag_from >= 0:
+		var dy: float = event.global_position.y - _press_gy
+		if not _drag_active:
+			if absf(dy) <= 14.0:
+				return
+			_drag_active = true
+			_drag_up = dy < 0.0  # 上滑=选, 下滑=取消
+			_sfx("click")
+		var idx := _hand_index_at(event.position)
+		if idx < 0:
+			return
+		for i in range(mini(_drag_from, idx), maxi(_drag_from, idx) + 1):
+			var cv: Control = _hand_cards[i]
+			var want := _drag_up
+			if selected.has(cv.card) != want:
+				_set_card_selected(cv, want)
+		_layout_hand()
 
 
 ## 手牌：卡牌控件化；仅在手牌实际变化时重建并播放发牌动画。
@@ -1130,7 +1182,7 @@ func _layout_hand() -> void:
 		step = maxf((avail - cw) / float(n - 1), 34.0)
 	for i in n:
 		var cv: Control = _hand_cards[i]
-		var lift := -14.0 if selected.has(cv.card) else 0.0
+		var lift := 4.0 if selected.has(cv.card) else 18.0
 		cv.position = Vector2(float(i) * step, lift)
 
 
