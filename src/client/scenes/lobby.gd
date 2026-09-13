@@ -637,8 +637,9 @@ func _build_ui() -> void:
 	fp_sb.content_margin_top = 10
 	fp_sb.content_margin_bottom = 10
 	found_panel.add_theme_stylebox_override("panel", fp_sb)
-	found_panel.position = Vector2(830, 232)
-	found_panel.custom_minimum_size = Vector2(300, 0)
+	# 左列状态区下方(紧凑档右列会被中列『本机开房』按钮侵入, 放左列永不重叠)
+	found_panel.position = Vector2(40, 356)
+	found_panel.custom_minimum_size = Vector2(368, 0)
 	found_panel.visible = false
 	add_child(found_panel)
 	found_box = VBoxContainer.new()
@@ -864,7 +865,7 @@ func _build_ui() -> void:
 	_reg(port_edit, "right")
 	_reg(connect_btn, "right")
 	_reg(discover_btn, "right")
-	_reg(found_panel, "right")
+	_reg(found_panel, "left", 0.1)
 	_reg(help_btn, "right")
 
 	# ── 房间页锚定(独立子页面布局) ──
@@ -1007,7 +1008,7 @@ func _rebuild_found_rows() -> void:
 			var txt := "🏠 %s  %d/%d人  %s" % [room["code"], room["players"], room["cap"], ip]
 			if not open:
 				txt += " · 游戏中"
-			var b := AppTheme.make_button(txt, Vector2(272, 42), 13)
+			var b := AppTheme.make_button(txt, Vector2(340, 42), 13)
 			b.disabled = not open
 			var rip := str(ip)
 			var rport := int(e["port"])

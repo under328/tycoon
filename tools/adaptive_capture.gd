@@ -8,6 +8,7 @@ const PROFILES := [
 	["pc_720p", Vector2i(1280, 720)],
 	["pad_4k3", Vector2i(1280, 960)],
 	["phone_20x9", Vector2i(1600, 720)],
+	["phone_compact", Vector2i(1248, 576)],
 ]
 const SCENE_PATHS := [
 	"res://src/client/scenes/main_menu.gd",
@@ -43,6 +44,8 @@ func _next() -> void:
 			return
 	var p: Array = PROFILES[step]
 	root.size = Vector2i(p[1])
+	# 真机触屏 csf=1.25(main.gd 同源): 窗口 1248x576 → 逻辑视口 1248x576
+	root.content_scale_factor = 1.25 if str(p[0]) == "phone_compact" else 1.0
 	var path: String = SCENE_PATHS[sidx]
 	if path.ends_with(".tscn"):
 		cur = (load(path) as PackedScene).instantiate()

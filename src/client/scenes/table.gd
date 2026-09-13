@@ -270,7 +270,11 @@ func _advance() -> void:
 			if bool(r["ok"]):
 				state = r["state"]
 				if rogue:
-					_advance_gen += 1  # 揭示期间停循环, 关闭后重启
+					# 揭示期间停循环, 关闭后重启。必须同步清 advancing:
+					# gen 已自增, 循环尾部的清位不会执行, 否则关闭弹窗时
+					# 看到 advancing==true 直接 return → 第 2 局起永久卡死
+					_advance_gen += 1
+					advancing = false
 					_show_rogue_reveal()
 					break
 		elif phase == "game_end":
