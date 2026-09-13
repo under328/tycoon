@@ -32,12 +32,15 @@ func _ready() -> void:
 func _synth_table_tracks() -> void:
 	var koto := Synth.bgm_koto()
 	var rev := Synth.bgm_koto_rev()
-	_register_table_tracks.call_deferred(koto, rev)
+	var rogue := Synth.bgm_rogue()
+	_register_table_tracks.call_deferred(koto, rev, rogue)
 
 
-func _register_table_tracks(koto: AudioStreamWAV, rev: AudioStreamWAV) -> void:
+func _register_table_tracks(koto: AudioStreamWAV, rev: AudioStreamWAV,
+		rogue: AudioStreamWAV) -> void:
 	_bgm_tracks["table"] = koto
 	_bgm_tracks["table_rev"] = rev
+	_bgm_tracks["rogue"] = rogue
 	_table_synth_done = true
 	if _bgm_thread != null:
 		_bgm_thread.wait_to_finish()
@@ -137,7 +140,7 @@ func play_bgm(track: String = "lobby") -> void:
 		return
 	if not _bgm_tracks.has(track):
 		match track:
-			"table", "table_rev":
+			"table", "table_rev", "rogue":
 				# 合成未注册(线程仍在跑, 或已结束但 deferred 注册未到) → 只重试,
 				# 不在主线程兜底合成 — 兜底路径在手机上冻结 1-4 秒即 ANR
 				if _bgm_thread != null or not _table_synth_done:

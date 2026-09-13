@@ -328,6 +328,45 @@ static func bgm_koto() -> AudioStreamWAV:
 			ev.append(_n(t0 + 2, 1, "snare", 0, 0.10))
 	return render_track(8, 116, ev)
 
+## 肉鸽 BGM: E 和声小调 128BPM 神秘急板(笛长音 + 拨弦音型 + 深鼓),
+## 命运卡的不可预知感 → 小调色彩 + 增二度装饰音。
+static func bgm_rogue() -> AudioStreamWAV:
+	var ev := []
+	# 笛主旋律(E 和声小调, 8 小节): E5 D#5 B4 G4 A4 B4 / C5 B4 A4 F#4 E4
+	var mel := [
+		[0, 1.0, 659.25], [1, 0.5, 622.25], [1.5, 1.5, 493.88],
+		[3, 0.5, 392.0], [3.5, 0.5, 440.0], [4, 2.0, 493.88],
+		[6, 0.5, 523.25], [6.5, 0.5, 493.88], [7, 1.0, 440.0],
+		[8, 1.0, 369.99], [9, 0.5, 392.0], [9.5, 0.5, 440.0],
+		[10, 3.0, 329.63], [13, 0.5, 493.88], [13.5, 0.5, 523.25],
+		[14, 2.0, 659.25],
+	]
+	for rep in 2:
+		for n in mel:
+			ev.append(_n(float(n[0]) + rep * 16, float(n[1]), "flute",
+					float(n[2]), 0.15))
+	# 和声: Em / C / D / Em(带 D# 色彩)
+	var roots := [82.41, 65.41, 73.42, 82.41]
+	var arps := [
+		[329.63, 392.0, 493.88, 392.0],
+		[261.63, 329.63, 392.0, 329.63],
+		[293.66, 369.99, 440.0, 369.99],
+		[329.63, 415.3, 622.25, 493.88],
+	]
+	for rep in 2:
+		for bi in 4:
+			var t0: float = rep * 16 + bi * 4
+			var arp: Array = arps[bi]
+			ev.append(_n(t0, 4, "bass", float(roots[bi]), 0.16))
+			for e8 in 8:
+				ev.append(_n(t0 + e8 * 0.5, 0.4, "pluck",
+						float(arp[e8 % arp.size()]), 0.10))
+			ev.append(_n(t0, 1, "taiko", 0.0, 0.3))
+			ev.append(_n(t0 + 2.5, 0.5, "snare", 0.0, 0.10))
+			ev.append(_n(t0 + 3.5, 0.5, "snare", 0.0, 0.14))
+	return render_track(8, 128, ev)
+
+
 static func bgm_koto_rev() -> AudioStreamWAV:
 	var ev := []
 	var riff := [[110.0, 0.5], [110.0, 0.5], [130.81, 0.5], [164.81, 0.5],

@@ -61,6 +61,9 @@ var _last_round_ids: Array = []
 var _end_shown := false
 var _field_count := -1
 var _had_field := false         # 出牌区是否有过牌(区分清桌音效与首次刷新)
+var _trick_texts: Array = []    # 本轮已出各手文本(清桌时整体转上轮)
+var _last_trick: Array = []     # 上一轮完整出牌回顾(清桌后常显)
+var trick_lbl: Label = null     # 上轮回顾标签(出牌区空时显示)
 var _turn_total := -1.0
 var _turn_remain := -1.0
 var _last_turn_seat := -99
@@ -101,7 +104,7 @@ func _ready() -> void:
 		_refresh()
 	else:
 		_new_match()
-	Audio.play_bgm("table")
+	Audio.play_bgm("rogue" if rogue else "table")
 
 
 func _process(delta: float) -> void:
@@ -561,6 +564,16 @@ func _show_rogue_reveal() -> void:
 	add_child(dlg)
 	dlg.position = Vector2.ZERO
 	dlg.size = size
+	# 揭示演出: 暗幕淡入 + 卡面上浮弹入
+	dlg.modulate.a = 0.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(dlg, "modulate:a", 1.0, 0.22)
+	tw.tween_property(panel, "scale", Vector2.ONE, 0.34)			.from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK)			.set_ease(Tween.EASE_OUT)
+	panel.pivot_offset = Vector2(200, 180)
+	panel.modulate.a = 0.0
+	var tw2 := create_tween()
+	tw2.tween_property(panel, "modulate:a", 1.0, 0.18).set_delay(0.06)
 	_update_rogue_lbl()
 
 
@@ -671,6 +684,8 @@ func _build_ui() -> void:
 
 	# 动态和风夜景背景(弱化, 与主菜单同源)
 	var bg := BackdropScript.new()
+	if rogue:
+		bg.modulate = Color(1.05, 0.82, 1.2)  # 肉鸽夜空: 偏紫氛围
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -781,6 +796,11 @@ func _build_ui() -> void:
 	field_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_hint.position = Vector2(20, 6)
 	field_hint.custom_minimum_size = Vector2(600, 24)
+	trick_lbl = _make_label(13, Color("c9b06a"))
+	trick_lbl.position = Vector2(20, 30)
+	trick_lbl.custom_minimum_size = Vector2(600, 22)
+	trick_lbl.visible = false
+	field_panel.add_child(trick_lbl)
 	field_panel.add_child(field_hint)
 
 	# 出牌条目流式排布: 牌多时自动折两行, 不超出出牌区
@@ -1169,7 +1189,7 @@ func _refresh_view(view: Dictionary) -> void:
 			Audio.play_bgm("table_rev")  # 革命: 切小调急板
 		elif phase == "play":
 			_spawn_fx("anti_revolution")
-			Audio.play_bgm("table")  # 革命解除: 切回大调
+			Audio.play_bgm("rogue" if rogue else "table")  # 革命解除: 切回大调
 
 	# 阶段切换: 交换过场 / 一落千丈(上局大富豪本轮垫底)
 	if phase != _prev_phase:
@@ -1375,6 +1395,17 @@ func _round_end_text(view: Dictionary) -> String:
 	return "  ".join(parts)
 
 
+## 上轮回顾: 清桌后空场阶段常显上一轮各手(信息不因清桌丢失)
+func _show_trick_recap() -> void:
+	if trick_lbl == null:
+		return
+	var show := field_box.get_child_count() == 0 and not _last_trick.is_empty()
+	trick_lbl.visible = show
+	if show:
+		var lines := _last_trick.slice(0, 3)
+		trick_lbl.text = "上轮  " + "  |  ".join(PackedStringArray(lines))
+
+
 ## 桌面区：实体卡牌 + 出牌动画。
 func _refresh_field(view: Dictionary) -> void:
 	var field: Array = view["field"]
@@ -1393,11 +1424,19 @@ func _refresh_field(view: Dictionary) -> void:
 			child.queue_free()
 		if _field_count == 0 and _had_field:
 			_sfx("clear")  # 由有到无=清桌; 首次刷新(-1→0)不出声
+			_last_trick = _trick_texts.duplicate()
+			_trick_texts.clear()
+			_show_trick_recap()
 		_had_field = false
 		return
 	# 增量追加: 出牌只加最新一手(整排重建会闪一帧鬼影 — queue_free 延迟移除)
 	if grew:
 		var entry: Dictionary = field[field.size() - 1]
+		var labels: Array = []
+		for c in entry["combo"]["cards"]:
+			labels.append(CardsGd.label(int(c)))
+		_trick_texts.append("%s: %s" % [_seat_name(view, int(entry["seat"])),
+				" ".join(PackedStringArray(labels))])
 		var holder := VBoxContainer.new()
 		holder.add_theme_constant_override("separation", 2)
 		var name_lb := _make_label(14, AppTheme.GOLD)
