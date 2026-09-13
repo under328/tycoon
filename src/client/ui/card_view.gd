@@ -161,6 +161,14 @@ func _draw_face() -> void:
 	var px: float = 5 * s
 	var py: float = 3 * s
 	var skew: float = 4 * s
+	var fsize := int(16.0 * s)
+	if rank.length() > 1:
+		fsize = int(13.5 * s)  # 双字符点数(10): 略缩字号
+	# 牌匾宽度随点数文字实测宽度伸展 — 防"10"溢出牌匾
+	# (白字落在米白牌面上不可见, 看起来只剩"1")
+	var rank_fw: float = _font_ascii.get_string_size(
+			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x
+	pw = maxf(pw, skew + rank_fw + 7.0 * s)
 	var pl_pts := PackedVector2Array([
 		Vector2(px + skew, py), Vector2(px + pw, py),
 		Vector2(px + pw - skew, py + ph), Vector2(px, py + ph),
@@ -169,8 +177,8 @@ func _draw_face() -> void:
 	var pl_line := pl_pts.duplicate()
 	pl_line.append(pl_pts[0])
 	draw_polyline(pl_line, Color(_pal["face"], 0.35), 1.0 * s, true)
-	draw_string(_font_ascii, Vector2(px + skew + 3 * s, py + 17 * s), rank,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * s), _pal["face"])
+	draw_string(_font_ascii, Vector2(px + skew + 3 * s, py + ph - 6.0 * s), rank,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, _pal["face"])
 	_suit(card, Vector2(13, 38) * s, 5.5 * s, ink)
 	# 中心: 大花色(投影 + 内芯环)
 	var c := size / 2.0
