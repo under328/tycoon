@@ -15,18 +15,26 @@ const HAND_SIZE := 13
 ## 肉鸽模式『命运卡』目录: 每局开始随机抽一张生效(单局有效)。
 ## 引擎读取 st["cfg"]["rogue_mod"]; 目录同时供牌桌揭示 UI 与帮助图鉴使用。
 const ROGUE_MODS := [
-	{"id": "joker_x2", "name": "王者归来", "glyph": "王",
+	{"id": "joker_x2", "name": "王者归来", "glyph": "王", "cat": "发牌",
 		"desc": "本局牌堆多 2 张王(共 4 张), 压制与反转更疯狂"},
-	{"id": "revolution_start", "name": "天生革命", "glyph": "革",
+	{"id": "revolution_start", "name": "天生革命", "glyph": "革", "cat": "规则",
 		"desc": "本局从开局起就处于革命状态, 大小颠倒"},
-	{"id": "short_hands", "name": "缩地成寸", "glyph": "缩",
+	{"id": "short_hands", "name": "缩地成寸", "glyph": "缩", "cat": "发牌",
 		"desc": "本局每人只发 10 张牌, 节奏更快"},
-	{"id": "chaos_exchange", "name": "混沌换牌", "glyph": "混沌",
+	{"id": "chaos_exchange", "name": "混沌换牌", "glyph": "混", "cat": "规则",
 		"desc": "本局换牌张数随机(1~3 张), 强弱易位更难预料"},
-	{"id": "joker_rage", "name": "龙王之怒", "glyph": "怒",
+	{"id": "joker_rage", "name": "龙王之怒", "glyph": "怒", "cat": "触发",
 		"desc": "本局任何人打出王, 革命状态立即翻转"},
-	{"id": "double_stakes", "name": "双倍赌局", "glyph": "×2",
+	{"id": "double_stakes", "name": "双倍赌局", "glyph": "×2", "cat": "结算",
 		"desc": "本局身份积分变动 ×2, 大起大落"},
+	{"id": "joker_ban", "name": "无王之地", "glyph": "禁", "cat": "发牌",
+		"desc": "本局牌堆不含王, 全凭真本事"},
+	{"id": "no_exchange", "name": "免战之约", "glyph": "免", "cat": "规则",
+		"desc": "本局跳过换牌阶段, 开局直接亮牌开打"},
+	{"id": "score_negate", "name": "福祸反转", "glyph": "反", "cat": "结算",
+		"desc": "本局身份积分正负反转, 垫底反而得分"},
+	{"id": "eight_gift", "name": "八喜临门", "glyph": "喜", "cat": "触发",
+		"desc": "本局打出 8 切时, 立即从死牌堆摸 1 张"},
 ]
 
 
@@ -34,6 +42,11 @@ const ROGUE_MODS := [
 static func _roll_rogue(st: Dictionary, round_idx: int) -> String:
 	if not bool(st["cfg"].get("rogue", false)):
 		return ""
+	# 固定剧本锁(首局预置 rogue_mod 时上锁): 每局都生效同一张
+	var lock := str(st["cfg"].get("rogue_mod_lock", ""))
+	if lock != "":
+		st["cfg"]["rogue_mod"] = lock
+		return lock
 	# 首局允许调用方指定命运卡(cfg 预置 rogue_mod): 固定剧本/测试用
 	if round_idx == 0 and str(st["cfg"].get("rogue_mod", "")) != "":
 		return _rogue_mod_id(st)
@@ -71,6 +84,8 @@ static func new_match(cfg: Dictionary, seed_v: int = -1) -> Dictionary:
 	if seed_v < 0:
 		seed_v = int(Time.get_unix_time_from_system() * 1000.0) % 1000000007
 	var st := _empty_state(cfg, seed_v)
+	if _rogue_mod_id(st) != "":
+		st["cfg"]["rogue_mod_lock"] = _rogue_mod_id(st)  # 固定剧本: 每局同卡
 	_deal_round(st, 0)
 	if _rogue_mod_id(st) == "revolution_start":
 		st["revolution"] = true
@@ -162,6 +177,16 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 			has_8 = true
 			break
 	if has_8 and not hand.is_empty():
+		# 命运卡『八喜临门』: 8 切时从死牌堆摸 1 张(手牌+1, 可见可打)
+		if _rogue_mod_id(st) == "eight_gift" and not (st["dead"] as Array).is_empty():
+			var gr := RandomNumberGenerator.new()
+			gr.seed = hash(str(st["seed"], ":8gift:", int(st["round"]),
+					st["field"].size()))
+			var pick: int = (st["dead"] as Array)[gr.randi() % (st["dead"] as Array).size()]
+			(st["dead"] as Array).erase(pick)
+			hand.append(pick)
+			CardsGd.sort_cards(hand)
+			st["gift_drawn"] = gr.randi()  # 状态戳: 客户端可感知手牌变化
 		st["field"].clear()
 		st["lead"] = {}
 		st["turn"] = seat
@@ -216,6 +241,21 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 	var millionaire := _seat_with_identity(ids, 0)
 	var commoner := _seat_with_identity(ids, 2)
 	var rich := _seat_with_identity(ids, 1)
+	if mod == "no_exchange":
+		# 『免战之约』: 跳过换牌阶段, 直接开打(乞丐先出), 各自手牌不变
+		st["exchange"] = []
+		st["exchange_returns"] = []
+		st["phase"] = "play"
+		st["turn"] = beggar
+		st["revolution"] = mod == "revolution_start"
+		st["quads"] = 1 if mod == "revolution_start" else 0
+		st["finish_order"] = []
+		st["field"] = []
+		st["lead"] = {}
+		st["passes"] = 0
+		st["last_player"] = -1
+		st["must_include"] = -1
+		return _ok(st)
 	st["exchange"] = [
 		_give(st, beggar, millionaire, n_rich),
 		_give(st, commoner, rich, n_common),
@@ -300,7 +340,12 @@ static func _finish_player(st: Dictionary, seat: int) -> Dictionary:
 					ids[int(others[i])] = ranks[i]
 				ids[rich] = 3
 		var deltas := [0, 0, 0, 0]
-		var mult := 2 if _rogue_mod_id(st) == "double_stakes" else 1
+		var mult := 1
+		match _rogue_mod_id(st):
+			"double_stakes":
+				mult = 2
+			"score_negate":
+				mult = -1
 		for s in SEATS:
 			deltas[s] = ScoringGd.round_delta(int(ids[s])) * mult
 			st["scores"][s] = int(st["scores"][s]) + deltas[s]
@@ -347,7 +392,9 @@ static func _deal_round(st: Dictionary, round_idx: int) -> void:
 	rng.seed = hash(str(st["seed"], ":", round_idx))
 	# 命运卡在本局发牌前抽取(影响牌堆/手牌数)
 	var mod := _roll_rogue(st, round_idx)
-	var deck := CardsGd.full_deck(bool(st["cfg"]["with_joker"]))
+	# 『无王之地』: 牌堆不含王(优先于房间带王配置)
+	var deck := CardsGd.full_deck(
+			bool(st["cfg"]["with_joker"]) and mod != "joker_ban")
 	if mod == "joker_x2":
 		deck.append(54)  # 扩展王: is_joker 以 id>=52 判定, 无需特判
 		deck.append(55)

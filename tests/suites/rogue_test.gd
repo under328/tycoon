@@ -14,16 +14,25 @@ func run(t) -> void:
 	_mod_chaos_exchange(t)
 	_mod_double_stakes(t)
 	_mod_joker_rage(t)
+	_mod_joker_ban(t)
+	_mod_no_exchange(t)
+	_mod_score_negate(t)
+	_mod_eight_gift(t)
 
+
+const Cats = preload("res://src/rules/game_state.gd")
 
 func _catalog(t) -> void:
-	t.expect_eq(GameStateGd.ROGUE_MODS.size(), 6, "命运卡共 6 种")
+	t.expect_eq(GameStateGd.ROGUE_MODS.size(), 10, "命运卡共 10 种")
 	var ids := {}
 	for m in GameStateGd.ROGUE_MODS:
-		for k in ["id", "name", "desc", "glyph"]:
+		for k in ["id", "name", "desc", "glyph", "cat"]:
 			t.expect((m as Dictionary).has(k), "命运卡 %s 缺字段 %s" % [m.get("id"), k])
 		ids[str(m["id"])] = true
-	t.expect(ids.size() == 6, "命运卡 id 无重复")
+	t.expect(ids.size() == 10, "命运卡 id 无重复")
+	for cat in ["发牌", "规则", "触发", "结算"]:
+		t.expect(GameStateGd.ROGUE_MODS.any(func(m: Dictionary) -> bool:
+			return str(m["cat"]) == cat), "分类『%s』至少一张" % cat)
 
 
 ## 同种子同局号 → 抽卡一致(可重放); cfg 无 rogue → 不抽
@@ -122,9 +131,9 @@ func _mod_joker_rage(t) -> void:
 
 # ---------------------------------------------------------------- 工具
 
-func _match_with_mod(mod: String) -> Dictionary:
+func _match_with_mod(mod: String, seed_v: int = 7) -> Dictionary:
 	# 指定首局命运卡(引擎: 首局 rogue_mod 预置时不重抽) → 走真实发牌路径
-	return GameStateGd.new_match({"rogue": true, "rogue_mod": mod}, 7)
+	return GameStateGd.new_match({"rogue": true, "rogue_mod": mod}, seed_v)
 
 
 func _count_jokers(st: Dictionary) -> int:
@@ -163,3 +172,61 @@ func _finish_three(st: Dictionary) -> Dictionary:
 			return st
 		st = r["state"]
 	return st
+
+
+## 无王之地: 全场 0 张王
+func _mod_joker_ban(t) -> void:
+	var st := _match_with_mod("joker_ban")
+	t.expect_eq(_count_jokers(st), 0, "无王之地: 全场无王")
+
+
+## 免战之约: 跳过换牌, 次局直接 play 且乞丐先出
+func _mod_no_exchange(t) -> void:
+	var st := _match_with_mod("no_exchange", 9)
+	st = _finish_three(st)
+	t.expect(str(st["phase"]) == "round_end", "首局打完")
+	var r = GameStateGd.apply(st, {"t": "next_round"})
+	st = r["state"]
+	t.expect(str(st["phase"]) == "play", "免战之约: 次局跳过换牌直接开打")
+	var ids: Array = st["identities"]
+	t.expect_eq(int(st["turn"]), ids.find(3), "乞丐先出")
+
+
+## 福祸反转: 结算积分正负翻转(大富豪 -9, 垫底 +9)
+func _mod_score_negate(t) -> void:
+	var st := _match_with_mod("score_negate", 11)
+	st = _finish_three(st)
+	var neg_ok := false
+	var pos_ok := false
+	for seat in 4:
+		var identity: int = int(st["identities"][seat])
+		var pts: int = int(st["last_points"][seat])
+		if identity == 0 and pts < 0:
+			neg_ok = true  # 大富豪被反转扣分
+		if identity == 3 and pts > 0:
+			pos_ok = true  # 垫底被反转得分
+	t.expect(neg_ok, "大富豪积分反转扣分")
+	t.expect(pos_ok, "垫底积分反转发分")
+
+
+## 八喜临门: 8 切时从死牌堆摸 1 张(打 1 摸 1, 死牌堆 -1)
+func _mod_eight_gift(t) -> void:
+	var st := _match_with_mod("eight_gift", 13)
+	st["hands"][0] = [20, 2]     # 单8 + ♦3
+	st["hands"][1] = [44, 45]
+	st["hands"][2] = [40, 41]
+	st["hands"][3] = [48, 52]
+	st["dead"] = [30, 31, 32]
+	st["lead"] = {}
+	st["turn"] = 0
+	st["must_include"] = -1
+	st["phase"] = "play"
+	var dead_before: int = (st["dead"] as Array).size()
+	var r = GameStateGd.apply(st, {"t": "play", "seat": 0, "cards": [20]})
+	t.expect(bool(r["ok"]), "8切领出合法 got=%s" % str(r.get("error", "")))
+	t.expect_eq(int((r["state"]["hands"][0] as Array).size()), 2,
+			"打出 1 张后摸回 1 张")
+	t.expect_eq(int((r["state"]["dead"] as Array).size()), dead_before - 1,
+			"死牌堆 -1")
+
+

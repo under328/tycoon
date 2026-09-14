@@ -53,6 +53,8 @@ func _draw() -> void:
 			_draw_fall(sz)
 		"exchange":
 			_draw_exchange(sz)
+		"eight_gift":
+			_big_text(sz, "八喜临门 · 摸 1 张", 0.42, 54, Color("ffd166"), 0.95)
 
 
 ## 大字横贯居中(带错位阴影), 返回基线 y

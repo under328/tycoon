@@ -587,7 +587,8 @@ func _show_rogue_reveal() -> void:
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
 	var cap := AppTheme.make_label(15, AppTheme.DIM)
-	cap.text = "命运卡 · 第 %d 局" % (int(state["round"]) + 1)
+	cap.text = "命运卡 · 第 %d 局 · %s类效果" % [int(state["round"]) + 1,
+			str(meta.get("cat", ""))]
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(cap)
 	var glyph := AppTheme.make_label(88, AppTheme.GOLD)
@@ -651,7 +652,8 @@ func _update_rogue_lbl() -> void:
 			if str(m["id"]) == mod_id:
 				meta = m
 				break
-		rogue_lbl.text = "命运卡: %s — %s" % [meta.get("name", ""), meta.get("desc", "")]
+		rogue_lbl.text = "【%s】%s — %s" % [meta.get("glyph", ""), meta.get("name", ""),
+				meta.get("desc", "")]
 
 
 ## ESC 关闭命运卡弹窗(在 _unhandled_input 的 leave_dlg 分支旁)
@@ -706,6 +708,11 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 			Wallet.note_mission("m_quad")
 		if bool(data.get("eight_cut", false)):
 			_spawn_fx("eight_cut")
+			if rogue and _rogue_mod_id_safe() == "eight_gift":
+				var gift_tw := get_tree().create_timer(0.9)
+				gift_tw.timeout.connect(func() -> void:
+					if is_inside_tree():
+						_spawn_fx("eight_gift"))
 
 
 func _append_chat(seat: int, text: String) -> void:
@@ -1567,6 +1574,11 @@ func _round_end_text(view: Dictionary) -> String:
 		parts.append("%s=%s(%+d)" % [
 			_seat_name(view, s), ScoringGd.IDENTITY_NAMES[int(ids[s])], int(pts[s]),
 		])
+	var mod := _rogue_mod_id_safe()
+	if mod == "double_stakes":
+		parts.append("命运卡: 结算×2")
+	elif mod == "score_negate":
+		parts.append("命运卡: 正负反转")
 	return "  ".join(parts)
 
 
@@ -1866,4 +1878,9 @@ func _detect_local_eight_cut(action: Dictionary, st_after: Dictionary) -> void:
 	for c in action.get("cards", []):
 		if CardsGd.value(int(c)) == 8:
 			_spawn_fx("eight_cut")
+			if rogue and _rogue_mod_id_safe() == "eight_gift":
+				var gift_tw := get_tree().create_timer(0.9)
+				gift_tw.timeout.connect(func() -> void:
+					if is_inside_tree():
+						_spawn_fx("eight_gift"))
 			return

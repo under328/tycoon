@@ -14,8 +14,8 @@ const PAGES := [
 		"规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n"
 		+ "区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。\n"
 		+ "命运卡来自固定图鉴(共 6 种, 见后两页), 抽到哪张全凭运气——随机性与可玩性由此而来。", 0],
-	["命运卡图鉴 · 上", "三张改变牌局的命运卡:", 1],
-	["命运卡图鉴 · 下", "三张改变节奏的命运卡:", 2],
+	["命运卡图鉴 · 发牌与规则", "发牌类与规则类命运卡:", 1],
+	["命运卡图鉴 · 触发与结算", "触发类与结算类命运卡:", 2],
 ]
 
 var page := 0
@@ -171,6 +171,39 @@ func _card(pos: Vector2, meta: Dictionary) -> void:
 	v.add_child(ds)
 
 
+func _card_small(pos: Vector2, m: Dictionary) -> void:
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.10, 0.10, 0.24, 0.96), Color(AppTheme.GOLD, 0.7), 8, 1)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = pos
+	panel.custom_minimum_size = Vector2(300, 116)
+	_fig.add_child(panel)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	panel.add_child(h)
+	var glyph := _label(34, AppTheme.GOLD)
+	glyph.add_theme_font_override("font", AppTheme.title_font())
+	glyph.text = str(m["glyph"])
+	glyph.custom_minimum_size = Vector2(40, 0)
+	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	h.add_child(glyph)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 2)
+	h.add_child(v)
+	var nm := _label(16, AppTheme.WHITE)
+	nm.text = "%s · %s" % [str(m["name"]), str(m["cat"])]
+	v.add_child(nm)
+	var ds := _label(12, AppTheme.DIM)
+	ds.text = str(m["desc"])
+	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(ds)
+
+
 func _line(a: Vector2, b: Vector2, color := AppTheme.GOLD) -> void:
 	var ln := Line2D.new()
 	ln.points = PackedVector2Array([a, b])
@@ -221,17 +254,22 @@ func _build_fig(kind: int) -> void:
 			_text("每局必定抽一张; 6 种命运卡见后两页", Vector2(240, 250),
 					AppTheme.GOLD, 16)
 		1:
-			_card(Vector2(20, 20), _mod("joker_x2"))
-			_card(Vector2(340, 20), _mod("revolution_start"))
-			_card(Vector2(660, 20), _mod("short_hands"))
-			_text("王的数量与革命状态, 直接改变压制策略", Vector2(240, 235),
+			# 发牌类×3(上排) + 规则类×3(下排)
+			var ids1 := ["joker_x2", "short_hands", "joker_ban",
+					"revolution_start", "chaos_exchange", "no_exchange"]
+			for i in ids1.size():
+				var m1: Dictionary = _mod(str(ids1[i]))
+				_card_small(Vector2(20 + (i % 3) * 320, 16 + (i / 3) * 128), m1)
+			_text("发牌类改牌堆构成; 规则类改当局长打法", Vector2(300, 292),
 					AppTheme.GOLD, 15)
 		2:
-			_card(Vector2(20, 20), _mod("chaos_exchange"))
-			_card(Vector2(340, 20), _mod("joker_rage"))
-			_card(Vector2(660, 20), _mod("double_stakes"))
-			_text("结算奖励(金币/钻石/首胜)与普通模式完全一致", Vector2(240, 235),
-					AppTheme.GOLD, 15)
+			# 触发类×2 + 结算类×2
+			var ids2 := ["joker_rage", "eight_gift", "double_stakes", "score_negate"]
+			for i in ids2.size():
+				var m2: Dictionary = _mod(str(ids2[i]))
+				_card_small(Vector2(80 + (i % 2) * 440, 16 + (i / 2) * 128), m2)
+			_text("触发类在对局中实时播报; 结算奖励与普通模式完全一致",
+					Vector2(240, 292), AppTheme.GOLD, 15)
 
 
 func _label(size: int, color: Color) -> Label:
