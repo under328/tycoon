@@ -26,6 +26,7 @@ var _title_group: Control   # 标题/斩切线/副标/朱印 组容器(内部坐
 var _badge: PanelContainer
 var _rank_lbl: Label
 var _mode_dlg: Control = null   # 模式选择弹窗
+var _tutorial: Control = null   # 新手引导页(打开期间持有)
 var _ver_lbl: Label
 var _hint_lbl: Label
 var _fan: Control             # 右下卡扇(展示已装备卡面)
@@ -494,8 +495,10 @@ func _open_shop() -> void:
 func _open_tutorial() -> void:
 	var tut := TutorialScript.new()
 	_mount_page(tut)
-	tut.closed.connect(func() -> void: _tutorial_item.badge = _tutorial_badge())
-	add_child(tut)
+	_tutorial = tut
+	tut.closed.connect(func() -> void:
+		_tutorial = null
+		_tutorial_item.badge = _tutorial_badge())
 
 
 func _build_settings() -> void:
