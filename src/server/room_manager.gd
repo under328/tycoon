@@ -38,6 +38,13 @@ func _init() -> void:
 
 func hello(peer: int, ver: int, token: String, client_id: String = "", skin_id: String = "") -> Array:
 	var out := []
+	# 有人回到房间而对局已结束(game_end) → 立即收尾该局:
+	# 否则重入者会收到上局 game_end 视图, 看到"上局结算界面"而非新局。
+	for code in rooms.keys():
+		var r0 = rooms[code]
+		if r0.match_ctl != null 				and str(r0.match_ctl.state.get("phase", "")) == "game_end":
+			r0.end_match()
+			_bcast_room_state(out, r0)
 	if skin_id != "":
 		peer_skin[peer] = skin_id
 	if ver != MsgC.PROTOCOL_VERSION:

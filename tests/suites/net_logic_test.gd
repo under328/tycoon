@@ -15,6 +15,32 @@ func run(t) -> void:
 	_m3_features(t)
 	_chat_rate_limit(t)
 	_room_limit(t)
+	_rejoin_finished_match(t)
+
+
+## 重入已结束对局的房间: 只发房间状态不发 game_end 视图(防上局结算残影)
+func _rejoin_finished_match(t) -> void:
+	var m = _mgr()
+	var out: Array = m.create_room(300, "房主", {}, "cid-300")
+	var code := ""
+	for e in out:
+		if str(e["event"]) == "s_room_state":
+			code = str(e["data"]["room_code"])
+	t.expect(code != "", "建房取得房间码")
+	for peer in range(301, 305):
+		m.hello(peer, MsgC.PROTOCOL_VERSION, "")
+		m.join_room(peer, "p%d" % peer, code, "cid-%d" % peer)
+	m.start(300)
+	var room = m.rooms.get(code)
+	t.expect(room.match_ctl != null, "对局已开始")
+	# 强制推到终局(等价于 AI 打完后的收尾前状态)
+	room.match_ctl.state["phase"] = "game_end"
+	# 人类玩家断线后重连(hello 带 token)
+	var token: String = str(room.seats[0]["token"])
+	var re: Array = m.hello(999, MsgC.PROTOCOL_VERSION, token, "cid-300")
+	t.expect(_count(re, "s_room_state") >= 1, "重入收到房间状态")
+	t.expect(_count(re, "s_game_view") == 0, "重入不再收到 game_end 视图")
+	t.expect(room.match_ctl == null, "已结束对局立即收尾(match_ctl 清空)")
 
 
 ## 房间总数上限: 建满 MAX_ROOMS 后建房返回 s_error(room_limit), 防异常客户端刷房。
