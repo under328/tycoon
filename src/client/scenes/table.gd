@@ -80,6 +80,8 @@ var counter_toggle: Button = null
 var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
 var _counter_totals := {}       # 点数值 -> 总张数(王受命运卡影响)
 var phrase_row: HBoxContainer = null  # 快捷短语行(表情弹开时显示)
+var settings_btn: Button = null      # 对局内设置入口(右上)
+var _settings_page: Control = null   # 对局内打开的设置页
 var _turn_total := -1.0
 var _turn_remain := -1.0
 var _last_turn_seat := -99
@@ -178,6 +180,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return  # 后台托管中隐藏的牌桌不抢 ESC(确认框等由当前界面处理)
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if _settings_page != null and is_instance_valid(_settings_page):
+			_settings_page._close()
+			return
 		if _rogue_dlg != null:
 			_close_rogue_reveal()
 			return
@@ -518,6 +523,26 @@ func _show_leave_dialog() -> void:
 	dlg.size = size
 
 
+## 对局内设置页: 复用全屏设置(音乐/页面/触感), 本地局打开时暂停驱动
+func _open_settings_page() -> void:
+	if _settings_page != null:
+		return
+	_settings_page = (load("res://src/client/ui/settings_panel.gd") as GDScript).new()
+	add_child(_settings_page)
+	_settings_page.position = Vector2.ZERO
+	_settings_page.size = size
+	_settings_page.open()  # 页面默认隐藏(同主菜单用法), open 后加载并显示
+	_settings_page.closed.connect(func() -> void:
+		if _settings_page != null and is_instance_valid(_settings_page):
+			_settings_page.queue_free()
+		_settings_page = null
+		if mode == "local" and not state.is_empty() 				and str(state["phase"]) != "game_end":
+			_advance())
+	if mode == "local" and advancing:
+		_advance_gen += 1  # 暂停: 挂起循环在下一个校验点自行退出
+		advancing = false
+
+
 func _close_leave_dialog() -> void:
 	if _leave_dlg != null and is_instance_valid(_leave_dlg):
 		_leave_dlg.queue_free()
@@ -788,13 +813,18 @@ func _build_ui() -> void:
 	add_child(timer_label)
 
 	rules_btn = _button("规则")
-	rules_btn.position = Vector2(1076, 10)
+	settings_btn = _button("设置")
+	settings_btn.position = Vector2(1076, 10)
+	rules_btn.position = Vector2(964, 10)
 	rules_btn.custom_minimum_size = Vector2(72, 32)
 	rules_btn.add_theme_font_size_override("font_size", 15)
 	rules_btn.pressed.connect(func() -> void:
 		_sfx("click")
 		var tut := TutorialScript.new()
 		add_child(tut))
+	settings_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_open_settings_page())
 	add_child(rules_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
@@ -1164,8 +1194,9 @@ func _relayout() -> void:
 	# 顶部
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
-	rules_btn.position = Vector2(w - 204, 10)
-	counter_toggle.position = Vector2(w - 308, 10)  # 与规则钮(96宽)留 8px 间距
+	settings_btn.position = Vector2(w - 204, 10)
+	rules_btn.position = Vector2(w - 308, 10)
+	counter_toggle.position = Vector2(w - 412, 10)  # 96宽钮步进 104, 两两留 8px
 	if counter_lbl != null:
 		counter_lbl.position = Vector2(20, field_panel.size.y - 30.0)
 		counter_lbl.size = Vector2(field_panel.size.x - 40.0, 22.0)
