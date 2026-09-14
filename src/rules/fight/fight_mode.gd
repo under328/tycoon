@@ -197,6 +197,7 @@ static func derive_stats(cards: Array, combo: Dictionary, floor_num: int) -> Dic
 			mres *= 1.15
 			max_hp *= 1.15
 			skill *= 1.15
+	var club_cnt := _suit_count(cards, 3)
 	return {
 		"atk": int(atk * grow), "def": int(def * grow),
 		"mres": int(mres * grow), "skill": int(skill * grow),
@@ -206,6 +207,9 @@ static func derive_stats(cards: Array, combo: Dictionary, floor_num: int) -> Dic
 		"vamp": 0.25 if tier == "full_house" else 0.0, # 葫芦吸血
 		"combo_tier": tier,
 		"straight": tier == "straight",                # 顺子: 每 3 回合连击
+		"club_cnt": club_cnt,
+		# ♣ 张数决定技能流派: 1=火球(纯伤) 2=冰霜(伤害+减速) ≥3=圣光(伤害+回血)
+		"skill_kind": "fire" if club_cnt <= 1 else ("frost" if club_cnt == 2 else "light"),
 	}
 
 
@@ -253,6 +257,7 @@ func spawn_enemy(is_boss: bool) -> void:
 		"hp": int(base_hp), "max_hp": int(base_hp),
 		"atk": int(base_atk),
 		"intent": "attack",
+		"magic": is_boss and rng.randf() < 0.5,   # Boss 半数带法术攻击(打魔抗)
 	}
 	choose_intent()
 	_round_num = 0
@@ -261,7 +266,13 @@ func spawn_enemy(is_boss: bool) -> void:
 
 ## 怪物意图: 事先定好下一手, 玩家可据此选择攻/防
 func choose_intent() -> void:
-	enemy["intent"] = "heavy" if rng.randf() < 0.3 else "attack"
+	var r := rng.randf()
+	if r < 0.3:
+		enemy["intent"] = "heavy"
+	elif r < 0.45 and bool(enemy.get("magic", false)):
+		enemy["intent"] = "spell"
+	else:
+		enemy["intent"] = "attack"
 
 
 ## 每层推进: 小怪 → Boss
@@ -329,7 +340,17 @@ func step(action: String) -> Array:
 			if str(enemy.get("affix", "")) == "iron":
 				dmg = maxi(int(dmg * 0.75), 1)
 			enemy["hp"] = int(enemy["hp"]) - dmg
-			evs.append({"who": "p", "kind": "skill", "v": dmg})
+			var kind_name := str(stats.get("skill_kind", "fire"))
+			match kind_name:
+				"frost":  # 冰霜: 附带减速(敌下一手伤害 -20%)
+					enemy["chilled"] = true
+					evs.append({"who": "e", "kind": "chilled", "v": 0})
+				"light":  # 圣光: 附带回血(技能值的 30%)
+					var hl := maxi(int(dmg * 0.3), 1)
+					hp = mini(hp + hl, int(stats["max_hp"]))
+					evs.append({"who": "p", "kind": "heal", "v": hl})
+			evs.append({"who": "p", "kind": "skill", "v": dmg,
+					"skill_kind": kind_name})
 			_skill_cd = 1 if bool(stats.get("skill_cd_fast", false)) else 2
 		"defend":
 			var heal := maxi(int(stats["max_hp"]) / 25, 3)
@@ -348,15 +369,26 @@ func step(action: String) -> Array:
 		evs.append({"who": "e", "kind": "die", "v": 0})
 		return evs
 	# 敌人按意图行动(意图上一回合末已公示); 狂暴词缀每回合 +12% 攻
-	var heavy: bool = str(enemy.get("intent", "attack")) == "heavy"
+	var intent := str(enemy.get("intent", "attack"))
+	var heavy: bool = intent == "heavy"
+	var spell: bool = intent == "spell"
 	var rage_mul: float = 1.0 + 0.12 * _round_no 			if str(enemy.get("affix", "")) == "rage" else 1.0
 	var edmg := int(float(enemy["atk"]) * rage_mul
-			* (1.6 if heavy else 1.0) * rng.randf_range(0.9, 1.1))
+			* (1.6 if heavy else (1.1 if spell else 1.0))
+			* rng.randf_range(0.9, 1.1))
+	if spell:
+		edmg = maxi(edmg - int(float(stats["mres"]) * 0.6), 1)  # 法术打魔抗
+	else:
+		edmg = maxi(edmg - _player_mit(), 1)                     # 物理打护甲
 	if action == "defend":
 		edmg = int(edmg * 0.4)
-	edmg = maxi(edmg - _player_mit(), 1)
+	if bool(enemy.get("chilled", false)):
+		edmg = maxi(int(edmg * 0.8), 1)
+		enemy["chilled"] = false
+	edmg = maxi(edmg, 1)
 	hp -= edmg
-	evs.append({"who": "e", "kind": "heavy" if heavy else "dmg", "v": edmg})
+	evs.append({"who": "e", "kind": "spell" if spell else ("heavy" if heavy else "dmg"),
+			"v": edmg})
 	# 嗜血词缀: 按造成的伤害回血
 	if str(enemy.get("affix", "")) == "vamp":
 		enemy["hp"] = mini(int(enemy["hp"]) + int(edmg * 0.3), int(enemy["max_hp"]))

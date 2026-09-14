@@ -28,6 +28,7 @@ const MISSIONS := [
 	{"id": "m_win", "name": "赢得一场胜利", "target": 1, "reward_diamonds": 3},
 	{"id": "m_play", "name": "完成 2 场对局", "target": 2, "reward_gold": 150},
 	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 2},
+	{"id": "m_fight", "name": "格斗试炼通过 1 层", "target": 1, "reward_diamonds": 2},
 ]
 
 ## 成就目录: cond 在 check_achievements 里按 id 求值(基于持久化统计)
@@ -42,6 +43,10 @@ const ACHIEVEMENTS := [
 	{"id": "collector", "name": "收藏家", "desc": "拥有 8 件装扮(皮肤+卡面)"},
 	{"id": "gambler", "name": "赌性坚强", "desc": "购入一张双倍钻石卡"},
 	{"id": "signer_7", "name": "风雨无阻", "desc": "连续签到满 7 天"},
+	{"id": "fight_1", "name": "初入试炼", "desc": "完成一次格斗试炼"},
+	{"id": "fight_5", "name": "登塔者", "desc": "格斗试炼到达第 5 层"},
+	{"id": "fight_10", "name": "无尽征服者", "desc": "格斗试炼到达第 10 层"},
+	{"id": "fight_boss_3", "name": "屠龙勇士", "desc": "累计击败 3 个 Boss"},
 ]
 
 ## 特殊道具(消耗型/限时增益, 非装扮): currency=购买所用货币
@@ -66,6 +71,8 @@ var special_bought := 0        # 累计购入特殊道具数(成就统计)
 var unlocked: Array = []       # 已解锁成就 id
 var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
 var fight_best := 0            # 格斗试炼历史最高层数
+var fight_runs := 0            # 累计格斗局数
+var fight_bosses := 0          # 累计击败 Boss 数
 var mission_day := ""          # 任务所属日期
 var mission_progress := {}     # id -> 进度
 var mission_claimed := {}      # id -> true(已领取)
@@ -117,6 +124,8 @@ func _reset_defaults() -> void:
 	unlocked = []
 	history = []
 	fight_best = 0
+	fight_runs = 0
+	fight_bosses = 0
 	mission_day = ""
 	mission_progress = {}
 	mission_claimed = {}
@@ -167,6 +176,8 @@ func _read_into(path: String) -> bool:
 	var hs: Array = cf.get_value("wallet", "history", [])
 	history = hs
 	fight_best = int(cf.get_value("wallet", "fight_best", 0))
+	fight_runs = int(cf.get_value("wallet", "fight_runs", 0))
+	fight_bosses = int(cf.get_value("wallet", "fight_bosses", 0))
 	mission_day = str(cf.get_value("wallet", "mission_day", ""))
 	var mp = cf.get_value("wallet", "mission_progress", {})
 	mission_progress = mp if mp is Dictionary else {}
@@ -197,6 +208,8 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "unlocked", unlocked)
 	cf.set_value("wallet", "history", history)
 	cf.set_value("wallet", "fight_best", fight_best)
+	cf.set_value("wallet", "fight_runs", fight_runs)
+	cf.set_value("wallet", "fight_bosses", fight_bosses)
 	cf.set_value("wallet", "mission_day", mission_day)
 	cf.set_value("wallet", "mission_progress", mission_progress)
 	cf.set_value("wallet", "mission_claimed", mission_claimed)
@@ -285,7 +298,9 @@ func buy_special(item_id: String) -> bool:
 ## ── 格斗试炼 ──
 
 ## 通关/终局发放: 层数越高钻石越多(2 + 层数×2); 记录历史最高层
-func grant_fight_reward(floor_num: int) -> Dictionary:
+func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
+	fight_runs += 1
+	fight_bosses += bosses
 	var d := 2 + floor_num * 2
 	diamonds += d
 	diamonds_earned += d
@@ -401,6 +416,8 @@ func check_achievements() -> Array:
 		"diamonds_earned": diamonds_earned, "gold": gold,
 		"skins": owned_skins.size(), "cards": owned_cards.size(),
 		"special_bought": special_bought, "sign_streak": sign_streak,
+		"fight_best": fight_best, "fight_runs": fight_runs,
+		"fight_bosses": fight_bosses,
 	}
 	var newly: Array = []
 	for a in ACHIEVEMENTS:
@@ -428,6 +445,10 @@ func _ach_met(id: String, s: Dictionary) -> bool:
 		"collector": return int(s["skins"]) + int(s["cards"]) >= 8
 		"gambler": return int(s["special_bought"]) >= 1
 		"signer_7": return int(s["sign_streak"]) >= 7
+		"fight_5": return int(s["fight_best"]) >= 5
+		"fight_10": return int(s["fight_best"]) >= 10
+		"fight_1": return int(s["fight_runs"]) >= 1
+		"fight_boss_3": return int(s["fight_bosses"]) >= 3
 	return false
 
 

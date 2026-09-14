@@ -14,6 +14,9 @@ func run(t) -> void:
 	_stats_by_suit(t)
 	_battle_flow(t)
 	_reward_record(t)
+	_skill_schools(t)
+	_magic_enemy(t)
+	_mission_fight(t)
 
 
 ## 牌型: 9 层级逐级验证(♠♥♦♣)
@@ -116,4 +119,88 @@ func _reward_record(t) -> void:
 	var r5: Dictionary = w.grant_fight_reward(5)
 	t.expect(bool(r5["new_record"]), "破纪录标记")
 	t.expect_eq(int(w.fight_best), 5, "纪录更新为 5")
+	w.queue_free()
+
+
+## 技能流派: ♣1 火球 / ♣2 冰霜(敌下一手减速) / ♣3+ 圣光(附带回血)
+func _skill_schools(t) -> void:
+	var mk := func(club: int) -> Dictionary:
+		var hand := []
+		for i in club:
+			hand.append(card(10, 3))   # ♣
+		hand.append(card(10, 0))
+		hand.append(card(11, 1))
+		hand.append(card(12, 2))
+		hand.append(card(13, 0))
+		var c: Dictionary = FightGd.evaluate_combo(hand)
+		var f = FightGd.new(7)
+		f.equip(hand)
+		return {"kind": str(f.stats["skill_kind"]), "f": f, "combo": c}
+	t.expect_eq(str(mk.call(1)["kind"]), "fire", "♣1 → 火球流")
+	t.expect_eq(str(mk.call(2)["kind"]), "frost", "♣2 → 冰霜流")
+	t.expect_eq(str(mk.call(3)["kind"]), "light", "♣3 → 圣光流")
+	# 冰霜减速: ♣2 技能后敌人 chilled → 敌方下一手伤害降低
+	var f2 = FightGd.new(7)
+	f2.equip([card(10, 3), card(11, 3), card(10, 0), card(13, 1), card(13, 2)])
+	f2.spawn_enemy(false)
+	f2.enemy["hp"] = 99999
+	f2.enemy["intent"] = "attack"
+	f2.enemy["chilled"] = false
+	var evs_f: Array = f2.step("skill")
+	var chilled_evt := false
+	for e in evs_f:
+		if str(e["kind"]) == "chilled":
+			chilled_evt = true
+	t.expect(chilled_evt, "冰霜: 技能附带冻结标记")
+	# 圣光回血: 受伤后放圣光 → 出现 heal 事件
+	var f3 = FightGd.new(7)
+	f3.equip([card(10, 3), card(11, 3), card(12, 3), card(13, 1), card(13, 2)])
+	f3.spawn_enemy(false)
+	f3.hp = 50
+	f3.enemy["hp"] = 99999
+	var evs: Array = f3.step("skill")
+	var healed := false
+	for e in evs:
+		if str(e["kind"]) == "heal":
+			healed = true
+	t.expect(healed, "圣光流附带回血")
+
+
+## 法术怪: 法术攻击走魔抗减免(高魔抗 → 实伤更低)
+func _magic_enemy(t) -> void:
+	var f = FightGd.new(7)
+	f.equip([card(9, 0), card(10, 0), card(11, 0), card(12, 0), card(13, 0)])
+	f.spawn_enemy(false)
+	f.enemy["magic"] = true
+	f.enemy["intent"] = "spell"
+	f.enemy["hp"] = 99999
+	f.enemy["max_hp"] = 99999
+	f.enemy["atk"] = 100
+	var low_mres := 0
+	f.stats["mres"] = 0
+	f.hp = 1000
+	f.enemy["intent"] = "spell"
+	for e in f.step("attack"):
+		if str(e["who"]) == "e":
+			low_mres = int(e["v"])
+	f.stats["mres"] = 200
+	f.hp = 1000
+	f.enemy["intent"] = "spell"
+	var high_mres := 0
+	for e in f.step("attack"):
+		if str(e["who"]) == "e":
+			high_mres = int(e["v"])
+	t.expect(high_mres < low_mres, "魔抗降低法术伤害 (%d→%d)" % [low_mres, high_mres])
+
+
+## 任务: 格斗层完成推进 m_fight
+func _mission_fight(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_fight_mission.cfg"
+	t.expect(int(w.mission_state("m_fight")["progress"]) == 0, "任务未开始")
+	w.note_mission("m_fight")
+	t.expect_eq(int(w.mission_state("m_fight")["progress"]), 1, "格斗层任务完成")
+	var r: Dictionary = w.claim_mission("m_fight")
+	t.expect_eq(int(r["diamonds"]), 2, "领取 +2 钻")
+	t.expect(w.mission_state("m_fight")["claimed"], "领取状态记录")
 	w.queue_free()

@@ -18,6 +18,7 @@ var _sel: Array = []
 var _cards_ui: Array = []    # {wrap, sb, id, on}
 var _busy := false
 var _run_diamonds := 0
+var _bosses_killed := 0
 
 var header: Control
 var back_btn: Button
@@ -74,6 +75,14 @@ func _ready() -> void:
 	stage_lbl.position = Vector2(480, 34)
 	add_child(stage_lbl)
 
+	var help_btn := AppTheme.make_button("?", Vector2(42, 42), 20)
+	help_btn.position = Vector2(1064, 26)
+	help_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var fh: Control = (load("res://src/client/ui/fight_help.gd") as GDScript).new()
+		fh.closed.connect(func() -> void: fh.queue_free())
+		add_child(fh))
+	add_child(help_btn)
 	back_btn = AppTheme.make_button("放弃试炼", Vector2(130, 42), 15)
 	back_btn.position = Vector2(1120, 26)
 	back_btn.pressed.connect(func() -> void:
@@ -345,8 +354,11 @@ func _refresh_combo_chip() -> void:
 
 func _refresh_actions() -> void:
 	var cd := int(fm._skill_cd)
+	var kind := str(fm.stats.get("skill_kind", "fire"))
+	var icon := "🔥" if kind == "fire" else ("❄" if kind == "frost" else "✟")
+	var label := "火球" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
 	act_skill.disabled = cd > 0
-	act_skill.text = "✨ 技能" if cd <= 0 else "✨ 冷却 %d" % cd
+	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 			else ("%s 冷却 %d" % [icon, cd])
 
 
 func _on_action(action: String) -> void:
@@ -372,7 +384,11 @@ func _run_events(evs: Array) -> void:
 			_floater("暴击 -%d" % int(ev["v"]), tx, ty, Color("ffd166"))
 			_sfx("play_card" if not is_enemy_target else "fall")
 		"skill":
-			_floater("✨ -%d" % int(ev["v"]), tx, ty, Color("7ec8ff"))
+			var sk := str(ev.get("skill_kind", "fire"))
+			var scol := Color("7ec8ff") if sk == "frost" 					else (Color("7dd87d") if sk == "light" else Color("ff9a3d"))
+			var stxt: String = str({"fire": "火球", "frost": "冰霜",
+					"light": "圣光"}.get(sk, "技能"))
+			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, scol)
 			_sfx("exchange" if not is_enemy_target else "fall")
 		"heavy":
 			_floater("重击 -%d" % int(ev["v"]), tx, ty, Color("ff5050"))
@@ -387,12 +403,21 @@ func _run_events(evs: Array) -> void:
 			_floater("防御", 260.0, 240.0, Color("7ec8ff"))
 		"die":
 			_floater("击破!", 980.0, 280.0, AppTheme.GOLD)
+			if bool(fm.enemy.get("is_boss", false)):
+				_bosses_killed += 1
 	if is_enemy_target and not e_glyph.has_tween():
 		var flash := create_tween()
 		flash.tween_property(e_glyph, "modulate", Color(2.5, 1.2, 1.2), 0.06)
 		flash.tween_property(e_glyph, "modulate", Color.WHITE, 0.18)
 	if not is_enemy_target:
 		_shake(8.0 if kind == "heavy" else 4.0)
+	# 冲撞演出: 施攻方朝受方突进再回位
+	var lunge_from: float = avatar.position.x + 150.0 			if not is_enemy_target else e_glyph.position.x + 40.0
+	var lunge_to: float = avatar.position.x + 210.0 			if not is_enemy_target else e_glyph.position.x - 60.0
+	var target: Control = avatar if not is_enemy_target else e_glyph
+	var lt := create_tween()
+	lt.tween_property(target, "position:x", lunge_to, 0.12)
+	lt.tween_property(target, "position:x", target.position.x, 0.16)
 	_refresh_bars()
 	_refresh_actions()
 	if kind == "dmg" or kind == "heavy":
@@ -423,6 +448,7 @@ func _floor_cleared() -> void:
 	fm.advance_stage()
 	var r: Dictionary = Wallet.grant_fight_reward(floor_num)
 	_run_diamonds += int(r["diamonds"])
+	Wallet.note_mission("m_fight")
 	_show_blessing_draft("奖励: %+d 钻石 · 本局累计 %d 钻" % [
 				int(r["diamonds"]), _run_diamonds])
 
@@ -431,7 +457,7 @@ func _finish_run() -> void:
 	if phase == "over":
 		return
 	phase = "over"
-	var r: Dictionary = Wallet.grant_fight_reward(floor_num)
+	var r: Dictionary = Wallet.grant_fight_reward(floor_num, _bosses_killed)
 	_run_diamonds += int(r["diamonds"])
 	Wallet.push_history({
 		"day": Time.get_date_string_from_system(),
@@ -522,7 +548,12 @@ func _log_clear() -> void:
 func _intent_text() -> String:
 	if fm.enemy.is_empty():
 		return ""
-	return "💥 重击(防御可减!)" if str(fm.enemy.get("intent", "attack")) == "heavy" 			else "⚔ 攻击"
+	var it := str(fm.enemy.get("intent", "attack"))
+	if it == "heavy":
+		return "💥 重击(防御可减!)"
+	if it == "spell":
+		return "🔥 法术(魔抗可减!)"
+	return "⚔ 攻击"
 
 
 ## 打击感: 战斗区随机抖动后回位
