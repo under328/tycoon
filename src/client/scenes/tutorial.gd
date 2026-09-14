@@ -115,14 +115,19 @@ func _relayout() -> void:
 	var h := size.y
 	if w < 100.0 or h < 100.0:
 		return
-	var cx := (w - 800.0) / 2.0
+	# 内容列宽自适应: 窄屏几乎满宽, 宽屏封顶 900 居中
+	var col_w := minf(w - 80.0, 900.0)
+	var cx := (w - col_w) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
 	var sq := h < 660.0
 	_title.custom_minimum_size = Vector2(w, 50)
 	_title.size = Vector2(w, 50)
 	_fig.position = Vector2(cx, (96.0 if sq else 140.0) + dy)
-	_fig.size = Vector2(800, (290.0 if sq else 300.0))
+	_fig.size = Vector2(col_w, (290.0 if sq else 300.0))
 	_body.position = Vector2(cx, (402.0 if sq else 470.0) + dy)
+	_body.custom_minimum_size = Vector2(col_w, 130)
+	_body.size = Vector2(col_w, 130)
+	_body.add_theme_font_size_override("font_size", 21 if Responsive.is_touch() else 19)
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
 				(502.0 if sq else 618.0) + dy)

@@ -81,6 +81,7 @@ func _ready() -> void:
 	add_child(_scroll)
 	_grid = GridContainer.new()
 	_grid.columns = 3
+	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.add_theme_constant_override("h_separation", 18)
 	_grid.add_theme_constant_override("v_separation", 18)
 	_scroll.add_child(_grid)
@@ -95,7 +96,8 @@ func _ready() -> void:
 	_set_tab("skin")
 
 
-## 多设备自适应: 余额/返回锚右上, 商品区随窗口伸缩, 提示行贴底缘。
+## 多设备自适应: 余额/返回锚右上, 商品区随窗口伸缩, 提示行贴底缘;
+## 商品网格列数随宽度 2/3/4 列, 卡片等宽填满(不再留右侧死空间)。
 func _relayout() -> void:
 	var w := size.x
 	var h := size.y
@@ -106,6 +108,9 @@ func _relayout() -> void:
 	_scroll.position = Vector2(40, 170)
 	_scroll.size = Vector2(w - 80.0, h - 236.0)
 	_toast.position = Vector2(40, h - 60)
+	var cols := 4 if w >= 1500.0 else (3 if w >= 1050.0 else 2)
+	if _grid.columns != cols:
+		_grid.columns = cols
 
 
 func _set_tab(tab: String) -> void:
@@ -133,7 +138,8 @@ func _special_panel(item: Dictionary) -> Control:
 	var id := str(item["id"])
 	var active := id == "item_double_diamond" and Wallet.double_diamond_active()
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(372, 232)
+	panel.custom_minimum_size = Vector2(300, 232)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
 			AppTheme.GOLD if active else Color(1, 1, 1, 0.15), 12, 2 if not active else 3)
 	sb.content_margin_left = 22
@@ -213,7 +219,8 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 
 	# 卡片外框: 留足内边距, 装备中金框高亮
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(372, 232)
+	panel.custom_minimum_size = Vector2(300, 232)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sb := AppTheme.flat(
 			Color(0.13, 0.13, 0.28), AppTheme.GOLD if equipped
 					else Color(1, 1, 1, 0.15), 12, 2 if not equipped else 3)

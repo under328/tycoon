@@ -220,7 +220,9 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					"help 下一页未居中右")
 			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0, "help 关闭未锚右缘")
 		5:  # 新手引导
-			expect(absf(s._fig.position.x - (w - 800.0) / 2.0) <= 1.0, "tutorial 图示未居中")
+			var col_w: float = minf(w - 80.0, 900.0)
+			expect(absf(s._fig.position.x - (w - col_w) / 2.0) <= 1.0, "tutorial 图示未居中")
+			expect(absf(s._fig.size.x - col_w) <= 1.0, "tutorial 内容列宽未自适应")
 			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0, "tutorial 关闭未锚右缘")
 			expect(absf(s._next_btn.position.x - (w / 2.0 + 120.0)) <= 1.0, "tutorial 下一页未居中")
 		6:  # 设置面板(纯容器布局, 交给通用断言)

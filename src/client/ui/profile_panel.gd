@@ -170,7 +170,7 @@ func _build_missions() -> void:
 		var claimed := bool(st["claimed"])
 		var done := prog >= target and not claimed
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(1180, 0)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
 				AppTheme.GOLD if claimed else Color(1, 1, 1, 0.12), 10, 1)
 		sb.content_margin_left = 18
