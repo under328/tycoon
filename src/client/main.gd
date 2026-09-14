@@ -316,6 +316,8 @@ func _leave_table() -> void:
 	if lobby != null:
 		lobby.visible = true
 		_fit_safe_area(lobby)
+		if lobby.has_method("return_to_entry"):
+			lobby.return_to_entry()  # 联机桌退出: 大厅复位到入口页(防残留房间页)
 	Audio.play_bgm("lobby")
 
 

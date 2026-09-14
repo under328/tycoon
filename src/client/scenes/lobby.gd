@@ -305,6 +305,14 @@ func show_status(text: String, color: Color = COLOR_GOLD) -> void:
 	_set_status(text, color)
 
 
+## 从牌桌返回大厅: 复位到入口页(离开房间语义已由桌内 _do_leave 完成,
+## 这里只做页签/面板复位 —— 否则大厅残留『房间页』, 返回菜单变成两步)
+func return_to_entry() -> void:
+	_apply_view("entry")
+	hide_host_panel()
+	show_status("", COLOR_GOLD)
+
+
 ## 解析邀请码文本: 返回 {ips:[...], ip:首个, port, code} 或 {}(无效)。
 ## 地址段支持逗号分隔多候选(TC|局域网IP,TailscaleIP|端口|房码), 单地址向后兼容。
 static func parse_invite(text: String) -> Dictionary:
@@ -1128,6 +1136,8 @@ func _apply_settings(settings: Dictionary) -> void:
 
 
 func _on_room_state(state: Dictionary) -> void:
+	if net == null or not net.in_room:
+		return  # 已离开房间后的迟到广播: 不把页签拉回房间页
 	_last_room_code = str(state.get("room_code", ""))
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
