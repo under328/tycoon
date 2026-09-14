@@ -23,6 +23,8 @@ func _ready() -> void:
 	# 独立全屏页(同商城/档案): 不透明背景, 不再透出主菜单;
 	# 页眉 + 返回 + 滚动内容, 手机紧凑视口下整页可滚
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 代码 new 出的 Control 挂 Control 父下锚点不自动求值(size 停留 0×0) → 显式铺满
+	size = get_parent_area_size()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var bg := ColorRect.new()

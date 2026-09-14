@@ -30,6 +30,8 @@ var _close_lbl: Label
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 代码 new 出的 Control 挂 Control 父下锚点不自动求值(size 停留 0×0) → 显式铺满
+	size = get_parent_area_size()
 
 	# 不透明全屏页: 从模式选择弹窗打开, 不应透出主菜单背景
 	var dim := ColorRect.new()

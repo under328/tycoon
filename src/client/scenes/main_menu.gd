@@ -49,6 +49,8 @@ func _ready() -> void:
 	_build_menu()
 	_build_fan()
 	_build_settings()
+	_settings.name = "Page"
+	resized.connect(_sync_pages)
 	Responsive.watch(self, _relayout)
 	# 余额即时同步: 对局结算(后台托管打完也会结算)发放金币/钻石时首页立即刷新
 	Wallet.balance_changed.connect(_refresh_balance)
@@ -162,10 +164,10 @@ func _build_title() -> void:
 	prof_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
+		_mount_page(pp)
 		pp.closed.connect(func() -> void:
 			pp.queue_free()
-			_refresh_balance())
-		add_child(pp))
+			_refresh_balance()))
 	ops.add_child(prof_btn)
 
 	# 版本号(锚左下)
@@ -290,8 +292,8 @@ func _show_mode_select() -> void:
 	help.pressed.connect(func() -> void:
 		Audio.play("click")
 		var rh: Control = (load("res://src/client/ui/rogue_help.gd") as GDScript).new()
-		rh.closed.connect(func() -> void: rh.queue_free())
-		add_child(rh))
+		_mount_page(rh)
+		rh.closed.connect(func() -> void: rh.queue_free()))
 	head.add_child(help)
 	# AI 难度行(本地两种模式共用)
 	var diff_row := HBoxContainer.new()
@@ -453,12 +455,26 @@ func _refresh_balance() -> void:
 		_rank_lbl.reset_size()
 
 
+## 全屏页统一挂载: 显式铺满父级(锚点对代码 new 的 Control 不自动求值),
+## 并在菜单尺寸变化(窗口拉伸/安全区变化)时同步所有已挂载页面
+func _mount_page(page: Control) -> void:
+	page.name = "Page"
+	add_child(page)
+	page.position = Vector2.ZERO
+	page.size = size
+
+
+func _sync_pages() -> void:
+	for c in get_children():
+		if c is Control and str(c.name) == "Page":
+			(c as Control).size = size
+
+
 func _open_shop() -> void:
 	if _shop != null:
 		return
 	_shop = ShopScript.new()
-	_shop.name = "Shop"
-	add_child(_shop)
+	_mount_page(_shop)
 	_shop.closed.connect(func() -> void:
 		_shop.queue_free()
 		_shop = null
@@ -467,6 +483,7 @@ func _open_shop() -> void:
 
 func _open_tutorial() -> void:
 	var tut := TutorialScript.new()
+	_mount_page(tut)
 	tut.closed.connect(func() -> void: _tutorial_item.badge = _tutorial_badge())
 	add_child(tut)
 
