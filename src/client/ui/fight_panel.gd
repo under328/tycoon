@@ -46,6 +46,9 @@ var act_skill: Button
 var act_def: Button
 var hand_row: HBoxContainer
 var overlay: CenterContainer = null
+var e_intent: Label = null
+var bless_row: HBoxContainer = null
+var _shake_t := 0.0
 
 
 func _ready() -> void:
@@ -141,6 +144,11 @@ func _ready() -> void:
 	e_lbl.custom_minimum_size = Vector2(280, 26)
 	e_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	battle_box.add_child(e_lbl)
+	e_intent = _label(14, Color("ffb14e"))
+	e_intent.position = Vector2(880, 178)
+	e_intent.custom_minimum_size = Vector2(280, 24)
+	e_intent.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	battle_box.add_child(e_intent)
 	e_glyph = _label(96, AppTheme.WHITE)
 	e_glyph.position = Vector2(940, 240)
 	battle_box.add_child(e_glyph)
@@ -178,6 +186,12 @@ func _ready() -> void:
 	combo_chip.custom_minimum_size = Vector2(320, 26)
 	combo_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	battle_box.add_child(combo_chip)
+	bless_row = HBoxContainer.new()
+	bless_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bless_row.add_theme_constant_override("separation", 8)
+	bless_row.position = Vector2(440, 152)
+	bless_row.custom_minimum_size = Vector2(400, 24)
+	battle_box.add_child(bless_row)
 
 	act_atk = AppTheme.make_button("⚔ 攻击", Vector2(170, 56), 18)
 	act_skill = AppTheme.make_button("✨ 技能", Vector2(170, 56), 18)
@@ -215,6 +229,7 @@ func _relayout() -> void:
 	php_bar.position = avatar.position + Vector2(-15.0, 162.0)
 	php_txt.position = php_bar.position + Vector2(0.0, 22.0)
 	e_lbl.position = Vector2(w * 0.68, h * 0.28)
+	e_intent.position = Vector2(w * 0.68, h * 0.28 - 30.0)
 	e_glyph.position = Vector2(w * 0.70, h * 0.33)
 	ehp_bar.position = Vector2(w * 0.67, h * 0.53)
 	ehp_txt.position = Vector2(w * 0.67, h * 0.53 + 22.0)
@@ -306,6 +321,7 @@ func _start_battle() -> void:
 func _next_encounter() -> void:
 	fm.next_encounter()
 	e_lbl.text = str(fm.enemy["name"])
+	e_intent.text = "意图: %s" % _intent_text()
 	e_glyph.text = str(fm.enemy["glyph"])
 	stage_lbl.text = "第 %d 层 · %s" % [floor_num, fm.stage_label()]
 	_log_clear()
@@ -371,8 +387,16 @@ func _run_events(evs: Array) -> void:
 			_floater("防御", 260.0, 240.0, Color("7ec8ff"))
 		"die":
 			_floater("击破!", 980.0, 280.0, AppTheme.GOLD)
+	if is_enemy_target and not e_glyph.has_tween():
+		var flash := create_tween()
+		flash.tween_property(e_glyph, "modulate", Color(2.5, 1.2, 1.2), 0.06)
+		flash.tween_property(e_glyph, "modulate", Color.WHITE, 0.18)
+	if not is_enemy_target:
+		_shake(8.0 if kind == "heavy" else 4.0)
 	_refresh_bars()
 	_refresh_actions()
+	if kind == "dmg" or kind == "heavy":
+		e_intent.text = "意图: %s" % _intent_text()
 	var tw := create_tween()
 	tw.tween_interval(0.5)
 	tw.tween_callback(func() -> void: _run_events(evs))
@@ -383,11 +407,11 @@ func _after_events() -> void:
 		_finish_run()
 		return
 	if fm.encounter_cleared():
+		fm.advance_stage()               # mob→boss→clear
 		if fm.all_stages_cleared():
-			_floor_cleared()
+			_floor_cleared()             # 本层通关(祝福三选一)
 		else:
-			fm.advance_stage()
-			_next_encounter()
+			_next_encounter()            # 下一场: Boss(或小怪)
 			_refresh_actions()
 			_busy = false
 		return
@@ -399,29 +423,8 @@ func _floor_cleared() -> void:
 	fm.advance_stage()
 	var r: Dictionary = Wallet.grant_fight_reward(floor_num)
 	_run_diamonds += int(r["diamonds"])
-	_show_overlay("第 %d 层 通关!" % floor_num,
-			"奖励: %+d 钻石 · 本局累计 %d 钻\n敌人变得更强了…" % [
-				int(r["diamonds"]), _run_diamonds],
-			"进入第 %d 层" % (floor_num + 1),
-			func() -> void:
-				_close_overlay()
-				floor_num += 1
-				fm.next_floor()
-				fm.equip(fm.hand)
-				phase = "battle"
-				for c in hand_row.get_children():
-					c.queue_free()
-				for id in fm.hand:
-					var cv: Control = CardViewScript.new(int(id))
-					cv.custom_minimum_size = Vector2(60, 84)
-					cv.size = Vector2(60, 84)
-					hand_row.add_child(cv)
-				stage_lbl.text = "第 %d 层 · 小怪战" % floor_num
-				_next_encounter()
-				_refresh_bars()
-				_refresh_combo_chip()
-				_refresh_actions()
-				_busy = false)
+	_show_blessing_draft("奖励: %+d 钻石 · 本局累计 %d 钻" % [
+				int(r["diamonds"]), _run_diamonds])
 
 
 func _finish_run() -> void:
@@ -514,6 +517,124 @@ func _log(text: String) -> void:
 
 func _log_clear() -> void:
 	log_lbl.text = ""
+
+
+func _intent_text() -> String:
+	if fm.enemy.is_empty():
+		return ""
+	return "💥 重击(防御可减!)" if str(fm.enemy.get("intent", "attack")) == "heavy" 			else "⚔ 攻击"
+
+
+## 打击感: 战斗区随机抖动后回位
+func _shake(strength: float) -> void:
+	if _shake_t > 0.0:
+		return
+	_shake_t = 0.18
+	var tw := create_tween()
+	for i in 5:
+		var off := Vector2(rng_off(), rng_off()) * strength * 0.4
+		tw.tween_property(battle_box, "position",
+				Vector2.ZERO + off, 0.035)
+	tw.tween_property(battle_box, "position", Vector2.ZERO, 0.035)
+
+
+func rng_off() -> float:
+	return randf_range(-1.0, 1.0)
+
+
+## 祝福徽章刷新
+func _refresh_bless_chips() -> void:
+	for c in bless_row.get_children():
+		c.queue_free()
+	for b_id in fm.blessings:
+		var chip := AppTheme.make_label(13, AppTheme.GOLD)
+		var bname := ""
+		for b in FightModeGd.BLESSINGS:
+			if str(b["id"]) == str(b_id):
+				bname = str(b["name"])
+		chip.text = "·%s·" % bname
+		bless_row.add_child(chip)
+
+
+## 通关三选一祝福
+func _show_blessing_draft(reward_text: String) -> void:
+	var picks: Array = fm.roll_blessings()
+	overlay = CenterContainer.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 40
+	sb.content_margin_right = 40
+	sb.content_margin_top = 26
+	sb.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", sb)
+	overlay.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var t := AppTheme.make_label(30, AppTheme.GOLD)
+	t.text = "第 %d 层 通关!" % floor_num
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var b := AppTheme.make_label(15, AppTheme.WHITE)
+	b.text = reward_text + "
+选择一项祝福(立即生效, 可叠加):"
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(b)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	for m in picks:
+		var mid := str(m["id"])
+		var btn := AppTheme.make_button("%s
+%s" % [str(m["name"]), str(m["desc"])],
+				Vector2(190, 76), 14)
+		btn.pressed.connect(func() -> void:
+			Audio.play("win")
+			fm.add_blessing(mid)
+			_refresh_bless_chips()
+			_after_blessing(mid))
+		row.add_child(btn)
+	var skip_cc := CenterContainer.new()
+	var skip := AppTheme.make_button("跳过(不选祝福)", Vector2(220, 42), 14)
+	skip.pressed.connect(func() -> void:
+		Audio.play("click")
+		_after_blessing(null))
+	skip_cc.add_child(skip)
+	box.add_child(skip_cc)
+	add_child(overlay)
+
+
+func _after_blessing(_picked) -> void:
+	_goto_next_floor()
+
+
+func _goto_next_floor() -> void:
+	_close_overlay()
+	floor_num += 1
+	fm.next_floor()
+	fm.equip(fm.hand)
+	phase = "battle"
+	for c in hand_row.get_children():
+		c.queue_free()
+	for id in fm.hand:
+		var cv: Control = CardViewScript.new(int(id))
+		cv.custom_minimum_size = Vector2(60, 84)
+		cv.size = Vector2(60, 84)
+		hand_row.add_child(cv)
+	stage_lbl.text = "第 %d 层 · 小怪战" % floor_num
+	_next_encounter()
+	_refresh_bars()
+	_refresh_combo_chip()
+	_refresh_bless_chips()
+	_refresh_actions()
+	_busy = false
 
 
 ## 音效统一入口(与牌桌同款: 页面隐藏时不发声)

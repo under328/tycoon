@@ -51,12 +51,49 @@ func equip(cards: Array) -> void:
 	hand = (cards as Array).slice(0, 5)
 	combo = evaluate_combo(hand)
 	stats = derive_stats(hand, combo, floor_num)
+	_apply_blessings(stats)
 	hp = int(stats["max_hp"])
 	_skill_cd = 0
 	_round_no = 0
 	_log("第 %d 层: 属性就绪 — HP %d / 物攻 %d / 护甲 %d / 技能 %d (%s)" % [
 		floor_num, hp, int(stats["atk"]), int(stats["def"]),
 		int(stats["skill"]), str(combo["name"])])
+
+
+## 获得祝福: 记录并立即叠加到当前属性(生命祝福同时回补差值)
+func add_blessing(id: String) -> void:
+	blessings.append(id)
+	_apply_blessings(stats)
+	if id == "b_hp":
+		hp = mini(hp + int(int(stats["max_hp"]) * 0.3), int(stats["max_hp"]))
+	if id == "b_regen":
+		pass  # 回合开始时生效
+	_log("获得祝福: %s" % str(BLESSINGS.filter(
+			func(b: Dictionary) -> bool: return str(b["id"]) == id)[0]["name"]))
+
+
+## 祝福叠加到属性(乘区/加区)
+func _apply_blessings(st: Dictionary) -> void:
+	var n := {}
+	for b in blessings:
+		n[b] = int(n.get(b, 0)) + 1
+	st["atk"] = int(int(st["atk"]) * (1.0 + 0.25 * int(n.get("b_atk", 0))))
+	st["def"] = int(int(st["def"]) * (1.0 + 0.30 * int(n.get("b_def", 0))))
+	st["mres"] = int(int(st["mres"]) * (1.0 + 0.30 * int(n.get("b_def", 0))))
+	st["max_hp"] = int(int(st["max_hp"]) * (1.0 + 0.30 * int(n.get("b_hp", 0))))
+	st["crit_rate"] = float(st["crit_rate"]) + 0.12 * int(n.get("b_crit", 0))
+	st["crit_dmg"] = float(st["crit_dmg"]) + 0.5 * int(n.get("b_cdmg", 0))
+	st["vamp"] = float(st.get("vamp", 0.0)) + 0.15 * int(n.get("b_vamp", 0))
+	st["skill"] = int(int(st["skill"]) * (1.0 + 0.40 * int(n.get("b_skill", 0))))
+	st["skill_cd_fast"] = n.get("b_skill", 0) > 0
+	st["regen"] = n.get("b_regen", 0) > 0
+
+
+## 通关三选一: 随机抽 3 个不同祝福
+func roll_blessings() -> Array:
+	var pool: Array = BLESSINGS.duplicate()
+	pool.shuffle()
+	return pool.slice(0, 3)
 
 
 ## ── 牌型判定: 标准 5 张扑克(不含王) ──
@@ -191,19 +228,40 @@ func spawn_enemy(is_boss: bool) -> void:
 	var scale := pow(1.25, floor_num - 1)
 	var base_hp := (70.0 if is_boss else 42.0) * scale
 	var base_atk := (16.0 if is_boss else 10.0) * scale
+	var elite := not is_boss and floor_num % 3 == 0   # 每 3 层小怪为精英
+	if elite:
+		base_hp *= 1.6
+		base_atk *= 1.35
 	if is_boss:
 		base_hp *= 1.5
 		base_atk *= 1.2
 	var pool: Array = BOSS_NAMES if is_boss else MOB_NAMES
 	var pick: Array = pool[rng.randi() % pool.size()]
+	var affix := ""
+	if elite:
+		affix = ["rage", "iron", "vamp"][rng.randi() % 3]
+	elif is_boss and floor_num >= 4:
+		affix = ["rage", "iron", "vamp"][rng.randi() % 3]
+	var name_txt := str(pick[0])
+	if affix != "":
+		name_txt = "「%s」%s" % [AFFIX_NAMES[affix], name_txt]
+	if elite:
+		name_txt = "精英·" + name_txt
 	enemy = {
-		"name": str(pick[0]) + ("" if is_boss else ""),
-		"glyph": str(pick[1]), "is_boss": is_boss,
+		"name": name_txt, "glyph": str(pick[1]), "is_boss": is_boss,
+		"elite": elite, "affix": affix,
 		"hp": int(base_hp), "max_hp": int(base_hp),
 		"atk": int(base_atk),
+		"intent": "attack",
 	}
-	_round_no = 0
-	_log("%s出现! HP %d / 攻击 %d" % [enemy["name"], enemy["hp"], enemy["atk"]])
+	choose_intent()
+	_round_num = 0
+	_log("%s出现! HP %d / 攻击 %d" % [name_txt, enemy["hp"], enemy["atk"]])
+
+
+## 怪物意图: 事先定好下一手, 玩家可据此选择攻/防
+func choose_intent() -> void:
+	enemy["intent"] = "heavy" if rng.randf() < 0.3 else "attack"
 
 
 ## 每层推进: 小怪 → Boss
@@ -212,7 +270,22 @@ func next_encounter() -> String:
 	return _stage
 
 
-var _stage := "mob"   # mob → boss → clear(进下一层)
+## 祝福目录(通关后三选一, 可叠加): apply 在属性推导后叠加
+const BLESSINGS := [
+	{"id": "b_atk", "name": "攻击祝福", "desc": "物攻 +25%"},
+	{"id": "b_def", "name": "铁壁祝福", "desc": "护甲/魔抗 +30%"},
+	{"id": "b_hp", "name": "生命祝福", "desc": "生命上限 +30%"},
+	{"id": "b_crit", "name": "精准祝福", "desc": "暴击率 +12%"},
+	{"id": "b_cdmg", "name": "重伤祝福", "desc": "暴击伤害 +50%"},
+	{"id": "b_vamp", "name": "嗜血祝福", "desc": "吸血 +15%"},
+	{"id": "b_skill", "name": "灵韵祝福", "desc": "技能伤害 +40%, 冷却 -1"},
+	{"id": "b_regen", "name": "恢复祝福", "desc": "每回合开始回复 4% 生命"},
+]
+const AFFIX_NAMES := {"rage": "狂暴", "iron": "铁壁", "vamp": "嗜血"}
+
+var _stage := "mob"        # mob → boss → clear(进下一层)
+var blessings: Array = []  # 已获祝福 id(可叠加)
+var _round_num := 0        # 当前战斗回合(狂暴词缀用)
 
 
 ## 进入新层: 返回候选牌(8 张), 由 UI 选 5 张后 equip()
@@ -229,8 +302,14 @@ func step(action: String) -> Array:
 	if _stage == "boss" and enemy.is_empty():
 		return evs
 	_round_no += 1
+	_round_num = _round_no
 	if _skill_cd > 0:
 		_skill_cd -= 1
+	# 恢复祝福: 回合开始回血
+	if bool(stats.get("regen", false)) and hp < int(stats["max_hp"]):
+		var rg := maxi(int(int(stats["max_hp"]) * 0.04), 2)
+		hp = mini(hp + rg, int(stats["max_hp"]))
+		evs.append({"who": "p", "kind": "heal", "v": rg})
 	# 玩家行动
 	match action:
 		"attack":
@@ -239,15 +318,19 @@ func step(action: String) -> Array:
 			if crit:
 				dmg = int(dmg * float(stats["crit_dmg"]))
 			dmg = maxi(dmg - 2, 1)
+			if str(enemy.get("affix", "")) == "iron":
+				dmg = maxi(int(dmg * 0.75), 1)
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			evs.append({"who": "p", "kind": "crit" if crit else "dmg", "v": dmg})
 			_vamp_heal(evs, dmg)
 		"skill":
 			var dmg := int(float(stats["skill"]) * rng.randf_range(0.9, 1.2))
 			dmg = maxi(dmg - 1, 1)
+			if str(enemy.get("affix", "")) == "iron":
+				dmg = maxi(int(dmg * 0.75), 1)
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			evs.append({"who": "p", "kind": "skill", "v": dmg})
-			_skill_cd = 2
+			_skill_cd = 1 if bool(stats.get("skill_cd_fast", false)) else 2
 		"defend":
 			var heal := maxi(int(stats["max_hp"]) / 25, 3)
 			hp = mini(hp + heal, int(stats["max_hp"]))
@@ -264,15 +347,21 @@ func step(action: String) -> Array:
 		enemy["hp"] = 0
 		evs.append({"who": "e", "kind": "die", "v": 0})
 		return evs
-	# 敌人行动(玩家防御 → 减伤 60%)
-	var heavy: bool = rng.randf() < 0.25
-	var edmg := int(float(enemy["atk"]) * (1.6 if heavy else 1.0)
-			* rng.randf_range(0.9, 1.1))
+	# 敌人按意图行动(意图上一回合末已公示); 狂暴词缀每回合 +12% 攻
+	var heavy: bool = str(enemy.get("intent", "attack")) == "heavy"
+	var rage_mul: float = 1.0 + 0.12 * _round_no 			if str(enemy.get("affix", "")) == "rage" else 1.0
+	var edmg := int(float(enemy["atk"]) * rage_mul
+			* (1.6 if heavy else 1.0) * rng.randf_range(0.9, 1.1))
 	if action == "defend":
 		edmg = int(edmg * 0.4)
 	edmg = maxi(edmg - _player_mit(), 1)
 	hp -= edmg
 	evs.append({"who": "e", "kind": "heavy" if heavy else "dmg", "v": edmg})
+	# 嗜血词缀: 按造成的伤害回血
+	if str(enemy.get("affix", "")) == "vamp":
+		enemy["hp"] = mini(int(enemy["hp"]) + int(edmg * 0.3), int(enemy["max_hp"]))
+	# 选定下一手意图并公示
+	choose_intent()
 	# 连击: 顺子玩家死亡判定后不再追击 ✓(顺序已保证)
 	return evs
 
