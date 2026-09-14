@@ -147,7 +147,7 @@ func _start_local(mode: String = "normal") -> void:
 	if table != null and table.mode == "local" \
 			and not table.state.is_empty() \
 			and str(table.state["phase"]) != "game_end":
-		_show_resume_dialog()
+		_show_resume_dialog(mode)  # 带上所选模式: 确认框"开始新游戏"直接用
 		return
 	_launch_new_local(mode == "rogue")
 
@@ -167,7 +167,7 @@ func _launch_new_local(rogue: bool = false) -> void:
 
 
 ## 后台对局仍在进行: 询问返回上一局还是开新局
-func _show_resume_dialog() -> void:
+func _show_resume_dialog(mode: String = "normal") -> void:
 	if _resume_dlg != null:
 		return
 	var dlg := Control.new()
@@ -213,7 +213,7 @@ func _show_resume_dialog() -> void:
 	new_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close_resume_dialog()
-		menu._show_mode_select())
+		_launch_new_local(mode == "rogue"))  # 模式选择弹窗里已选好, 直接开
 	row.add_child(new_btn)
 	var cancel := AppTheme.make_button("取消", Vector2(96, 46), 15)
 	cancel.pressed.connect(func() -> void:
