@@ -65,6 +65,7 @@ var diamonds_earned := 0       # 累计获得钻石(成就统计)
 var special_bought := 0        # 累计购入特殊道具数(成就统计)
 var unlocked: Array = []       # 已解锁成就 id
 var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
+var fight_best := 0            # 格斗试炼历史最高层数
 var mission_day := ""          # 任务所属日期
 var mission_progress := {}     # id -> 进度
 var mission_claimed := {}      # id -> true(已领取)
@@ -115,6 +116,7 @@ func _reset_defaults() -> void:
 	special_bought = 0
 	unlocked = []
 	history = []
+	fight_best = 0
 	mission_day = ""
 	mission_progress = {}
 	mission_claimed = {}
@@ -164,6 +166,7 @@ func _read_into(path: String) -> bool:
 	unlocked = ul
 	var hs: Array = cf.get_value("wallet", "history", [])
 	history = hs
+	fight_best = int(cf.get_value("wallet", "fight_best", 0))
 	mission_day = str(cf.get_value("wallet", "mission_day", ""))
 	var mp = cf.get_value("wallet", "mission_progress", {})
 	mission_progress = mp if mp is Dictionary else {}
@@ -193,6 +196,7 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "special_bought", special_bought)
 	cf.set_value("wallet", "unlocked", unlocked)
 	cf.set_value("wallet", "history", history)
+	cf.set_value("wallet", "fight_best", fight_best)
 	cf.set_value("wallet", "mission_day", mission_day)
 	cf.set_value("wallet", "mission_progress", mission_progress)
 	cf.set_value("wallet", "mission_claimed", mission_claimed)
@@ -276,6 +280,23 @@ func buy_special(item_id: String) -> bool:
 		balance_changed.emit()
 		return true
 	return false
+
+
+## ── 格斗试炼 ──
+
+## 通关/终局发放: 层数越高钻石越多(2 + 层数×2); 记录历史最高层
+func grant_fight_reward(floor_num: int) -> Dictionary:
+	var d := 2 + floor_num * 2
+	diamonds += d
+	diamonds_earned += d
+	var best := maxi(fight_best, floor_num)
+	var new_record := best != fight_best
+	fight_best = best
+	var newly := check_achievements()
+	_mark_dirty()
+	balance_changed.emit()
+	return {"diamonds": d, "best": best, "new_record": new_record,
+			"achievements": newly}
 
 
 ## ── 每日任务 ──

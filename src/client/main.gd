@@ -15,6 +15,7 @@ var menu = null
 var lobby = null
 var table = null
 var net = null
+var fight_panel: Control = null # 格斗试炼页(非空=试炼进行中)
 var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
 var _fit_target: Control = null # 最近一次做过安全区适配的可见场景
 var _resume_dlg: Control = null # "返回上一局?"确认框
@@ -46,6 +47,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_refit_safe_area)
 	menu.local_game.connect(_start_local)
 	menu.online_game.connect(_start_online)
+	menu.fight_mode.connect(_start_fight)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
 
@@ -247,6 +249,28 @@ func _resume_local_game() -> void:
 	Audio.play_bgm("table")
 	table._advance()
 	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)  # 重连一次性信号
+
+
+## 格斗试炼(无尽模式): 独立全屏页, 关闭后回主菜单
+func _start_fight() -> void:
+	if fight_panel != null and is_instance_valid(fight_panel):
+		return
+	menu.visible = false
+	fight_panel = (load("res://src/client/ui/fight_panel.gd") as GDScript).new()
+	fight_panel.name = "Fight"
+	add_child(fight_panel)
+	_fit_safe_area(fight_panel)
+	fight_panel.closed.connect(_close_fight)
+
+
+func _close_fight() -> void:
+	if fight_panel != null and is_instance_valid(fight_panel):
+		fight_panel.queue_free()
+	fight_panel = null
+	if menu != null:
+		menu.visible = true
+		_fit_safe_area(menu)
+	Audio.play_bgm("lobby")
 
 
 func _start_online() -> void:

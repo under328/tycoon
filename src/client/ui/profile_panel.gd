@@ -219,12 +219,22 @@ func _build_history() -> void:
 	head.text = "共 %d 场 · 胜 %d 场 · 胜率 %d%% · 称号 %s" % [total, wins,
 			(100 * wins / total) if total > 0 else 0, Wallet.rank_title()]
 	_grid.add_child(head)
+	var fight := AppTheme.make_label(16, AppTheme.GOLD)
+	fight.text = "⚔ 格斗试炼最高纪录: 第 %d 层" % Wallet.fight_best
+	_grid.add_child(fight)
 	if (Wallet.history as Array).is_empty():
 		var empty := AppTheme.make_label(15, AppTheme.DIM)
 		empty.text = "还没有对局记录 — 去打一局吧!"
 		_grid.add_child(empty)
 		return
 	for e in Wallet.history:
+		if str(e.get("mode", "")) == "格斗":
+			var fr := AppTheme.make_label(15, AppTheme.GOLD)
+			fr.text = "%s · ⚔格斗试炼 · 到达第 %d 层 · %+d钻石" % [
+					str(e.get("day", "")), int(e.get("floor", 0)),
+					int(e.get("diamonds", 0))]
+			_grid.add_child(fr)
+			continue
 		var rank := int(e.get("rank", 0))
 		var row := AppTheme.make_label(15,
 				AppTheme.GOLD if rank == 1 else AppTheme.DIM)

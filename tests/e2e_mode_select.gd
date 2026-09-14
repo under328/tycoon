@@ -23,8 +23,8 @@ func _process(_d: float) -> bool:
 			return false
 		# 弹窗里应有 ? 帮助钮 + 两个模式钮(共 3 个 Button)
 		var btns: Array = dlg.find_children("*", "Button", true, false)
-		if btns.size() != 5:
-			_fail("弹窗按钮数=%d (期望 5: ?帮助/普通/肉鸽/简单/普通难度)" % btns.size())
+		if btns.size() != 6:
+			_fail("弹窗按钮数=%d (期望 6: ?帮助/普通/肉鸽/格斗/简单/普通难度)" % btns.size())
 			return false
 		# ? 帮助 → 图像化说明弹出
 		(btns[0] as Button).pressed.emit()

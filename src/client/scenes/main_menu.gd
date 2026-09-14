@@ -5,6 +5,7 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 
 signal local_game(mode: String)
 signal online_game
+signal fight_mode
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
 const SettingsPanelScript = preload("res://src/client/ui/settings_panel.gd")
@@ -338,6 +339,16 @@ func _show_mode_select() -> void:
 	d2.text = "每局随机一张『命运卡』增强随机性, 规则主体与普通一致"
 	d2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(d2)
+	# 格斗试炼(第三模式: 无尽动作牌斗)
+	var fight := AppTheme.make_button("格斗试炼", Vector2(420, 56), 20)
+	fight.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_mode_select()
+		fight_mode.emit())
+	box.add_child(fight)
+	var d0 := AppTheme.make_label(14, AppTheme.DIM)
+	d0.text = "化身头像人物, 5 张扑克定属性, 闯无尽楼层斩妖除魔"
+	box.add_child(d0)
 	_mode_dlg = dlg
 	add_child(dlg)
 
