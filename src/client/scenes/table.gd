@@ -47,7 +47,6 @@ var _advance_gen := 0         # 驱动循环代际: 重启循环时使旧协程�
 var _at_game_end := false
 var _emoji_cd := 0.0
 var _chat_cd := 0.0
-var _emoji_btns: Array = []
 var _emoji_toggle: Button        # 表情栏折叠切换钮
 var _emoji_open := false         # 表情栏是否展开
 var _prev_tick := -1
@@ -79,7 +78,12 @@ var counter_lbl: Label = null   # 记牌器 HUD(按点数显示未被出的牌�
 var counter_toggle: Button = null
 var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
 var _counter_totals := {}       # 点数值 -> 总张数(王受命运卡影响)
-var phrase_row: HBoxContainer = null  # 快捷短语行(表情弹开时显示)
+var emoji_popup: PanelContainer = null  # 表情/快捷回复向上弹出面板
+var emoji_grid: GridContainer = null
+var phrase_grid: GridContainer = null
+var _tab_emoji_btn: Button = null
+var _tab_phrase_btn: Button = null
+var _emoji_tab := "emoji"
 var settings_btn: Button = null      # 对局内设置入口(右上)
 var _settings_page: Control = null   # 对局内打开的设置页
 var _turn_total := -1.0
@@ -826,6 +830,7 @@ func _build_ui() -> void:
 		Audio.play("click")
 		_open_settings_page())
 	add_child(rules_btn)
+	add_child(settings_btn)
 
 	seat_labels.append(null)  # 座位0=自己，信息在 self_label（头像旁）
 	for i in 3:
@@ -949,13 +954,41 @@ func _build_ui() -> void:
 	for b: Button in [btn_play, btn_hint, btn_pass, btn_rematch, btn_leave]:
 		ops_row.add_child(b)
 
-	# 快捷表情（仅联机模式; 44px 触控热区）
-	# 折叠交互: 底部只显示一个表情切换钮, 点击展开全部, 再点收起
+	# 快捷表达面板: 😀 钮向上弹出, 面板内 表情/快捷回复 双 Tab(不再横向铺开)
+	emoji_popup = PanelContainer.new()
+	var ep_sb := AppTheme.flat(AppTheme.PANEL, Color(AppTheme.GOLD, 0.6), 12, 2)
+	ep_sb.content_margin_left = 12
+	ep_sb.content_margin_right = 12
+	ep_sb.content_margin_top = 10
+	ep_sb.content_margin_bottom = 12
+	emoji_popup.add_theme_stylebox_override("panel", ep_sb)
+	emoji_popup.position = Vector2(16, 408)  # 😀 钮上方(664-面板高-8)
+	emoji_popup.custom_minimum_size = Vector2(360, 248)
+	emoji_popup.visible = false
+	add_child(emoji_popup)
+	var ep_box := VBoxContainer.new()
+	ep_box.add_theme_constant_override("separation", 8)
+	emoji_popup.add_child(ep_box)
+	var ep_tabs := HBoxContainer.new()
+	ep_tabs.add_theme_constant_override("separation", 8)
+	ep_box.add_child(ep_tabs)
+	_tab_emoji_btn = AppTheme.make_button("表情", Vector2(160, 36), 15)
+	_tab_emoji_btn.toggle_mode = true
+	_tab_emoji_btn.pressed.connect(func() -> void: _set_emoji_tab("emoji"))
+	ep_tabs.add_child(_tab_emoji_btn)
+	_tab_phrase_btn = AppTheme.make_button("快捷回复", Vector2(160, 36), 15)
+	_tab_phrase_btn.toggle_mode = true
+	_tab_phrase_btn.pressed.connect(func() -> void: _set_emoji_tab("phrase"))
+	ep_tabs.add_child(_tab_phrase_btn)
+	# 表情页(4 列网格)
+	emoji_grid = GridContainer.new()
+	emoji_grid.columns = 4
+	emoji_grid.add_theme_constant_override("h_separation", 8)
+	emoji_grid.add_theme_constant_override("v_separation", 8)
+	ep_box.add_child(emoji_grid)
 	for i in EMOJIS.size():
 		var id := i
-		var eb := AppTheme.make_button(EMOJIS[i],
-				Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
-		eb.position = Vector2(16 + i * 52, 664)
+		var eb := AppTheme.make_button(EMOJIS[i], Vector2(72, 44), 20)
 		eb.pressed.connect(func() -> void:
 			if _emoji_cd > 0.0:
 				_flash_error("表情发太快了")
@@ -964,25 +997,25 @@ func _build_ui() -> void:
 			_sfx("pop")
 			if mode == "online" and net != null:
 				net.send_emoji(id))
-		add_child(eb)
-		_emoji_btns.append(eb)
-	# 快捷短语行(热门牌类标配: 预设语音包, 本地=气泡+AI回应, 联机=聊天广播)
-	phrase_row = HBoxContainer.new()
-	phrase_row.add_theme_constant_override("separation", 6)
-	phrase_row.position = Vector2(16, 712)
-	add_child(phrase_row)
+		emoji_grid.add_child(eb)
+	# 快捷回复页(2 列, 发完整语句; 本地=气泡+AI回应, 联机=聊天广播)
+	phrase_grid = GridContainer.new()
+	phrase_grid.columns = 2
+	phrase_grid.add_theme_constant_override("h_separation", 8)
+	phrase_grid.add_theme_constant_override("v_separation", 8)
+	phrase_grid.visible = false
+	ep_box.add_child(phrase_grid)
 	for ph: Array in QUICK_PHRASES:
 		var short: String = str(ph[0])
 		var full: String = str(ph[1])
-		var pb := AppTheme.make_button(short, Vector2(86, 38), 13)
-		pb.visible = false
+		var pb := AppTheme.make_button(short, Vector2(160, 40), 14)
 		pb.pressed.connect(func() -> void:
 			if _chat_cd > 0.0:
 				_flash_error("说太快了")
 				return
 			_chat_cd = 1.0
 			_send_phrase(full))
-		phrase_row.add_child(pb)
+		phrase_grid.add_child(pb)
 	_emoji_toggle = AppTheme.make_button("😀",
 			Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
 	_emoji_toggle.position = Vector2(16, 664)
@@ -990,6 +1023,9 @@ func _build_ui() -> void:
 		Audio.play("pop")
 		_emoji_open = not _emoji_open
 		_update_emoji_vis())
+	add_child(_emoji_toggle)
+	_update_emoji_vis()
+
 	add_child(_emoji_toggle)
 	_update_emoji_vis()
 	# 开局问候: 本地模式随机一位 AI 打招呼(氛围)
@@ -1108,15 +1144,25 @@ func _vibrate(ms: int) -> void:
 		Input.vibrate_handheld(ms)
 
 
-## 表情/快捷短语区: 切换钮常显(两种模式), 展开后显示表情+短语行;
+## 表达面板显隐: 😀 切换钮常显, 面板向上弹出(表情/快捷回复双 Tab);
 ## 本地模式同样可用(纯客户端气泡 + AI 随机回应), 联机走聊天广播。
 func _update_emoji_vis() -> void:
 	_emoji_toggle.visible = true
-	for eb: Button in _emoji_btns:
-		eb.visible = _emoji_open
-	if phrase_row != null:
-		for pb: Button in phrase_row.get_children():
-			pb.visible = _emoji_open
+	if emoji_popup != null:
+		emoji_popup.visible = _emoji_open
+	_set_emoji_tab(_emoji_tab)
+
+
+func _set_emoji_tab(tab: String) -> void:
+	_emoji_tab = tab
+	if emoji_grid == null or phrase_grid == null:
+		return
+	emoji_grid.visible = tab == "emoji"
+	phrase_grid.visible = tab == "phrase"
+	if _tab_emoji_btn != null:
+		_tab_emoji_btn.set_pressed_no_signal(tab == "emoji")
+	if _tab_phrase_btn != null:
+		_tab_phrase_btn.set_pressed_no_signal(tab == "phrase")
 
 
 func _flash_error(msg: String) -> void:
@@ -1258,17 +1304,17 @@ func _relayout() -> void:
 			(8.0 if compact else (h - 58)))
 	chat_btn.position = Vector2(send_x if not compact else 592.0,
 			(8.0 if compact else (h - 58)))
-	# 快捷表情(联机): 折叠态仅切换钮; 展开时表情排在切换钮右侧
+	# 表达面板: 😀 钮贴底左; 面板固定锚在其上方(向上弹出)
 	_emoji_toggle.position = Vector2(16, h - 58)
-	for i in _emoji_btns.size():
-		_emoji_btns[i].position = Vector2(60 + i * 52, h - 58)
+	if emoji_popup != null:
+		emoji_popup.position = Vector2(16, h - 58.0 - 248.0 - 8.0)
 	# 虚拟键盘避让: 聚焦聊天时底部整行抬到键盘上方
 	if _kbd_shift > 0.0:
 		chat_log.position.y -= _kbd_shift * 0.6
 		chat_edit.position.y -= _kbd_shift
 		chat_btn.position.y -= _kbd_shift
-		for eb: Button in _emoji_btns:
-			eb.position.y -= _kbd_shift
+		if emoji_popup != null:
+			emoji_popup.position.y -= _kbd_shift
 
 
 func _refresh() -> void:
