@@ -15,11 +15,6 @@ var _petals: Array = []
 var _cards: Array = []
 var _stars: Array = []
 var _birds: Array = []
-## 描金边框显隐: 移动端安全区内缩后边框贴在分隔线上, 默认隐藏更干净
-var frame_visible := true:
-	set(v):
-		frame_visible = v
-		queue_redraw()
 
 
 func _ready() -> void:
@@ -185,5 +180,3 @@ func _draw() -> void:
 					Color(Color("f2b8c6"), 0.85))
 		draw_circle(bl, 3.0, Color(Wafu.GOLD, 0.9))
 	draw_texture_rect(_vignette, Rect2(Vector2.ZERO, sz), false)
-	if frame_visible:
-		Wafu.frame(self, sz, Color(Wafu.GOLD, 0.28))

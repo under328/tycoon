@@ -42,7 +42,6 @@ func _ready() -> void:
 	_bg = BGScript.new()
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# 移动端: 菜单被安全区内缩, 背景描金边框会贴在分隔线上 → 隐藏
-	_bg.frame_visible = not Responsive.is_touch()
 	add_child(_bg)
 
 	_build_title()
@@ -76,7 +75,7 @@ func _relayout() -> void:
 	if _hint_lbl != null:
 		_hint_lbl.position = Vector2((w - _hint_lbl.size.x) / 2.0, h - 36)
 	if _fan != null:
-		_fan.position = Vector2(w - 340.0, clampf(h * 0.60, 300.0, h - 300.0))
+		_fan.position = Vector2(w - 356.0, clampf(h * 0.60, 300.0, h - 300.0))  # 内收 16: 旋转卡角不越缘
 	# 菜单项: 按可用高度自适应间距(手机紧凑视口也能放下全部六项)
 	var y0 := clampf(h * 0.23, 110.0, 188.0)
 	var spacing := clampf((h - y0 - 120.0) / 5.0, 52.0, 76.0)

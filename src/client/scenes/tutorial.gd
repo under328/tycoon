@@ -45,13 +45,6 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# 和风边框
-	var frame := ReferenceRect.new()
-	frame.border_color = Color(AppTheme.GOLD, 0.55)
-	frame.border_width = 2.0
-	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.editor_only = false
-	add_child(frame)
 
 	_title = _label(34, AppTheme.GOLD)
 	_title.position = Vector2(0, 52)
