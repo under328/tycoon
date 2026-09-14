@@ -19,6 +19,8 @@ var _cards_ui: Array = []    # {wrap, sb, id, on}
 var _busy := false
 var _run_diamonds := 0
 var _bosses_killed := 0
+var _reroll_btn: Button = null
+var _rerolled := false
 
 var header: Control
 var back_btn: Button
@@ -111,13 +113,28 @@ func _ready() -> void:
 	cards_row.add_theme_constant_override("separation", 14)
 	select_box.add_child(cards_row)
 	var cc := CenterContainer.new()
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 16)
+	cc.add_child(btn_row)
+	_reroll_btn = AppTheme.make_button("🔄 重抽候选", Vector2(200, 52), 18)
+	_reroll_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_rerolled = true
+		_reroll_btn.disabled = true
+		for c in cards_row.get_children():
+			c.queue_free()
+		_cards_ui.clear()
+		_sel.clear()
+		_fill_candidates()
+		combo_lbl.text = "已选 0/5 · 选满 5 张显示牌型"
+		confirm_btn.disabled = true)
+	btn_row.add_child(_reroll_btn)
 	confirm_btn = AppTheme.make_button("出 战", Vector2(240, 52), 20)
 	confirm_btn.disabled = true
 	confirm_btn.pressed.connect(func() -> void:
 		Audio.play("win")
 		_start_battle())
-	cc.add_child(confirm_btn)
-	select_box.add_child(cc)
+	btn_row.add_child(confirm_btn)
 	_fill_candidates()
 
 	# ── 战斗阶段(自由布局: 血条/敌我位置手工摆放, 不可用 VBox 堆叠) ──
@@ -257,7 +274,7 @@ func _label(size_num: int, color: Color) -> Label:
 
 ## ── 选牌阶段 ──
 func _fill_candidates() -> void:
-	var cands: Array = fm.draw_candidates(8)
+	var cands: Array = fm.draw_candidates(10)
 	for c in cands:
 		var wrap := PanelContainer.new()
 		var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 8, 1)
@@ -649,6 +666,7 @@ func _after_blessing(_picked) -> void:
 func _goto_next_floor() -> void:
 	_close_overlay()
 	floor_num += 1
+	_rerolled = false
 	fm.next_floor()
 	fm.equip(fm.hand)
 	phase = "battle"

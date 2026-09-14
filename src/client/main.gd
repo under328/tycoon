@@ -334,6 +334,10 @@ func _enter_table() -> void:
 
 
 func _leave_table() -> void:
+	var tf := FileAccess.open("C:/Users/Administrator/AppData/Local/Temp/leave_dbg.txt", FileAccess.WRITE)
+	if tf != null:
+		tf.store_line("leave_table called")
+		tf.close()
 	if table != null:
 		table.queue_free()
 		table = null

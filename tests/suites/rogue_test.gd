@@ -39,10 +39,11 @@ func _catalog(t) -> void:
 func _roll_deterministic(t) -> void:
 	var a := GameStateGd.new_match({"rogue": true}, 42)
 	var b := GameStateGd.new_match({"rogue": true}, 42)
-	t.expect_eq(str(a["cfg"]["rogue_mod"]), str(b["cfg"]["rogue_mod"]),
-			"同种子同局抽卡一致")
-	t.expect(GameStateGd.ROGUE_MODS.any(func(m: Dictionary) -> bool:
-		return str(m["id"]) == str(a["cfg"]["rogue_mod"])), "抽卡结果在图鉴内")
+	t.expect_eq(str(a["rogue_choices"]), str(b["rogue_choices"]),
+			"同种子同局候选一致")
+	t.expect((a["rogue_choices"] as Array).all(func(id) -> bool:
+		return GameStateGd.ROGUE_MODS.any(func(m: Dictionary) -> bool:
+			return str(m["id"]) == str(id))), "二选一候选均在图鉴内")
 	var c := GameStateGd.new_match({}, 42)
 	t.expect_eq(str(c["cfg"].get("rogue_mod", "")), "", "普通模式不抽卡")
 
@@ -122,6 +123,7 @@ func _mod_joker_rage(t) -> void:
 	var st2 := _match_with_mod("joker_rage")
 	st2["hands"][0] = [52]
 	st2["revolution"] = true
+	st2["phase"] = "play"
 	st2["lead"] = {}
 	st2["turn"] = 0
 	st2["must_include"] = -1
@@ -132,8 +134,11 @@ func _mod_joker_rage(t) -> void:
 # ---------------------------------------------------------------- 工具
 
 func _match_with_mod(mod: String, seed_v: int = 7) -> Dictionary:
-	# 指定首局命运卡(引擎: 首局 rogue_mod 预置时不重抽) → 走真实发牌路径
-	return GameStateGd.new_match({"rogue": true, "rogue_mod": mod}, seed_v)
+	# 指定首局命运卡(引擎: 锁定剧本两候选同卡), draft 阶段选 0 → 发牌开局
+	var st: Dictionary = GameStateGd.new_match({"rogue": true, "rogue_mod": mod}, seed_v)
+	if str(st["phase"]) == "draft":
+		st = GameStateGd.apply(st, {"t": "rogue_pick", "idx": 0})["state"]
+	return st
 
 
 func _count_jokers(st: Dictionary) -> int:
@@ -185,9 +190,13 @@ func _mod_no_exchange(t) -> void:
 	var st := _match_with_mod("no_exchange", 9)
 	st = _finish_three(st)
 	t.expect(str(st["phase"]) == "round_end", "首局打完")
-	var r = GameStateGd.apply(st, {"t": "next_round"})
-	st = r["state"]
-	t.expect(str(st["phase"]) == "play", "免战之约: 次局跳过换牌直接开打")
+	var nr = GameStateGd.apply(st, {"t": "next_round"})
+	st = nr["state"]
+	t.expect(str(st["phase"]) == "draft", "次局进入命运二选一")
+	t.expect_eq((st["rogue_choices"] as Array).size(), 2, "二选一候选 2 张")
+	var pick = GameStateGd.apply(st, {"t": "rogue_pick", "idx": 0})
+	st = pick["state"]
+	t.expect(str(st["phase"]) == "play", "选卡后直接开打")
 	var ids: Array = st["identities"]
 	t.expect_eq(int(st["turn"]), ids.find(3), "乞丐先出")
 

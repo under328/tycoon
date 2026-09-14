@@ -201,7 +201,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _new_match() -> void:
 	for child in fx_layer.get_children():
 		child.queue_free()  # 关闭上一场的结算面板/特效
-	state = GameStateGd.new_match({}, -1)
+	# 肉鸽模式: 引擎启用命运卡(每局二选一), 普通模式不受影响
+	state = GameStateGd.new_match({"rogue": rogue}, -1) if rogue 			else GameStateGd.new_match({}, -1)
 	selected.clear()
 	# 重置视听状态(上场的革命/阶段/桌面/手牌缓存全部作废)
 	_end_shown = false
@@ -219,7 +220,7 @@ func _new_match() -> void:
 	for i in range(1, 4):
 		_seat_skins[i] = ids[randi() % ids.size()]
 	if rogue:
-		_show_rogue_reveal()  # 首局命运卡: 关闭后 _advance()
+		_show_rogue_flow()  # draft → 选择 → 确认揭示 → _advance
 	else:
 		_advance()
 
@@ -238,6 +239,14 @@ func _advance() -> void:
 	var guard := 0
 	while true:
 		guard += 1
+		if guard % 25 == 0:
+			var tr := FileAccess.open("C:/Users/Administrator/AppData/Local/Temp/adv_trace.txt", FileAccess.WRITE)
+			if tr != null:
+				tr.store_line("guard=%d phase=%s round=%d turn=%s pend=%s adv=%s" % [guard,
+						str(state.get("phase", "?")), int(state.get("round", -1)),
+						str(state.get("turn", "?")),
+						str((state.get("exchange_returns", []) as Array).size()), advancing])
+				tr.close()
 		if guard > 2000:
 			push_error("local table: 驱动循环超限")
 			break
@@ -261,9 +270,19 @@ func _advance() -> void:
 			# 否则 AI 动作打在错误座位上(not_your_turn)导致循环死亡
 			if str(state["phase"]) != "play" or int(state["turn"]) != seat_to_act:
 				continue
+			print("[adv] t=%d seat=%d decide begin" % [Time.get_ticks_msec(), seat_to_act])
 			var action := BotPlayerGd.decide(state, seat_to_act, GameSettings.ai_level)
+			print("[adv] seat=%d decided t=%s" % [seat_to_act, str(action.get("t", "?"))])
 			var r := _local_apply(action)
+			print("[adv] t=%d seat=%d applied ok=%s" % [Time.get_ticks_msec(), seat_to_act,
+					str(r["ok"])])
 			if not bool(r["ok"]):
+				var tr := FileAccess.open("C:/Users/Administrator/AppData/Local/Temp/adv_err.txt", FileAccess.WRITE)
+				if tr != null:
+					tr.store_line("AI illegal seat=%d err=%s hand=%s lead=%s" % [seat_to_act,
+							str(r["error"]), str(state["hands"][seat_to_act]),
+							str(state.get("lead", {}))])
+					tr.close()
 				push_error("local table: AI 非法动作 %s" % str(r["error"]))
 				break
 			_detect_local_eight_cut(action, r["state"])
@@ -304,8 +323,13 @@ func _advance() -> void:
 					# 看到 advancing==true 直接 return → 第 2 局起永久卡死
 					_advance_gen += 1
 					advancing = false
-					_show_rogue_reveal()
+					_show_rogue_choice()  # 次局命运二选一
 					break
+		elif phase == "draft" and rogue:
+			_advance_gen += 1
+			advancing = false
+			_show_rogue_choice()
+			break
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
@@ -553,8 +577,70 @@ func _close_leave_dialog() -> void:
 	_leave_dlg = null
 
 
-## 命运卡揭示(每局开始): 全屏暗幕 + 居中卡面, 点击关闭后恢复驱动。
-## 首局由 _new_match 调用(关闭后启动循环); 后续局由 _advance 调用(已停循环)。
+## 命运卡流程: draft 阶段二选一 → 选定后确认揭示(开始对局)
+func _show_rogue_flow() -> void:
+	if str(state.get("phase", "")) == "draft":
+		_show_rogue_choice()
+	else:
+		_show_rogue_reveal()
+
+
+## 二选一: 两张命运卡并排, 点击选定并应用
+func _show_rogue_choice() -> void:
+	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
+		_rogue_dlg.queue_free()
+	var dlg := Control.new()
+	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
+	dlg.theme = AppTheme.build_theme()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 18)
+	center.add_child(box)
+	var cap := AppTheme.make_label(26, AppTheme.GOLD)
+	cap.text = "命运二选一 · 第 %d 层" % (int(state["round"]) + 1)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(cap)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	box.add_child(row)
+	var choices: Array = state.get("rogue_choices", [])
+	for i in choices.size():
+		var meta := {}
+		for m in GameStateGd.ROGUE_MODS:
+			if str(m["id"]) == str(choices[i]):
+				meta = m
+				break
+		var idx := i
+		var pick := AppTheme.make_button(
+				"【%s】%s
+%s" % [meta.get("glyph", "?"), meta.get("name", ""),
+				meta.get("desc", "")], Vector2(330, 130), 16)
+		pick.pressed.connect(func() -> void:
+			Audio.play("win")
+			var r := GameStateGd.apply(state,
+					{"t": "rogue_pick", "idx": idx})
+			if bool(r["ok"]):
+				state = r["state"]
+			_show_rogue_reveal())
+		row.add_child(pick)
+	var hint := AppTheme.make_label(14, AppTheme.DIM)
+	hint.text = "选定的命运卡在本层生效"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(hint)
+	_rogue_dlg = dlg
+	add_child(dlg)
+	dlg.position = Vector2.ZERO
+	dlg.size = size
+
+
+## 选定后的确认揭示(暗幕淡入 + 卡面弹出 + 开始对局)
 func _show_rogue_reveal() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		_rogue_dlg.queue_free()
@@ -616,19 +702,10 @@ func _show_rogue_reveal() -> void:
 	add_child(dlg)
 	dlg.position = Vector2.ZERO
 	dlg.size = size
-	# 揭示演出: 暗幕淡入 + 卡面上浮弹入
-	dlg.modulate.a = 0.0
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(dlg, "modulate:a", 1.0, 0.22)
-	tw.tween_property(panel, "scale", Vector2.ONE, 0.34)			.from(Vector2(0.72, 0.72)).set_trans(Tween.TRANS_BACK)			.set_ease(Tween.EASE_OUT)
-	panel.pivot_offset = Vector2(200, 180)
-	panel.modulate.a = 0.0
-	var tw2 := create_tween()
-	tw2.tween_property(panel, "modulate:a", 1.0, 0.18).set_delay(0.06)
 	_update_rogue_lbl()
 
 
+## 确认揭示的关闭: 关闭后恢复驱动(本地局暂停/续玩由 _advance 代际管理)
 func _close_rogue_reveal() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		_rogue_dlg.queue_free()

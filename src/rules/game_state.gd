@@ -42,10 +42,8 @@ const ROGUE_MODS := [
 static func _roll_rogue(st: Dictionary, round_idx: int) -> String:
 	if not bool(st["cfg"].get("rogue", false)):
 		return ""
-	# 固定剧本锁(首局预置 rogue_mod 时上锁): 每局都生效同一张
 	var lock := str(st["cfg"].get("rogue_mod_lock", ""))
 	if lock != "":
-		st["cfg"]["rogue_mod"] = lock
 		return lock
 	# 首局允许调用方指定命运卡(cfg 预置 rogue_mod): 固定剧本/测试用
 	if round_idx == 0 and str(st["cfg"].get("rogue_mod", "")) != "":
@@ -53,8 +51,19 @@ static func _roll_rogue(st: Dictionary, round_idx: int) -> String:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(str(st["seed"], ":rogue:", round_idx))
 	var mod: Dictionary = ROGUE_MODS[rng.randi() % ROGUE_MODS.size()]
-	st["cfg"]["rogue_mod"] = str(mod["id"])
 	return str(mod["id"])
+
+
+## 抽两张不同命运卡候选(玩家二选一); 锁定剧本时两张相同
+static func _roll_choices(st: Dictionary, round_idx: int) -> Array:
+	var lock := str(st["cfg"].get("rogue_mod_lock", ""))
+	if lock != "":
+		return [lock, lock]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(str(st["seed"], ":rc:", round_idx))
+	var a: int = rng.randi() % ROGUE_MODS.size()
+	var b: int = (a + 1 + rng.randi() % (ROGUE_MODS.size() - 1)) % ROGUE_MODS.size()
+	return [str(ROGUE_MODS[a]["id"]), str(ROGUE_MODS[b]["id"])]
 
 
 static func _rogue_mod_id(st: Dictionary) -> String:
@@ -84,8 +93,15 @@ static func new_match(cfg: Dictionary, seed_v: int = -1) -> Dictionary:
 	if seed_v < 0:
 		seed_v = int(Time.get_unix_time_from_system() * 1000.0) % 1000000007
 	var st := _empty_state(cfg, seed_v)
-	if _rogue_mod_id(st) != "":
-		st["cfg"]["rogue_mod_lock"] = _rogue_mod_id(st)  # 固定剧本: 每局同卡
+	var preset := str(st["cfg"].get("rogue_mod", ""))
+	if preset != "":
+		st["cfg"]["rogue_mod_lock"] = preset  # 固定剧本: 每局同卡
+	if bool(st["cfg"].get("rogue", false)):
+		# 肉鸽: 先出『命运二选一』, 玩家选定后才发牌开局
+		st["rogue_choices"] = _roll_choices(st, 0)
+		st["cfg"]["rogue_mod"] = str(st["rogue_choices"][0])
+		st["phase"] = "draft"
+		return st
 	_deal_round(st, 0)
 	if _rogue_mod_id(st) == "revolution_start":
 		st["revolution"] = true
@@ -120,6 +136,8 @@ static func apply(state: Dictionary, action: Dictionary) -> Dictionary:
 			return _do_exchange_return(st, action)
 		"next_round":
 			return _do_next_round(st)
+		"rogue_pick":
+			return _do_rogue_pick(st, int(action.get("idx", 0)))
 		_:
 			return _fail(st, "unknown_action")
 
@@ -225,54 +243,91 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 		st["phase"] = "game_end"
 		return _ok(st)
 	st["round"] = next_round
-	var mod := _roll_rogue(st, next_round)
-	_deal_round(st, next_round)
-	# 强制交换（上一局身份）：大贫民→大富豪 2 张，贫民→富豪 1 张
-	# 『混沌换牌』: 张数随机 1~3(按局定随机, 可重放)
-	var n_rich := 2
-	var n_common := 1
-	if mod == "chaos_exchange":
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash(str(st["seed"], ":ce:", next_round))
-		n_rich = rng.randi_range(1, 3)
-		n_common = rng.randi_range(1, 3)
-	var ids: Array = st["identities"]
-	var beggar := _seat_with_identity(ids, 3)
-	var millionaire := _seat_with_identity(ids, 0)
-	var commoner := _seat_with_identity(ids, 2)
-	var rich := _seat_with_identity(ids, 1)
-	if mod == "no_exchange":
-		# 『免战之约』: 跳过换牌阶段, 直接开打(乞丐先出), 各自手牌不变
-		st["exchange"] = []
-		st["exchange_returns"] = []
-		st["phase"] = "play"
-		st["turn"] = beggar
-		st["revolution"] = mod == "revolution_start"
-		st["quads"] = 1 if mod == "revolution_start" else 0
-		st["finish_order"] = []
-		st["field"] = []
-		st["lead"] = {}
-		st["passes"] = 0
-		st["last_player"] = -1
-		st["must_include"] = -1
-		return _ok(st)
-	st["exchange"] = [
-		_give(st, beggar, millionaire, n_rich),
-		_give(st, commoner, rich, n_common),
-	]
-	# 强者返还等量"任意牌"——由接收者自选(M3 换牌流程), 依次结算
-	st["exchange_returns"] = [
-		{"seat": millionaire, "to": beggar, "n": n_rich},
-		{"seat": rich, "to": commoner, "n": n_common},
-	]
-	st["revolution"] = mod == "revolution_start"
-	st["quads"] = 1 if mod == "revolution_start" else 0
 	st["finish_order"] = []
 	st["field"] = []
 	st["lead"] = {}
 	st["passes"] = 0
 	st["last_player"] = -1
 	st["must_include"] = -1
+	if bool(st["cfg"].get("rogue", false)):
+		# 肉鸽: 出『命运二选一』, 玩家选定后才发牌开局
+		st["rogue_choices"] = _roll_choices(st, next_round)
+		st["cfg"]["rogue_mod"] = str(st["rogue_choices"][0])
+		st["phase"] = "draft"
+		return _ok(st)
+	_deal_round(st, next_round)
+	# 强制交换（上一局身份）：大贫民→大富豪 2 张，贫民→富豪 1 张
+	var ids: Array = st["identities"]
+	var beggar := _seat_with_identity(ids, 3)
+	var millionaire := _seat_with_identity(ids, 0)
+	var commoner := _seat_with_identity(ids, 2)
+	var rich := _seat_with_identity(ids, 1)
+	st["exchange"] = [
+		_give(st, beggar, millionaire, 2),
+		_give(st, commoner, rich, 1),
+	]
+	st["exchange_returns"] = [
+		{"seat": millionaire, "to": beggar, "n": 2},
+		{"seat": rich, "to": commoner, "n": 1},
+	]
+	st["revolution"] = false
+	st["quads"] = 0
+	st["phase"] = "exchange"
+	st["turn"] = millionaire
+	return _ok(st)
+
+
+## 肉鸽: 玩家在二选一中选定命运卡 → 应用效果并发牌开局
+## (发牌类/规则类/触发类效果由此即刻生效; 结算类在收尾时生效)
+static func _do_rogue_pick(st: Dictionary, idx: int) -> Dictionary:
+	if st["phase"] != "draft":
+		return _fail(st, "not_draft")
+	var choices: Array = st.get("rogue_choices", [])
+	if idx < 0 or idx >= choices.size():
+		return _fail(st, "unknown_action")
+	var mod := str(choices[idx])
+	st["cfg"]["rogue_mod"] = mod
+	st["rogue_mod_chosen"] = mod
+	_deal_round(st, st["round"])
+	var ids: Array = st["identities"]
+	var beggar := _seat_with_identity(ids, 3)
+	var millionaire := _seat_with_identity(ids, 0)
+	var commoner := _seat_with_identity(ids, 2)
+	var rich := _seat_with_identity(ids, 1)
+	st["revolution"] = mod == "revolution_start"
+	st["quads"] = 1 if mod == "revolution_start" else 0
+	st["finish_order"] = []
+	if mod == "no_exchange":
+		# 『免战之约』: 跳过换牌, 乞丐先出
+		st["phase"] = "play"
+		st["turn"] = beggar
+		return _ok(st)
+	if st["round"] == 0:
+		st["phase"] = "play"
+		var holder := -1
+		for s2 in SEATS:
+			if (st["hands"][s2] as Array).has(CardsGd.DIAMOND_3):
+				holder = s2
+				break
+		st["turn"] = holder if holder >= 0 else int(st["seed"]) % SEATS
+		st["must_include"] = CardsGd.DIAMOND_3  # 首局: 首手必须含 ♦3
+		return _ok(st)
+	# 次局起: 强制交换(『混沌换牌』张数随机 1~3)
+	var n_rich := 2
+	var n_common := 1
+	if mod == "chaos_exchange":
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(str(st["seed"], ":ce:", st["round"]))
+		n_rich = rng.randi_range(1, 3)
+		n_common = rng.randi_range(1, 3)
+	st["exchange"] = [
+		_give(st, beggar, millionaire, n_rich),
+		_give(st, commoner, rich, n_common),
+	]
+	st["exchange_returns"] = [
+		{"seat": millionaire, "to": beggar, "n": n_rich},
+		{"seat": rich, "to": commoner, "n": n_common},
+	]
 	st["phase"] = "exchange"
 	st["turn"] = millionaire
 	return _ok(st)
@@ -390,8 +445,8 @@ static func _empty_state(cfg: Dictionary, seed_v: int) -> Dictionary:
 static func _deal_round(st: Dictionary, round_idx: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(str(st["seed"], ":", round_idx))
-	# 命运卡在本局发牌前抽取(影响牌堆/手牌数)
-	var mod := _roll_rogue(st, round_idx)
+	# 命运卡已在 draft 阶段选定并写入 cfg.rogue_mod
+	var mod := _rogue_mod_id(st)
 	# 『无王之地』: 牌堆不含王(优先于房间带王配置)
 	var deck := CardsGd.full_deck(
 			bool(st["cfg"]["with_joker"]) and mod != "joker_ban")
