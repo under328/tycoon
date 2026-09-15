@@ -17,8 +17,9 @@ const SCENE_PATHS := [
 	"res://src/client/ui/lobby_help.gd",
 	"res://src/client/scenes/tutorial.gd",
 	"res://src/client/ui/settings_panel.gd",
+	"res://src/client/ui/fight_panel.gd",
 ]
-const SCENE_NAMES := ["menu", "lobby", "shop", "help", "tutorial", "settings"]
+const SCENE_NAMES := ["menu", "lobby", "shop", "help", "tutorial", "settings", "fight"]
 
 var step := 0    # 分辨率档
 var sidx := -1   # 场景序号
@@ -59,6 +60,8 @@ func _next() -> void:
 	cur.size = root.get_visible_rect().size
 	if SCENE_NAMES[sidx] == "settings":
 		cur.open()  # 设置页默认隐藏, open 后容器才布局
+	if SCENE_NAMES[sidx] == "fight":
+		pass  # 选牌阶段即为默认展示
 
 
 func _process(_d: float) -> bool:
