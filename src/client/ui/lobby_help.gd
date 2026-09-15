@@ -33,6 +33,7 @@ func _ready() -> void:
 	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级,
 	# 不再手动赋视口尺寸(那会溢出父级边界, 手机上按钮超界)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	size = get_parent_area_size()  # 代码 new 挂 Control 父下锚点不自动求值
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.55)

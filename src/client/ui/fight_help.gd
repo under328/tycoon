@@ -26,6 +26,7 @@ var _close_lbl: Label
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	size = get_parent_area_size()  # 代码 new 挂 Control 父下锚点不自动求值
 
 	var bg := ColorRect.new()
 	bg.color = AppTheme.BG
