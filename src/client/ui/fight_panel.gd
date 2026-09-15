@@ -1,57 +1,62 @@
-## 格斗试炼(无尽模式)全屏页: 选牌(8选5) → 小怪战 → Boss战 → 下一层…
-## 玩家化身头像人物; 5 张扑克 = 装备(♠物攻暴击/♦护甲魔抗/♥生命/♣法术);
-## 牌型协同(同花顺/四条/葫芦/顺子…)自动生效; 死亡结算, 按层数发钻石。
+## 格斗试炼(回合制)全屏页: 每回合『二选一』抽牌 → 编成左上 5 槽装备 →
+## 小怪/精英/Boss 战(R1 小怪 R2 小怪 R3 精英 R4 小怪 R5 BOSS)。
+## 特殊牌不占槽: 抽到立即生效并补抽普通牌, 保证 Boss 战恰好 5 张。
+## 怪物形象按主题组像素画; 玩家按皮肤演出攻击动作。纯渲染+输入, 规则在引擎。
 extends Control
 
 signal closed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const FightModeGd = preload("res://src/rules/fight/fight_mode.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
+const MonsterViewScript = preload("res://src/client/ui/monster_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
+const SkinsLib = preload("res://src/client/ui/skins.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
 var fm: FightModeGd
-var phase := "select"        # select / battle / over
-var floor_num := 1
-var _sel: Array = []
-var _cards_ui: Array = []    # {wrap, sb, id, on}
-var _busy := false
+var phase := "run"           # run(试炼中) / over(已结束)
 var _run_diamonds := 0
-var _bosses_killed := 0
-var _reroll_btn: Button = null
-var _rerolled := false
+var _busy := false
+var _pending_cand := -1      # 槽满替换: 待放入的候选
+var _banner: Label = null
+var _slot_ui: Array = []     # {wrap, sb, card} 装备槽
+var _sp_row: HBoxContainer = null
+var _combo_lbl: Label = null
 
 var header: Control
 var back_btn: Button
-var stage_lbl: Label
-var select_box: VBoxContainer
-var select_hint: Label
-var cards_row: HBoxContainer
-var combo_lbl: Label
-var confirm_btn: Button
-var battle_box: Control
+var help_btn: Button
+var round_lbl: Label
+var slots_box: VBoxContainer
+var player_box: Control
 var avatar: Control
-var php_bar: ColorRect
 var php_fg: ColorRect
 var php_txt: Label
-var e_lbl: Label
-var e_glyph: Label
-var ehp_bar: ColorRect
+var shield_fg: ColorRect
+var enemy_box: Control
+var monster: Control
 var ehp_fg: ColorRect
 var ehp_txt: Label
-var _vs_lbl: Label
+var ehp_bar: Control
+var e_name: Label
+var e_intent: Label
 var floaters: Control
 var log_lbl: Label
-var combo_chip: Label
+var act_row: HBoxContainer
 var act_atk: Button
 var act_skill: Button
 var act_def: Button
-var hand_row: HBoxContainer
-var overlay: CenterContainer = null
-var e_intent: Label = null
-var bless_row: HBoxContainer = null
+var draft_panel: PanelContainer
+var draft_title: Label
+var cand_row: HBoxContainer
+var draft_ops: HBoxContainer
+var battle_box: Control
 var _shake_t := 0.0
+var _bob_t := 0.0
+var _player_home: Vector2
+var _enemy_home: Vector2
 
 
 func _ready() -> void:
@@ -69,16 +74,15 @@ func _ready() -> void:
 	header.text = "格斗试炼"
 	header.icon = "card"
 	header.position = Vector2(36, 22)
-	header.custom_minimum_size = Vector2(420, 54)
-	header.size = Vector2(420, 54)
+	header.custom_minimum_size = Vector2(360, 54)
+	header.size = Vector2(360, 54)
 	add_child(header)
 
-	stage_lbl = AppTheme.make_label(20, AppTheme.GOLD)
-	stage_lbl.position = Vector2(480, 34)
-	add_child(stage_lbl)
+	round_lbl = AppTheme.make_label(19, AppTheme.GOLD)
+	add_child(round_lbl)
 
-	var help_btn := AppTheme.make_button("?", Vector2(42, 42), 20)
-	help_btn.position = Vector2(1064, 26)
+	help_btn = AppTheme.make_button("?", Vector2(42, 42), 20)
+	help_btn.position = Vector2(1040, 26)
 	help_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		var fh: Control = (load("res://src/client/ui/fight_help.gd") as GDScript).new()
@@ -86,187 +90,151 @@ func _ready() -> void:
 		add_child(fh))
 	add_child(help_btn)
 	back_btn = AppTheme.make_button("放弃试炼", Vector2(130, 42), 15)
-	back_btn.position = Vector2(1120, 26)
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		if phase == "select":
-			closed.emit()
-			queue_free()
-		else:
-			_finish_run())
+		_finish_run())
 	add_child(back_btn)
 
-	# ── 选牌阶段 ──
-	select_box = VBoxContainer.new()
-	select_box.position = Vector2(40, 110)
-	select_box.custom_minimum_size = Vector2(1200, 560)
-	select_box.add_theme_constant_override("separation", 16)
-	add_child(select_box)
-	select_hint = AppTheme.make_label(18, AppTheme.WHITE)
-	select_hint.text = "第 %d 层 — 从 8 张牌中选择 5 张装备\n(♠物攻暴击 ♦护甲魔抗 ♥生命 ♣法术)" % floor_num
-	select_box.add_child(select_hint)
-	combo_lbl = AppTheme.make_label(16, AppTheme.GOLD)
-	combo_lbl.text = "已选 0/5 · 选满 5 张显示牌型"
-	select_box.add_child(combo_lbl)
-	cards_row = HBoxContainer.new()
-	cards_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	cards_row.add_theme_constant_override("separation", 14)
-	select_box.add_child(cards_row)
-	var cc := CenterContainer.new()
-	var btn_row := HBoxContainer.new()
-	btn_row.add_theme_constant_override("separation", 16)
-	cc.add_child(btn_row)
-	_reroll_btn = AppTheme.make_button("🔄 重抽候选", Vector2(200, 52), 18)
-	_reroll_btn.tooltip_text = "持有重抽券可额外重抽"
-	_reroll_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_rerolled = true
-		if Wallet.item_count("item_reroll_ticket") > 0:
-			Wallet.consume_item("item_reroll_ticket")
-		else:
-			_reroll_btn.disabled = true
-		for c in cards_row.get_children():
-			c.queue_free()
-		_cards_ui.clear()
-		_sel.clear()
-		_fill_candidates()
-		combo_lbl.text = "已选 0/5 · 选满 5 张显示牌型"
-		confirm_btn.disabled = true)
-	btn_row.add_child(_reroll_btn)
-	confirm_btn = AppTheme.make_button("出 战", Vector2(240, 52), 20)
-	confirm_btn.disabled = true
-	confirm_btn.pressed.connect(func() -> void:
-		Audio.play("win")
-		_start_battle())
-	btn_row.add_child(confirm_btn)
-	_fill_candidates()
+	# ── 左上: 装备槽(5) + 奇物 + 牌型 ──
+	slots_box = VBoxContainer.new()
+	slots_box.add_theme_constant_override("separation", 4)
+	add_child(slots_box)
+	var slots_title := AppTheme.make_label(14, AppTheme.DIM)
+	slots_title.text = "装备槽"
+	slots_box.add_child(slots_title)
+	var slots_row := HBoxContainer.new()
+	slots_row.add_theme_constant_override("separation", 6)
+	slots_box.add_child(slots_row)
+	for i in 5:
+		var wrap := PanelContainer.new()
+		var sb := AppTheme.flat(Color(0.06, 0.06, 0.14),
+				Color(1, 1, 1, 0.25), 6, 1)
+		wrap.add_theme_stylebox_override("panel", sb)
+		wrap.custom_minimum_size = Vector2(56, 78)
+		wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+		var idx := i
+		wrap.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed \
+					and ev.button_index == MOUSE_BUTTON_LEFT:
+				_on_slot_clicked(idx))
+		slots_row.add_child(wrap)
+		_slot_ui.append({"wrap": wrap, "sb": sb, "card": -1})
+	var sp_row2 := HBoxContainer.new()
+	sp_row2.add_theme_constant_override("separation", 4)
+	slots_box.add_child(sp_row2)
+	_sp_row = sp_row2
+	_combo_lbl = AppTheme.make_label(13, AppTheme.GOLD)
+	slots_box.add_child(_combo_lbl)
 
-	# ── 战斗阶段(自由布局: 血条/敌我位置手工摆放, 不可用 VBox 堆叠) ──
+	# ── 战场: 玩家(左) / 怪物(右) ──
 	battle_box = Control.new()
 	battle_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	battle_box.visible = false
+	battle_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(battle_box)
 
 	avatar = AvatarScript.new()
-	avatar.custom_minimum_size = Vector2(150, 150)
-	avatar.size = Vector2(150, 150)
-	avatar.position = Vector2(180, 250)
+	avatar.custom_minimum_size = Vector2(140, 140)
+	avatar.size = Vector2(140, 140)
 	battle_box.add_child(avatar)
-	var pname := AppTheme.make_label(17, AppTheme.WHITE)
+	var pname := AppTheme.make_label(16, AppTheme.WHITE)
 	pname.text = str(GameSettings.nickname)
-	pname.position = Vector2(170, 410)
 	battle_box.add_child(pname)
-	php_bar = ColorRect.new()
+	var php_bar := ColorRect.new()
 	php_bar.color = Color(0, 0, 0, 0.6)
-	php_bar.position = Vector2(165, 442)
-	php_bar.size = Vector2(280, 20)
+	php_bar.size = Vector2(240, 18)
 	battle_box.add_child(php_bar)
 	php_fg = ColorRect.new()
 	php_fg.color = Color("58c858")
 	php_fg.position = Vector2(2, 2)
 	php_bar.add_child(php_fg)
-	php_txt = _label(13, AppTheme.WHITE)
-	php_txt.position = Vector2(165, 464)
+	php_txt = _label(12, AppTheme.WHITE)
 	battle_box.add_child(php_txt)
+	var shield_bar := ColorRect.new()
+	shield_bar.color = Color(0, 0, 0, 0.35)
+	shield_bar.size = Vector2(240, 6)
+	battle_box.add_child(shield_bar)
+	shield_fg = ColorRect.new()
+	shield_fg.color = Color("6ad0e8")
+	shield_bar.add_child(shield_fg)
 
-	e_lbl = _label(17, AppTheme.WHITE)
-	e_lbl.position = Vector2(880, 210)
-	e_lbl.custom_minimum_size = Vector2(280, 26)
-	e_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	battle_box.add_child(e_lbl)
+	monster = MonsterViewScript.new()
+	monster.custom_minimum_size = Vector2(200, 200)
+	monster.size = Vector2(200, 200)
+	battle_box.add_child(monster)
+	e_name = AppTheme.make_label(18, AppTheme.WHITE)
+	e_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	e_name.custom_minimum_size = Vector2(260, 24)
+	battle_box.add_child(e_name)
 	e_intent = _label(14, Color("ffb14e"))
-	e_intent.position = Vector2(880, 178)
-	e_intent.custom_minimum_size = Vector2(280, 24)
 	e_intent.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	e_intent.custom_minimum_size = Vector2(260, 20)
 	battle_box.add_child(e_intent)
-	e_glyph = _label(96, AppTheme.WHITE)
-	e_glyph.position = Vector2(940, 240)
-	battle_box.add_child(e_glyph)
 	ehp_bar = ColorRect.new()
 	ehp_bar.color = Color(0, 0, 0, 0.6)
-	ehp_bar.position = Vector2(860, 380)
-	ehp_bar.size = Vector2(280, 20)
+	ehp_bar.size = Vector2(240, 18)
 	battle_box.add_child(ehp_bar)
 	ehp_fg = ColorRect.new()
 	ehp_fg.color = Color("d05050")
 	ehp_fg.position = Vector2(2, 2)
 	ehp_bar.add_child(ehp_fg)
-	ehp_txt = _label(13, AppTheme.WHITE)
-	ehp_txt.position = Vector2(860, 402)
+	ehp_txt = _label(12, AppTheme.WHITE)
 	battle_box.add_child(ehp_txt)
-
-	_vs_lbl = _label(30, AppTheme.GOLD)
-	_vs_lbl.text = "VS"
-	_vs_lbl.position = Vector2(size.x / 2.0 - 24.0, size.y * 0.44)
-	battle_box.add_child(_vs_lbl)
 
 	floaters = Control.new()
 	floaters.set_anchors_preset(Control.PRESET_FULL_RECT)
 	floaters.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	battle_box.add_child(floaters)
 
-	log_lbl = _label(14, Color("c9b06a"))
-	log_lbl.position = Vector2(40, 500)
-	log_lbl.custom_minimum_size = Vector2(420, 160)
+	log_lbl = _label(13, Color("c9b06a"))
 	log_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	battle_box.add_child(log_lbl)
+	log_lbl.custom_minimum_size = Vector2(430, 120)
+	add_child(log_lbl)
 
-	combo_chip = AppTheme.make_label(16, AppTheme.GOLD)
-	combo_chip.position = Vector2(520, 120)
-	combo_chip.custom_minimum_size = Vector2(320, 26)
-	combo_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	battle_box.add_child(combo_chip)
-	bless_row = HBoxContainer.new()
-	bless_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	bless_row.add_theme_constant_override("separation", 8)
-	bless_row.position = Vector2(440, 152)
-	bless_row.custom_minimum_size = Vector2(400, 24)
-	battle_box.add_child(bless_row)
-
-	act_atk = AppTheme.make_button("⚔ 攻击", Vector2(170, 56), 18)
-	act_skill = AppTheme.make_button("✨ 技能", Vector2(170, 56), 18)
-	act_def = AppTheme.make_button("🛡 防御", Vector2(170, 56), 18)
+	# ── 战斗操作按钮 ──
+	act_row = HBoxContainer.new()
+	act_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	act_row.add_theme_constant_override("separation", 16)
+	add_child(act_row)
+	act_atk = AppTheme.make_button("⚔ 攻击", Vector2(160, 56), 18)
+	act_skill = AppTheme.make_button("✨ 技能", Vector2(160, 56), 18)
+	act_def = AppTheme.make_button("🛡 防御", Vector2(160, 56), 18)
 	act_atk.pressed.connect(func() -> void: _on_action("attack"))
 	act_skill.pressed.connect(func() -> void: _on_action("skill"))
 	act_def.pressed.connect(func() -> void: _on_action("defend"))
-	hand_row = HBoxContainer.new()
-	hand_row.add_theme_constant_override("separation", 6)
-	hand_row.position = Vector2(40, 620)
-	battle_box.add_child(hand_row)
-	var acts := HBoxContainer.new()
-	acts.alignment = BoxContainer.ALIGNMENT_CENTER
-	acts.add_theme_constant_override("separation", 20)
-	acts.position = Vector2(340, 620)
-	acts.custom_minimum_size = Vector2(600, 56)
-	acts.add_child(act_atk)
-	acts.add_child(act_skill)
-	acts.add_child(act_def)
-	battle_box.add_child(acts)
+	act_row.add_child(act_atk)
+	act_row.add_child(act_skill)
+	act_row.add_child(act_def)
+
+	# ── 抽牌面板(底部) ──
+	draft_panel = PanelContainer.new()
+	var dsb := AppTheme.flat(Color(0.08, 0.07, 0.18, 0.96), AppTheme.GOLD, 12, 1)
+	draft_panel.add_theme_stylebox_override("panel", dsb)
+	add_child(draft_panel)
+	var dbox := VBoxContainer.new()
+	dbox.add_theme_constant_override("separation", 8)
+	draft_panel.add_child(dbox)
+	draft_title = AppTheme.make_label(16, AppTheme.GOLD)
+	dbox.add_child(draft_title)
+	cand_row = HBoxContainer.new()
+	cand_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	cand_row.add_theme_constant_override("separation", 26)
+	dbox.add_child(cand_row)
+	draft_ops = HBoxContainer.new()
+	draft_ops.alignment = BoxContainer.ALIGNMENT_CENTER
+	draft_ops.add_theme_constant_override("separation", 14)
+	dbox.add_child(draft_ops)
 
 	Responsive.watch(self, _relayout)
+	_render()
+	Audio.play_bgm("table")
 
 
-## 多设备自适应: 顶栏锚边, 战斗列按窗口比例摆位, 血条跟角色走
-func _relayout() -> void:
-	var w := size.x
-	var h := size.y
-	if w < 100.0 or h < 100.0:
-		return
-	back_btn.position = Vector2(w - 150.0, 26)
-	stage_lbl.position = Vector2(w / 2.0 - 120.0, 34)
-	select_box.size = Vector2(w - 80.0, h - 140.0)
-	avatar.position = Vector2(w * 0.14, h * 0.34)
-	php_bar.position = avatar.position + Vector2(-15.0, 162.0)
-	php_txt.position = php_bar.position + Vector2(0.0, 22.0)
-	e_lbl.position = Vector2(w * 0.68, h * 0.28)
-	e_intent.position = Vector2(w * 0.68, h * 0.28 - 30.0)
-	e_glyph.position = Vector2(w * 0.70, h * 0.33)
-	ehp_bar.position = Vector2(w * 0.67, h * 0.53)
-	ehp_txt.position = Vector2(w * 0.67, h * 0.53 + 22.0)
-	_vs_lbl.position = Vector2(w / 2.0 - 24.0, h * 0.44)
-	log_lbl.position = Vector2(40, h - 210.0)
-	combo_chip.position = Vector2(w / 2.0 - 160.0, 120.0)
-	hand_row.position = Vector2(40, h - 96.0)
+func _process(delta: float) -> void:
+	# 怪物呼吸浮动 + 玩家轻微起伏(战斗阶段)
+	if fm != null and fm.phase == "battle":
+		_bob_t += delta
+		monster.position.y = _enemy_home.y + sin(_bob_t * 2.2) * 5.0
+		avatar.position.y = _player_home.y + sin(_bob_t * 1.7) * 3.0
 
 
 func _label(size_num: int, color: Color) -> Label:
@@ -276,121 +244,288 @@ func _label(size_num: int, color: Color) -> Label:
 	return lb
 
 
-## ── 选牌阶段 ──
-func _fill_candidates() -> void:
-	var cands: Array = fm.draw_candidates(10)
-	for c in cands:
-		var wrap := PanelContainer.new()
-		var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 8, 1)
-		wrap.add_theme_stylebox_override("panel", sb)
-		var cv: Control = CardViewScript.new(int(c))
-		cv.custom_minimum_size = Vector2(96, 134)
-		cv.size = Vector2(96, 134)
-		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		wrap.add_child(cv)
-		var id := int(c)
-		wrap.mouse_filter = Control.MOUSE_FILTER_STOP
-		wrap.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed \
-					and ev.button_index == MOUSE_BUTTON_LEFT:
-				_toggle_select(wrap, sb, id))
-		cards_row.add_child(wrap)
-		_cards_ui.append({"wrap": wrap, "sb": sb, "id": id, "on": false})
+## ── 总渲染: 按引擎 phase 切换可见区 ──
+func _render() -> void:
+	round_lbl.text = "第 %d/%d 回合 · %s" % [fm.round_num, FightModeGd.ROUNDS,
+			str(FightModeGd.GROUPS[fm.group]["name"])]
+	_refresh_slots()
+	_refresh_bars()
+	var is_battle: bool = fm.phase == "battle"
+	var is_draft: bool = fm.phase == "draft"
+	battle_box.visible = is_battle or is_draft
+	# 怪物未生成(draft)时隐藏敌方区, 避免显示占位形象
+	var enemy_ready: bool = is_battle and not fm.enemy.is_empty()
+	monster.visible = enemy_ready
+	e_name.visible = enemy_ready
+	e_intent.visible = enemy_ready
+	ehp_bar.visible = enemy_ready
+	ehp_txt.visible = enemy_ready
+	act_row.visible = is_battle and not _busy
+	draft_panel.visible = is_draft
+	log_lbl.text = "\n".join((fm.log_lines as Array).slice(
+			maxi(fm.log_lines.size() - 4, 0)))
+	if enemy_ready:
+		_fill_enemy_view()
+		_layout_bars(size.x, size.y)
+		_refresh_actions()
+	if is_draft:
+		_render_draft()
+	if fm.phase == "battle" and fm.player_dead() and not _busy:
+		# 复活币自动生效(与旧版一致); 无币则结算
+		if Wallet.try_consume_revive():
+			fm.revive()
+			_refresh_bars()
+			_floater("复活币生效!", _px(0.17), _py(0.42), AppTheme.GOLD)
+		else:
+			_finish_run()
 
 
-func _toggle_select(wrap: PanelContainer, sb: StyleBoxFlat, id: int) -> void:
-	Audio.play("click")
-	var entry: Dictionary = {}
-	for e in _cards_ui:
-		if int(e["id"]) == id:
-			entry = e
-	if entry.is_empty():
-		return
-	var on: bool = not bool(entry["on"])
-	if on and _sel.size() >= 5:
-		_flash("最多装备 5 张")
-		return
-	entry["on"] = on
-	if on:
-		_sel.append(id)
+func _fill_enemy_view() -> void:
+	(monster as Control).group = int(fm.enemy.get("group", 0))
+	(monster as Control).kind = str(fm.enemy.get("kind", "mob"))
+	(monster as Control).variant = int(fm.enemy.get("variant", 0))
+	var kind_txt: String = {"mob": "小怪", "elite": "精英怪",
+			"boss": "BOSS"}.get(str(fm.enemy.get("kind", "mob")), "")
+	e_name.text = "%s · %s" % [str(fm.enemy.get("name", "")), kind_txt]
+	_refresh_bars()
+
+
+func _px(f: float) -> float:
+	return size.x * f
+
+
+func _py(f: float) -> float:
+	return size.y * f
+
+
+## ── 装备槽 / 奇物 / 牌型 ──
+func _refresh_slots() -> void:
+	for i in 5:
+		var e: Dictionary = _slot_ui[i]
+		var wrap: PanelContainer = e["wrap"]
+		var card := -1
+		if i < fm.slots.size():
+			card = int(fm.slots[i])
+		if int(e["card"]) == card and not _replace_mode():
+			continue
+		for c in wrap.get_children():
+			c.queue_free()
+		e["card"] = card
+		if card >= 0:
+			var cv: Control = CardViewScript.new(card)
+			cv.custom_minimum_size = Vector2(52, 74)
+			cv.size = Vector2(52, 74)
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			wrap.add_child(cv)
+		var sb: StyleBoxFlat = e["sb"]
+		if _replace_mode():
+			sb.border_color = AppTheme.GOLD
+			sb.set_border_width_all(3)
+		else:
+			sb.border_color = AppTheme.GOLD if card >= 0 else Color(1, 1, 1, 0.25)
+			sb.set_border_width_all(2 if card >= 0 else 1)
+	for c in _sp_row.get_children():
+		c.queue_free()
+	for sp_id in fm.specials:
+		var meta: Dictionary = FightModeGd.sp_meta(sp_id)
+		var chip := AppTheme.make_label(13, Color("c89ae8"))
+		chip.text = "%s %s" % [str(meta["icon"]), str(meta["name"])]
+		chip.tooltip_text = str(meta["desc"])
+		_sp_row.add_child(chip)
+	if fm.specials.is_empty():
+		var hint := AppTheme.make_label(12, AppTheme.DIM)
+		hint.text = "奇物(特殊牌不占槽)"
+		_sp_row.add_child(hint)
+	if fm.slots.is_empty():
+		_combo_lbl.text = "集齐 5 张触发牌型协同"
 	else:
-		_sel.erase(id)
-	sb.border_color = AppTheme.GOLD if on else Color(1, 1, 1, 0.2)
-	sb.set_border_width_all(3 if on else 1)
-	var info := "选满 5 张生效"
-	if _sel.size() == 5:
-		var c: Dictionary = FightModeGd.evaluate_combo(_sel)
-		info = "牌型: %s(%s)" % [c["name"], c["desc"]]
-	combo_lbl.text = "已选 %d/5 · %s" % [_sel.size(), info]
-	confirm_btn.disabled = _sel.size() != 5
+		_combo_lbl.text = "牌型 %s · %s" % [fm.combo["name"], fm.combo["desc"]]
 
 
-func _flash(text: String) -> void:
-	select_hint.text = text
-	select_hint.add_theme_color_override("font_color", AppTheme.RED)
+func _replace_mode() -> bool:
+	return _pending_cand >= 0
 
 
-## ── 战斗阶段 ──
-func _start_battle() -> void:
-	fm.equip(_sel)  # 派生属性+生成牌型(此前仅 UI 预览)
-	phase = "battle"
-	select_box.visible = false
-	battle_box.visible = true
-	Audio.play_bgm("table")
-	for id in _sel:
-		var cv: Control = CardViewScript.new(int(id))
-		cv.custom_minimum_size = Vector2(60, 84)
-		cv.size = Vector2(60, 84)
-		hand_row.add_child(cv)
-	_next_encounter()
-	_refresh_bars()
-	_refresh_combo_chip()
-	_refresh_actions()
+func _on_slot_clicked(idx: int) -> void:
+	if not _replace_mode() or _busy or idx >= fm.slots.size():
+		return
+	Audio.play("click")
+	var cand := _pending_cand
+	_pending_cand = -1
+	var r: Dictionary = fm.draft_pick(cand, idx)
+	if bool(r["ok"]):
+		_after_pick_feedback(cand, idx)
+	_render()
 
 
-func _next_encounter() -> void:
-	fm.next_encounter()
-	e_lbl.text = str(fm.enemy["name"])
-	e_intent.text = "意图: %s" % _intent_text()
-	e_glyph.text = str(fm.enemy["glyph"])
-	stage_lbl.text = "第 %d 层 · %s" % [floor_num, fm.stage_label()]
-	_log_clear()
-	_log("%s 出现! (HP %d)" % [str(fm.enemy["name"]), int(fm.enemy["max_hp"])])
-	_refresh_bars()
+func _after_pick_feedback(cand: int, _slot: int) -> void:
+	if cand >= 0 and cand < 100:
+		_floater("装备 %s" % CardsGd.label(cand),
+				_px(0.17), _py(0.30), AppTheme.GOLD)
 
 
+## ── 抽牌面板 ──
+func _render_draft() -> void:
+	for c in cand_row.get_children():
+		c.queue_free()
+	for c in draft_ops.get_children():
+		c.queue_free()
+	if fm.comp:
+		draft_title.text = "🟣 奇物已生效 — 补抽一张普通牌 (装备 %d/5)" % fm.slots.size()
+	else:
+		draft_title.text = "第 %d 回合 — 二选一 (装备 %d/5)%s" % [fm.round_num,
+				fm.slots.size(),
+				"，额外候选组!" if fm.pairs_left > 1 else ""]
+	for cand in fm.pair:
+		if cand >= 100:
+			cand_row.add_child(_build_special_card(int(cand)))
+		else:
+			cand_row.add_child(_build_normal_card(int(cand)))
+	if _replace_mode():
+		draft_title.text = "装备槽已满 — 点击左上要替换的槽位，或跳过"
+		var skip := AppTheme.make_button("跳过这组", Vector2(150, 40), 14)
+		skip.pressed.connect(func() -> void:
+			Audio.play("click")
+			_pending_cand = -1
+			var r: Dictionary = fm.draft_pick(-1)
+			if bool(r["ok"]):
+				_render())
+		draft_ops.add_child(skip)
+
+
+func _build_normal_card(card: int) -> Control:
+	var wrap := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 10, 1)
+	wrap.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	wrap.add_child(box)
+	var cc := CenterContainer.new()
+	var cv: Control = CardViewScript.new(card)
+	cv.custom_minimum_size = Vector2(96, 134)
+	cv.size = Vector2(96, 134)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cc.add_child(cv)
+	box.add_child(cc)
+	var combo: Dictionary = FightModeGd.evaluate_combo(
+			((fm.slots as Array) + [card]).slice(0, 5))
+	var hint := _label(11, Color("c9b06a"))
+	if fm.slots.size() >= 5:
+		hint.text = "替换后 %s" % str(combo["name"])
+	else:
+		hint.text = "装备后 %s" % str(combo["name"])
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(hint)
+	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	wrap.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_on_candidate(card))
+	return wrap
+
+
+func _build_special_card(cand: int) -> Control:
+	var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
+	var wrap := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.16, 0.09, 0.24), Color("b070e0"), 10, 2)
+	wrap.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	wrap.add_child(box)
+	var icon := _label(40, Color("e8d0ff"))
+	icon.text = str(meta["icon"])
+	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(icon)
+	var nm := AppTheme.make_label(16, Color("e8d0ff"))
+	nm.text = "【奇物】%s" % str(meta["name"])
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(nm)
+	var desc := _label(12, Color("c8a8e0"))
+	desc.text = str(meta["desc"])
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.custom_minimum_size = Vector2(180, 60)
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(desc)
+	var tag := _label(11, Color("a888c0"))
+	tag.text = "不占装备槽" if fm.slots.size() < 5 else "槽满: 立即生效"
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tag)
+	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	wrap.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_on_candidate(cand))
+	return wrap
+
+
+func _on_candidate(cand: int) -> void:
+	if _busy or fm.phase != "draft":
+		return
+	Audio.play("click")
+	# 槽满 + 普通牌(引擎要求槽位) → 进入替换模式
+	if cand < 100 and fm.slots.size() >= 5:
+		_pending_cand = cand
+		_render()
+		return
+	var r: Dictionary = fm.draft_pick(cand)
+	if not bool(r["ok"]):
+		return
+	if cand >= 100:
+		var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
+		_floater("%s %s" % [str(meta["icon"]), str(meta["name"])],
+				_px(0.5), _py(0.34), Color("c89ae8"))
+		Audio.play("exchange")
+	_render()
+
+
+## ── 战斗 ──
 func _refresh_bars() -> void:
 	var mh: int = maxi(int(fm.stats["max_hp"]), 1)
-	php_fg.size = Vector2(276.0 * clampi(fm.hp, 0, mh) / float(mh), 16)
+	php_fg.size = Vector2(236.0 * clampi(fm.hp, 0, mh) / float(mh), 14)
 	php_txt.text = "HP %d / %d" % [maxi(fm.hp, 0), mh]
-	if not fm.enemy.is_empty():
+	shield_fg.size = Vector2(240.0 * clampi(float(fm.shield),
+			0.0, float(mh)) / float(mh), 6)
+	if fm.phase == "battle" and not fm.enemy.is_empty():
 		var eh: int = maxi(int(fm.enemy["max_hp"]), 1)
-		ehp_fg.size = Vector2(276.0 * clampi(int(fm.enemy["hp"]), 0, eh) / float(eh), 16)
+		ehp_fg.size = Vector2(236.0 * clampi(int(fm.enemy["hp"]), 0, eh) / float(eh), 14)
 		ehp_txt.text = "HP %d / %d" % [maxi(int(fm.enemy["hp"]), 0), eh]
+		e_intent.text = "意图: %s" % _intent_text()
 
 
-func _refresh_combo_chip() -> void:
-	combo_chip.text = "牌型: %s — %s" % [str(fm.combo["name"]), str(fm.combo["desc"])]
+func _intent_text() -> String:
+	if fm.enemy.is_empty():
+		return ""
+	match str(fm.enemy.get("intent", "attack")):
+		"heavy":
+			return "💥 重击(防御可减!)"
+		"spell":
+			return "🔥 法术(魔抗可减!)"
+	return "⚔ 攻击"
 
 
 func _refresh_actions() -> void:
-	var cd := int(fm._skill_cd)
+	var cd := fm.skill_cd()
 	var kind := str(fm.stats.get("skill_kind", "fire"))
 	var icon := "🔥" if kind == "fire" else ("❄" if kind == "frost" else "✟")
 	var label := "火球" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
 	act_skill.disabled = cd > 0
-	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 			else ("%s 冷却 %d" % [icon, cd])
+	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 \
+			else ("%s 冷却 %d" % [icon, cd])
 
 
 func _on_action(action: String) -> void:
-	if _busy or phase != "battle":
+	if _busy or fm.phase != "battle":
 		return
 	_busy = true
+	act_row.visible = false
+	Audio.play("click")
+	if action != "defend":
+		_player_strike()
 	var evs: Array = fm.step(action)
 	_run_events(evs)
 
 
-## 顺序播放事件(飘字/血条), 完毕后处理阶段推进
+## 顺序播放事件 → 收尾(阶段推进/死亡判定)
 func _run_events(evs: Array) -> void:
 	if evs.is_empty():
 		_after_events()
@@ -398,117 +533,213 @@ func _run_events(evs: Array) -> void:
 	var ev = evs.pop_front()
 	var kind := str(ev["kind"])
 	var is_enemy_target := str(ev["who"]) == "e"
-	var tx: float = 980.0 if is_enemy_target else 260.0
-	var ty: float = 300.0 if is_enemy_target else 280.0
+	var tx := _px(0.68) if is_enemy_target else _px(0.17)
+	var ty := _py(0.36) if is_enemy_target else _py(0.34)
 	match kind:
 		"crit":
 			_floater("暴击 -%d" % int(ev["v"]), tx, ty, Color("ffd166"))
-			_sfx("play_card" if not is_enemy_target else "fall")
+			_sfx("play_card")
 		"skill":
 			var sk := str(ev.get("skill_kind", "fire"))
-			var scol := Color("7ec8ff") if sk == "frost" 					else (Color("7dd87d") if sk == "light" else Color("ff9a3d"))
 			var stxt: String = str({"fire": "火球", "frost": "冰霜",
 					"light": "圣光"}.get(sk, "技能"))
-			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, scol)
-			_sfx("exchange" if not is_enemy_target else "fall")
+			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, Color("7ec8ff"))
+			_sfx("exchange")
 		"heavy":
 			_floater("重击 -%d" % int(ev["v"]), tx, ty, Color("ff5050"))
+			_enemy_strike("slam" if str(fm.enemy.get("kind")) != "mob" else "lunge")
 			_sfx("fall")
 		"dmg":
 			_floater("-%d" % int(ev["v"]), tx, ty,
 					AppTheme.RED if is_enemy_target else Color("ff8866"))
-			_sfx("play_card" if not is_enemy_target else "fall")
+			if is_enemy_target:
+				_hit_flash(monster)
+			else:
+				_sfx("play_card")
+		"thorns":
+			_floater("荆棘 -%d" % int(ev["v"]), tx, ty, Color("7dd87d"))
 		"heal":
-			_floater("+%d" % int(ev["v"]), 260.0, 240.0, Color("7dd87d"))
+			_floater("+%d" % int(ev["v"]), _px(0.17), _py(0.30), Color("7dd87d"))
 		"defend":
-			_floater("防御", 260.0, 240.0, Color("7ec8ff"))
+			_floater("防御", _px(0.17), _py(0.30), Color("7ec8ff"))
+		"chilled":
+			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
-			_floater("击破!", 980.0, 280.0, AppTheme.GOLD)
-			if bool(fm.enemy.get("is_boss", false)):
-				_bosses_killed += 1
-	if is_enemy_target and not e_glyph.has_tween():
-		var flash := create_tween()
-		flash.tween_property(e_glyph, "modulate", Color(2.5, 1.2, 1.2), 0.06)
-		flash.tween_property(e_glyph, "modulate", Color.WHITE, 0.18)
-	if not is_enemy_target:
-		_shake(8.0 if kind == "heavy" else 4.0)
-	# 冲撞演出: 施攻方朝受方突进再回位
-	var lunge_from: float = avatar.position.x + 150.0 			if not is_enemy_target else e_glyph.position.x + 40.0
-	var lunge_to: float = avatar.position.x + 210.0 			if not is_enemy_target else e_glyph.position.x - 60.0
-	var target: Control = avatar if not is_enemy_target else e_glyph
-	var lt := create_tween()
-	lt.tween_property(target, "position:x", lunge_to, 0.12)
-	lt.tween_property(target, "position:x", target.position.x, 0.16)
+			_monster_die()
+	if kind == "heavy" or kind == "spell":
+		_hit_flash(avatar)
+		_shake(6.0)
+	if kind == "dmg" and not is_enemy_target:
+		_enemy_strike("lunge")
+		_hit_flash(avatar)
+		_shake(4.0)
 	_refresh_bars()
-	_refresh_actions()
-	if kind == "dmg" or kind == "heavy":
-		e_intent.text = "意图: %s" % _intent_text()
+	_refresh_slots()
 	var tw := create_tween()
 	tw.tween_interval(0.5)
 	tw.tween_callback(func() -> void: _run_events(evs))
 
 
 func _after_events() -> void:
+	_refresh_bars()
 	if fm.player_dead():
-		# 复活币: 有库存自动消耗, 以 60% 生命原地复活
 		if Wallet.try_consume_revive():
-			fm.hp = int(int(fm.stats["max_hp"]) * 0.6)
-			_floater("复活币生效!", 260.0, 240.0, AppTheme.GOLD)
-			_log("复活币发光 — 你重新站了起来!")
+			fm.revive()
 			_refresh_bars()
-			_refresh_actions()
+			_floater("复活币生效!", _px(0.17), _py(0.30), AppTheme.GOLD)
 			_busy = false
+			act_row.visible = true
 			return
 		_finish_run()
 		return
-	if fm.encounter_cleared():
-		fm.advance_stage()               # mob→boss→clear
-		if fm.all_stages_cleared():
-			_floor_cleared()             # 本层通关(祝福三选一)
-		else:
-			_next_encounter()            # 下一场: Boss(或小怪)
-			_refresh_actions()
-			_busy = false
+	if fm.phase == "round_end":
+		_show_round_banner()
+		return
+	if fm.phase == "over":
+		_finish_run()
 		return
 	_busy = false
+	_render()   # 战斗继续: 刷新按钮/意图
 
 
-## ── 通关/终局 ──
-func _floor_cleared() -> void:
-	fm.advance_stage()
-	var r: Dictionary = Wallet.grant_fight_reward(floor_num)
-	_run_diamonds += int(r["diamonds"])
-	Wallet.note_mission("m_fight")
-	_show_blessing_draft("奖励: %+d 钻石 · 本局累计 %d 钻" % [
-				int(r["diamonds"]), _run_diamonds])
+func _show_round_banner() -> void:
+	if _banner != null and is_instance_valid(_banner):
+		_banner.queue_free()
+	_banner = _label(30, AppTheme.GOLD)
+	if fm.phase == "round_end":
+		_banner.text = "第 %d 回合 胜利!" % fm.round_num
+	else:
+		_banner.text = ""
+	_banner.position = Vector2(_px(0.5) - 120.0, _py(0.30))
+	_banner.z_index = 20
+	add_child(_banner)
+	var tw := create_tween()
+	tw.tween_interval(1.2)
+	tw.tween_callback(func() -> void:
+		if _banner != null and is_instance_valid(_banner):
+			_banner.queue_free()
+		_banner = null
+		fm.advance_round()
+		_busy = false
+		_render())
 
 
+## ── 演出: 玩家出击(按皮肤差异化) / 怪物攻击(按类别差异化) / 受击 / 死亡 ──
+func _player_strike() -> void:
+	var skin := "skin_default"
+	if is_inside_tree():
+		var w := get_node_or_null("/root/Wallet")
+		if w != null:
+			skin = str(w.equipped_skin)
+	# 每个皮肤不同动作: 狐妖/花魁=疾冲, 鬼类=跳劈, 其他=直进
+	var hop := skin in ["skin_aka", "skin_ao", "skin_tengu"]
+	var dash := skin in ["skin_kitsu", "skin_oiran"]
+	var reach := 70.0 if dash else 52.0
+	var tw := create_tween()
+	if hop:
+		tw.tween_property(avatar, "position",
+				_player_home + Vector2(reach * 0.6, -46.0), 0.16)
+		tw.tween_property(avatar, "position",
+				_player_home + Vector2(reach, 0.0), 0.12)
+	else:
+		tw.tween_property(avatar, "position",
+				_player_home + Vector2(reach, 0.0), 0.16)
+	tw.tween_callback(func() -> void: _slash_flash(skin))
+	tw.tween_property(avatar, "position", _player_home, 0.2)
+
+
+## 挥砍弧光: 颜色取皮肤主色
+func _slash_flash(skin: String) -> void:
+	var col: Color = SkinsLib._skin_theme(skin).get("cloth", Color("e0a83c"))
+	var slash := SlashArc.new()
+	slash.color = col
+	slash.position = monster.position + monster.size / 2.0 - Vector2(60, 60)
+	slash.size = Vector2(120, 120)
+	slash.z_index = 15
+	battle_box.add_child(slash)
+	var tw := slash.create_tween()
+	tw.tween_interval(0.22)
+	tw.tween_callback(slash.queue_free)
+	_hit_flash(monster)
+
+
+func _enemy_strike(style: String) -> void:
+	var tw := create_tween()
+	if style == "slam":
+		tw.tween_property(monster, "position:y", _enemy_home.y - 40.0, 0.14)
+		tw.tween_property(monster, "position:y", _enemy_home.y + 6.0, 0.10)
+		tw.tween_callback(func() -> void: _shake(9.0))
+		tw.tween_property(monster, "position:y", _enemy_home.y, 0.14)
+	else:
+		tw.tween_property(monster, "position:x", _enemy_home.x - 46.0, 0.14)
+		tw.tween_property(monster, "position:x", _enemy_home.x, 0.18)
+
+
+func _monster_die() -> void:
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(monster, "modulate", Color(2.0, 2.0, 2.0, 0.0), 0.5)
+	tw.tween_property(monster, "rotation", 0.6, 0.5)
+	tw.tween_property(monster, "position:y", _enemy_home.y + 20.0, 0.5)
+	Audio.play("win")
+
+
+func _hit_flash(target: Control) -> void:
+	var tw := create_tween()
+	tw.tween_property(target, "modulate", Color(2.5, 1.2, 1.2), 0.06)
+	tw.tween_property(target, "modulate", Color.WHITE, 0.16)
+
+
+func _shake(strength: float) -> void:
+	if _shake_t > 0.0:
+		return
+	_shake_t = 0.18
+	var tw := create_tween()
+	for i in 5:
+		var off := Vector2(randf_range(-1, 1), randf_range(-1, 1)) * strength * 0.4
+		tw.tween_property(battle_box, "position", off, 0.035)
+	tw.tween_property(battle_box, "position", Vector2.ZERO, 0.035)
+
+
+func _floater(text: String, x: float, y: float, col: Color) -> void:
+	var lb := _label(24, col)
+	lb.text = text
+	lb.position = Vector2(x - 40.0, y)
+	lb.z_index = 10
+	floaters.add_child(lb)
+	var tw := lb.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lb, "position:y", y - 56.0, 0.6)
+	tw.tween_property(lb, "modulate:a", 0.0, 0.6).set_delay(0.1)
+	tw.chain().tween_callback(lb.queue_free)
+
+
+## ── 结算 ──
 func _finish_run() -> void:
 	if phase == "over":
 		return
 	phase = "over"
-	var r: Dictionary = Wallet.grant_fight_reward(floor_num, _bosses_killed)
+	var cleared := fm.round_num - 1 if not fm.run_won else fm.round_num
+	var r: Dictionary = Wallet.grant_fight_reward(cleared)
 	_run_diamonds += int(r["diamonds"])
+	Wallet.note_mission("m_fight")
 	Wallet.push_history({
 		"day": Time.get_date_string_from_system(),
-		"mode": "格斗", "floor": floor_num, "rank": 0, "points": 0,
+		"mode": "格斗", "floor": cleared, "rank": 0, "points": 0,
 		"gold": 0, "diamonds": _run_diamonds,
 	})
-	_show_overlay("试炼结束",
-			"到达第 %d 层 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账" % [
-				floor_num, int(r["best"]), _run_diamonds],
-			"返回菜单",
-			func() -> void:
-				_close_overlay()
-				closed.emit()
-				queue_free())
+	var title := "试炼通关!" if fm.run_won else "试炼结束"
+	var body := "通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账" % [
+		cleared, int(r["best"]), _run_diamonds]
+	_show_overlay(title, body, "返回菜单", func() -> void:
+		_close_overlay()
+		closed.emit()
+		queue_free())
 
 
 func _show_overlay(title: String, body: String, btn_text: String,
 		on_btn: Callable) -> void:
-	if overlay != null and is_instance_valid(overlay):
-		overlay.queue_free()
-	overlay = CenterContainer.new()
+	var overlay := CenterContainer.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
@@ -542,164 +773,97 @@ func _show_overlay(title: String, body: String, btn_text: String,
 	cc.add_child(btn)
 	box.add_child(cc)
 	add_child(overlay)
+	overlay.position = Vector2.ZERO
+	overlay.size = size
 
 
 func _close_overlay() -> void:
-	if overlay != null and is_instance_valid(overlay):
-		overlay.queue_free()
-	overlay = null
+	for c in get_children():
+		if c is CenterContainer:
+			c.queue_free()
 
 
-## ── 演出辅助 ──
-func _floater(text: String, x: float, y: float, col: Color) -> void:
-	var lb := _label(24, col)
-	lb.text = text
-	lb.position = Vector2(x, y)
-	lb.z_index = 10
-	floaters.add_child(lb)
-	var tw := lb.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(lb, "position:y", y - 56.0, 0.6)
-	tw.tween_property(lb, "modulate:a", 0.0, 0.6).set_delay(0.1)
-	tw.chain().tween_callback(lb.queue_free)
-
-
-func _log(text: String) -> void:
-	log_lbl.text = log_lbl.text + "\n" + text if log_lbl.text != "" else text
-	var lines := log_lbl.text.split("\n")
-	if lines.size() > 5:
-		log_lbl.text = "\n".join(lines.slice(lines.size() - 5))
-
-
-func _log_clear() -> void:
-	log_lbl.text = ""
-
-
-func _intent_text() -> String:
-	if fm.enemy.is_empty():
-		return ""
-	var it := str(fm.enemy.get("intent", "attack"))
-	if it == "heavy":
-		return "💥 重击(防御可减!)"
-	if it == "spell":
-		return "🔥 法术(魔抗可减!)"
-	return "⚔ 攻击"
-
-
-## 打击感: 战斗区随机抖动后回位
-func _shake(strength: float) -> void:
-	if _shake_t > 0.0:
+## ── 布局 ──
+func _relayout() -> void:
+	var w := size.x
+	var h := size.y
+	if w < 100.0 or h < 100.0:
 		return
-	_shake_t = 0.18
-	var tw := create_tween()
-	for i in 5:
-		var off := Vector2(rng_off(), rng_off()) * strength * 0.4
-		tw.tween_property(battle_box, "position",
-				Vector2.ZERO + off, 0.035)
-	tw.tween_property(battle_box, "position", Vector2.ZERO, 0.035)
+	back_btn.position = Vector2(w - 150.0, 26)
+	help_btn.position = Vector2(w - 260.0, 26)
+	round_lbl.position = Vector2(w / 2.0 - 130.0, 34)
+	# 左上装备槽区
+	slots_box.position = Vector2(36.0, 84.0)
+	slots_box.size = Vector2(minf(340.0, w * 0.3), 160.0)
+	# 战场: 玩家左下 / 怪物右上
+	_player_home = Vector2(w * 0.13, h * 0.46)
+	_enemy_home = Vector2(w * 0.62, h * 0.24)
+	avatar.position = _player_home
+	monster.position = _enemy_home
+	_layout_bars(w, h)
+	# 日志与按钮
+	log_lbl.position = Vector2(36.0, h - 176.0)   # 左下: 避开底部抽牌面板
+	log_lbl.custom_minimum_size = Vector2(minf(270.0, w * 0.24), 150.0)
+	act_row.position = Vector2(w * 0.32, h - 92.0)
+	act_row.custom_minimum_size = Vector2(w * 0.42, 60)
+	# 抽牌面板: 底部居中
+	draft_panel.position = Vector2(w / 2.0 - 320.0, h - 236.0)
+	draft_panel.custom_minimum_size = Vector2(640, 0)
+	draft_panel.size = Vector2(640, 220)
 
 
-func rng_off() -> float:
-	return randf_range(-1.0, 1.0)
+func _layout_bars(w: float, h: float) -> void:
+	# battle_box 子节点按创建顺序: [avatar, pname, php_bar, php_txt,
+	#  shield_bar, monster, e_name, e_intent, ehp_bar, ehp_txt, floaters]
+	var kids := battle_box.get_children()
+	if kids.size() < 10:
+		return
+	var pname: Control = kids[1]
+	pname.position = _player_home + Vector2(-10.0, 142.0)
+	var php_bar: Control = kids[2]
+	php_bar.position = _player_home + Vector2(-10.0, 170.0)
+	php_fg.size = Vector2(maxf(php_bar.size.x * _hp_frac() - 4.0, 2.0), 14)
+	php_txt.position = php_bar.position + Vector2(0.0, 20.0)
+	var shield_bar: Control = kids[4]
+	shield_bar.position = php_bar.position + Vector2(0.0, 40.0)
+	shield_fg.size = Vector2(maxf(shield_bar.size.x * _shield_frac(), 0.0), 6)
+	e_name.position = _enemy_home + Vector2(-30.0, -34.0)
+	e_intent.position = _enemy_home + Vector2(-30.0, -12.0)
+	var ehp_bar: Control = kids[8]
+	ehp_bar.position = _enemy_home + Vector2(-20.0, 202.0)
+	ehp_fg.size = Vector2(maxf(ehp_bar.size.x * _enemy_hp_frac() - 4.0, 2.0), 14)
+	ehp_txt.position = ehp_bar.position + Vector2(0.0, 20.0)
 
 
-## 祝福徽章刷新
-func _refresh_bless_chips() -> void:
-	for c in bless_row.get_children():
-		c.queue_free()
-	for b_id in fm.blessings:
-		var chip := AppTheme.make_label(13, AppTheme.GOLD)
-		var bname := ""
-		for b in FightModeGd.BLESSINGS:
-			if str(b["id"]) == str(b_id):
-				bname = str(b["name"])
-		chip.text = "·%s·" % bname
-		bless_row.add_child(chip)
+func _hp_frac() -> float:
+	var mh: int = maxi(int(fm.stats["max_hp"]), 1)
+	return float(clampi(fm.hp, 0, mh)) / float(mh)
 
 
-## 通关三选一祝福
-func _show_blessing_draft(reward_text: String) -> void:
-	var picks: Array = fm.roll_blessings()
-	overlay = CenterContainer.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(dim)
-	var panel := PanelContainer.new()
-	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
-	sb.content_margin_left = 40
-	sb.content_margin_right = 40
-	sb.content_margin_top = 26
-	sb.content_margin_bottom = 28
-	panel.add_theme_stylebox_override("panel", sb)
-	overlay.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	panel.add_child(box)
-	var t := AppTheme.make_label(30, AppTheme.GOLD)
-	t.text = "第 %d 层 通关!" % floor_num
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(t)
-	var b := AppTheme.make_label(15, AppTheme.WHITE)
-	b.text = reward_text + "
-选择一项祝福(立即生效, 可叠加):"
-	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(b)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
-	box.add_child(row)
-	for m in picks:
-		var mid := str(m["id"])
-		var btn := AppTheme.make_button("%s
-%s" % [str(m["name"]), str(m["desc"])],
-				Vector2(190, 76), 14)
-		btn.pressed.connect(func() -> void:
-			Audio.play("win")
-			fm.add_blessing(mid)
-			_refresh_bless_chips()
-			_after_blessing(mid))
-		row.add_child(btn)
-	var skip_cc := CenterContainer.new()
-	var skip := AppTheme.make_button("跳过(不选祝福)", Vector2(220, 42), 14)
-	skip.pressed.connect(func() -> void:
-		Audio.play("click")
-		_after_blessing(null))
-	skip_cc.add_child(skip)
-	box.add_child(skip_cc)
-	add_child(overlay)
+func _shield_frac() -> float:
+	var mh: int = maxi(int(fm.stats["max_hp"]), 1)
+	return clampf(float(fm.shield) / float(mh), 0.0, 1.0)
 
 
-func _after_blessing(_picked) -> void:
-	_goto_next_floor()
+func _enemy_hp_frac() -> float:
+	if fm.enemy.is_empty():
+		return 0.0
+	var eh: int = maxi(int(fm.enemy["max_hp"]), 1)
+	return float(clampi(int(fm.enemy["hp"]), 0, eh)) / float(eh)
 
 
-func _goto_next_floor() -> void:
-	_close_overlay()
-	floor_num += 1
-	_rerolled = false
-	fm.next_floor()
-	fm.equip(fm.hand)
-	phase = "battle"
-	for c in hand_row.get_children():
-		c.queue_free()
-	for id in fm.hand:
-		var cv: Control = CardViewScript.new(int(id))
-		cv.custom_minimum_size = Vector2(60, 84)
-		cv.size = Vector2(60, 84)
-		hand_row.add_child(cv)
-	stage_lbl.text = "第 %d 层 · 小怪战" % floor_num
-	_next_encounter()
-	_refresh_bars()
-	_refresh_combo_chip()
-	_refresh_bless_chips()
-	_refresh_actions()
-	_busy = false
+## 挥砍弧光(攻击演出)
+class SlashArc extends Control:
+	var color := Color("e0a83c")
+
+	func _draw() -> void:
+		draw_arc(Vector2.ZERO, size.x * 0.46, PI * 0.9, PI * 1.9, 20,
+				Color(color, 0.9), size.x * 0.08, true)
+		draw_arc(Vector2.ZERO, size.x * 0.30, PI * 1.0, PI * 1.8, 16,
+				Color(1, 1, 1, 0.7), size.x * 0.04, true)
 
 
-## 音效统一入口(与牌桌同款: 页面隐藏时不发声)
+## 音效统一入口(页面隐藏时不发声)
 func _sfx(sfx_name: String) -> void:
 	if visible:
 		Audio.play(sfx_name)

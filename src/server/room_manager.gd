@@ -341,9 +341,9 @@ func rogue_pick(peer: int, idx: int) -> Array:
 	return out
 
 
-## 格斗对战: 选牌(仅格斗者座位合法, 观战者/重复选牌被拒)
-func fight_pick(peer: int, cards: Array) -> Array:
-	return _fight_action(peer, "pick", cards)
+## 格斗对战: 选牌(候选/槽位/跳过由 data 携带; 仅格斗者座位合法)
+func fight_pick(peer: int, data: Dictionary) -> Array:
+	return _fight_action(peer, "pick", data)
 
 
 ## 格斗对战: 回合行动 attack/skill/defend(仅当前回合格斗者合法)
@@ -360,9 +360,13 @@ func _fight_action(peer: int, kind: String, payload) -> Array:
 				"data": {"code": "no_match", "msg": "没有进行中的格斗对局"}})
 		return out
 	var seat: int = room.seat_of_peer(peer)
-	var r: Dictionary = (room.match_ctl.human_pick(seat, payload, Time.get_ticks_msec())
-			if kind == "pick"
-			else room.match_ctl.human_act(seat, str(payload), Time.get_ticks_msec()))
+	var r: Dictionary
+	if kind == "pick":
+		var data: Dictionary = payload
+		r = room.match_ctl.human_pick(seat, int(data.get("cand", -1)),
+				int(data.get("slot", -1)), Time.get_ticks_msec())
+	else:
+		r = room.match_ctl.human_act(seat, str(payload), Time.get_ticks_msec())
 	if not bool(r["changed"]):
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": str(r.get("error", "invalid")), "msg": "非法操作"}})

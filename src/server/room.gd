@@ -160,11 +160,8 @@ func _start_fight(now_ms: int, ai_delay_ms: int, phase_delay_ms: int) -> Diction
 		peers.append(int(seat_data["peer"]) if not bool(seat_data["bot"]) else -1)
 		online.append(bool(seat_data["online"]) and not bool(seat_data["bot"]))
 	var seed_v := token_rng.randi_range(1, 1000000000)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_v
-	var candidates := FightPvpGd.roll_candidates(rng)
-	match_ctl = FightMatchGd.new(seed_v, candidates, fighters, names,
-			peers, online, ai_delay_ms, phase_delay_ms, now_ms)
+	match_ctl = FightMatchGd.new(seed_v, fighters, names, peers, online,
+			ai_delay_ms, phase_delay_ms, now_ms)
 	return {"ok": true, "match_ctl": match_ctl}
 
 

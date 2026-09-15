@@ -318,7 +318,7 @@ func c_rogue_pick(data: Dictionary) -> void:
 func c_fight_pick(data: Dictionary) -> void:
 	if not is_server:
 		return
-	_flush(manager.fight_pick(_sender(), data.get("cards", [])))
+	_flush(manager.fight_pick(_sender(), data))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -652,9 +652,9 @@ func exchange_return(cards: Array) -> void:
 	_c_send("c_exchange_return", {"cards": cards})
 
 
-## 格斗对战: 提交选牌(5 张)
-func send_fight_pick(cards: Array) -> void:
-	_c_send("c_fight_pick", {"cards": cards})
+## 格斗对战: 选牌(候选值, 槽满替换时带槽位; -1 跳过)
+func send_fight_pick(cand: int, slot: int = -1) -> void:
+	_c_send("c_fight_pick", {"cand": cand, "slot": slot})
 
 
 ## 格斗对战: 回合行动 attack/skill/defend

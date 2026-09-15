@@ -290,6 +290,7 @@ func _teardown() -> void:
 			main.menu._close_mode_select()
 		7:
 			_press_text(main.fight_panel, "放弃试炼")
+			_press_text(main.fight_panel, "返回菜单")  # 结算面板确认后真正关闭
 		8:
 			main.lobby.go_back()
 		9:
