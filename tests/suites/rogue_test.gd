@@ -18,6 +18,7 @@ func run(t) -> void:
 	_mod_no_exchange(t)
 	_mod_score_negate(t)
 	_mod_eight_gift(t)
+	_rarity(t)
 
 
 const Cats = preload("res://src/rules/game_state.gd")
@@ -239,3 +240,22 @@ func _mod_eight_gift(t) -> void:
 			"死牌堆 -1")
 
 
+
+
+## 命运卡稀有度: 字段完整 / 权重抽取合法 / 视图下发
+func _rarity(t) -> void:
+	var rars := ["common", "epic", "legend"]
+	for m in GameStateGd.ROGUE_MODS:
+		t.expect(rars.has(str(m.get("rar", ""))), "命运卡 %s 有稀有度" % str(m["id"]))
+	var rars_seen := {"common": 0, "epic": 0, "legend": 0}
+	for i in 400:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 9000 + i
+		var weights: Array = []
+		for m in GameStateGd.ROGUE_MODS:
+			weights.append({"common": 5, "epic": 3, "legend": 1}[str(m.get("rar", "common"))])
+		var a: int = GameStateGd._weighted_pick(GameStateGd.ROGUE_MODS, weights, rng)
+		t.expect(a >= 0 and a < GameStateGd.ROGUE_MODS.size(), "权重抽取合法")
+		rars_seen[str(GameStateGd.ROGUE_MODS[a]["rar"])] = 				int(rars_seen[str(GameStateGd.ROGUE_MODS[a]["rar"])]) + 1
+	t.expect(int(rars_seen["legend"]) < int(rars_seen["common"]),
+			"传说比普通稀有(%d vs %d)" % [rars_seen["legend"], rars_seen["common"]])

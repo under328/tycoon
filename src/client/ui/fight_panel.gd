@@ -56,6 +56,10 @@ var draft_ops: HBoxContainer
 var battle_box: Control
 var _shake_t := 0.0
 var overlay: CenterContainer = null   # 结算弹窗(成员持有, 关闭可靠)
+var fury_bar: ColorRect
+var fury_fg: ColorRect
+var hits_lbl: Label
+var act_ult: Button
 var _bob_t := 0.0
 var _player_home: Vector2
 var _enemy_home: Vector2
@@ -183,6 +187,19 @@ func _ready() -> void:
 	ehp_txt = _label(12, AppTheme.WHITE)
 	battle_box.add_child(ehp_txt)
 
+	# 怒气条(奥义能量, 金色)
+	fury_bar = ColorRect.new()
+	fury_bar.color = Color(0, 0, 0, 0.45)
+	fury_bar.size = Vector2(240, 8)
+	battle_box.add_child(fury_bar)
+	fury_fg = ColorRect.new()
+	fury_fg.color = Color("ffd166")
+	fury_bar.add_child(fury_fg)
+	# 连击大字(中央)
+	hits_lbl = _label(44, Color("ffd166"))
+	hits_lbl.visible = false
+	hits_lbl.z_index = 15
+	battle_box.add_child(hits_lbl)
 	floaters = Control.new()
 	floaters.set_anchors_preset(Control.PRESET_FULL_RECT)
 	floaters.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -201,12 +218,16 @@ func _ready() -> void:
 	act_atk = AppTheme.make_button("⚔ 攻击", Vector2(160, 56), 18)
 	act_skill = AppTheme.make_button("✨ 技能", Vector2(160, 56), 18)
 	act_def = AppTheme.make_button("🛡 防御", Vector2(160, 56), 18)
+	act_ult = AppTheme.make_button("⚡ 奥义", Vector2(160, 56), 18)
+	act_ult.disabled = true
 	act_atk.pressed.connect(func() -> void: _on_action("attack"))
 	act_skill.pressed.connect(func() -> void: _on_action("skill"))
 	act_def.pressed.connect(func() -> void: _on_action("defend"))
+	act_ult.pressed.connect(func() -> void: _on_action("ult"))
 	act_row.add_child(act_atk)
 	act_row.add_child(act_skill)
 	act_row.add_child(act_def)
+	act_row.add_child(act_ult)
 
 	# ── 抽牌面板(底部) ──
 	draft_panel = PanelContainer.new()
@@ -247,6 +268,18 @@ func _label(size_num: int, color: Color) -> Label:
 	return lb
 
 
+func _update_hits() -> void:
+	if fm != null and fm.phase == "battle" and fm.hits >= 2:
+		hits_lbl.visible = true
+		hits_lbl.text = "COMBO x%d" % fm.hits
+		hits_lbl.position = Vector2(_px(0.5) - 90.0, _py(0.16))
+		var tw := create_tween()
+		hits_lbl.scale = Vector2(1.25, 1.25)
+		tw.tween_property(hits_lbl, "scale", Vector2.ONE, 0.12)
+	else:
+		hits_lbl.visible = false
+
+
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
 	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
@@ -254,6 +287,7 @@ func _render() -> void:
 			str(FightModeGd.GROUPS[fm.group]["name"])]
 	_refresh_slots()
 	_refresh_bars()
+	_update_hits()
 	var is_battle: bool = fm.phase == "battle"
 	var is_draft: bool = fm.phase == "draft"
 	battle_box.visible = is_battle or is_draft
@@ -398,6 +432,9 @@ func _render_draft() -> void:
 
 
 func _build_normal_card(card: int) -> Control:
+	var rare := card >= 200
+	if rare:
+		card = card - 200   # 稀有普通牌: 显示剥离后的卡面
 	var wrap := PanelContainer.new()
 	var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 10, 1)
 	wrap.add_theme_stylebox_override("panel", sb)
@@ -420,9 +457,9 @@ func _build_normal_card(card: int) -> Control:
 	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
 	if fm.slots.size() >= 5:
-		hint.text = tr("替换后 %s") % tr(str(combo["name"]))
+		hint.text = ((tr("稀有!") + " ") if rare else "") 				+ tr("替换后 %s") % tr(str(combo["name"]))
 	else:
-		hint.text = tr("装备后 %s") % tr(str(combo["name"]))
+		hint.text = ((tr("稀有!") + " ") if rare else "") 				+ tr("装备后 %s") % tr(str(combo["name"]))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -479,6 +516,9 @@ func _on_candidate(cand: int) -> void:
 	var r: Dictionary = fm.draft_pick(cand)
 	if not bool(r["ok"]):
 		return
+	if cand >= 200:
+		_floater(tr("稀有卡! 生命上限 +8%"), _px(0.5), _py(0.30),
+				Color("ffd166"))
 	if cand >= 100:
 		var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
 		_floater("%s %s" % [str(meta["icon"]), str(meta["name"])],
@@ -492,6 +532,8 @@ func _refresh_bars() -> void:
 	var mh: int = maxi(int(fm.stats["max_hp"]), 1)
 	php_fg.size = Vector2(236.0 * clampi(fm.hp, 0, mh) / float(mh), 14)
 	php_txt.text = "HP %d / %d" % [maxi(fm.hp, 0), mh]
+	if fury_fg != null:
+		fury_fg.size = Vector2(236.0 * float(fm.fury) / 100.0, 8)
 	shield_fg.size = Vector2(240.0 * clampi(float(fm.shield),
 			0.0, float(mh)) / float(mh), 6)
 	if fm.phase == "battle" and not fm.enemy.is_empty():
@@ -518,6 +560,7 @@ func _refresh_actions() -> void:
 	var icon := "🔥" if kind == "fire" else ("❄" if kind == "frost" else "✟")
 	var label := "火球" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
 	act_skill.disabled = cd > 0
+	act_ult.disabled = fm.fury < 100
 	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 \
 			else (tr("%s 冷却 %d") % [icon, cd])
 
@@ -572,6 +615,16 @@ func _run_events(evs: Array) -> void:
 			_sfx("pop")
 		"defend":
 			_floater("防御", _px(0.17), _py(0.30), Color("7ec8ff"))
+		"ult":
+			_floater(tr("奥义 -%d") % int(ev["v"]), _px(0.68), _py(0.30), AppTheme.GOLD)
+			_shake(12.0)
+			_sfx("crit")
+		"parry":
+			_floater(tr("完美格挡! 反击 -%d") % int(ev["v"]), _px(0.68), _py(0.36), Color("7ec8ff"))
+			_sfx("crit")
+		"combo":
+			_update_hits()   # 连击大字刷新
+			_sfx("tick")
 		"chilled":
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
@@ -850,6 +903,8 @@ func _layout_bars(w: float, h: float) -> void:
 	php_txt.position = php_bar.position + Vector2(0.0, 20.0)
 	var shield_bar: Control = kids[4]
 	shield_bar.position = php_bar.position + Vector2(0.0, 40.0)
+	fury_bar.position = shield_bar.position + Vector2(0.0, 12.0)
+	fury_fg.size = Vector2(maxf(fury_bar.size.x * float(fm.fury) / 100.0, 0.0), 8)
 	shield_fg.size = Vector2(maxf(shield_bar.size.x * _shield_frac(), 0.0), 6)
 	e_name.position = _enemy_home + Vector2(-30.0, -34.0)
 	e_intent.position = _enemy_home + Vector2(-30.0, -12.0)

@@ -127,6 +127,8 @@ func _auto_pick(seat: int) -> void:
 ## AI 行动启发式: 技能好了一般放; 残血三成概率防御; 否则普攻
 func _auto_act(seat: int) -> Array:
 	var act := "attack"
+	if int(state["battle"]["fury"][seat]) >= 100:
+		act = "ult"   # 怒气满优先奥义
 	var hp := int(state["battle"]["hp"][seat])
 	var mh := maxi(int(state["battle"]["max_hp"][seat]), 1)
 	if int(state["battle"]["skill_cd"][seat]) <= 0 and _rng.randf() < 0.65:

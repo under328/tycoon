@@ -3,6 +3,8 @@
 class_name View
 extends RefCounted
 
+const GameStateGd = preload("res://src/rules/game_state.gd")
+
 
 static func build(st: Dictionary, seat: int) -> Dictionary:
 	return {
@@ -31,7 +33,20 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"must_include": st["must_include"],
 		"rogue_mod": str(st["cfg"].get("rogue_mod", "")),
 		"rogue_choices": (st.get("rogue_choices", []) as Array).duplicate(),
+		"rogue_rar": _rogue_rar(st),
 	}
+
+
+## 候选命运卡的稀有度(与 rogue_choices 一一对应)
+static func _rogue_rar(st: Dictionary) -> Array:
+	var out: Array = []
+	for cid in st.get("rogue_choices", []):
+		var rar := "common"
+		for m in GameStateGd.ROGUE_MODS:
+			if str(m["id"]) == str(cid):
+				rar = str(m.get("rar", "common"))
+		out.append(rar)
+	return out
 
 
 static func _pending_return(st: Dictionary) -> Dictionary:

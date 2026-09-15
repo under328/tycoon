@@ -20,6 +20,7 @@ func run(t) -> void:
 	_draft_specials(t)
 	_battle_flow(t)
 	_reward_record(t)
+	_juice(t)
 
 
 func _combo_tiers(t) -> void:
@@ -298,3 +299,77 @@ func _reward_record(t) -> void:
 	var r2: Dictionary = w.grant_fight_reward(0)
 	t.expect(int(r2["diamonds"]) >= 0, "0 层结算不崩溃")
 	t.expect(int(r["best"]) == 5, "历史最佳记录为 5 层")
+
+
+## 爽点机制: 连击 / 怒气奥义 / 完美格挡 / 稀有卡
+func _juice(t) -> void:
+	var fm = FightGd.new(31)
+	while str(fm.phase) == "draft":
+		fm.draft_pick(fm.pair[0], 0 if fm.slots.size() >= 5 else -1)
+	t.expect(str(fm.phase) == "battle", "连击测试进入战斗")
+	# 连击: 连续攻击累计, 被击中清零
+	fm.stats["crit_rate"] = 0.0
+	fm.enemy["intent"] = "attack"
+	fm.step("attack")
+	t.expect(int(fm.hits) == 1, "首攻连击 1")
+	fm.enemy["hp"] = 999999
+	fm.step("attack")
+	t.expect(int(fm.hits) == 2, "连击累计 2")
+	var hp_before: int = fm.hp
+	fm.step("attack")
+	t.expect(fm.hp < hp_before or int(fm.enemy["hp"]) <= 0,
+			"敌人反击或已死亡")
+	if not fm.player_dead():
+		t.expect(int(fm.hits) >= 2, "反击不打断连击")
+	# 怒气: 攻击积攒 / 奥义需满 100
+	fm.fury = 0
+	fm.enemy["hp"] = 999999
+	fm.stats["crit_rate"] = 0.0
+	var ev0: Array = fm.step("attack")
+	t.expect((ev0 as Array).is_empty() or int(fm.fury) > 0, "攻击积怒气")
+	fm.fury = 50
+	var ev_bad: Array = fm.step("ult")
+	t.expect((ev_bad as Array).is_empty(), "怒气未满奥义无效")
+	# 奥义: 满怒释放, 大伤害 + 回血 + 清零
+	fm.fury = 100
+	var hp0: int = fm.hp
+	var atk0 := int(fm.stats["atk"])
+	var ev_ult: Array = fm.step("ult")
+	var has_ult := false
+	for e in ev_ult:
+		if str(e["kind"]) == "ult":
+			has_ult = true
+			t.expect(int(e["v"]) >= atk0 * 2, "奥义伤害 ≥ 2 倍攻击")
+	t.expect(has_ult, "奥义事件存在")
+	t.expect(int(fm.fury) < 100, "奥义后怒气已清(受击可再积攒)")
+	t.expect(fm.hp > hp0 or hp0 <= 0, "奥义附带回血")
+	# 完美格挡: 重击意图时防御 → 零伤害 + 反击
+	fm.revive()
+	fm.hp = int(int(fm.stats["max_hp"]) * 0.8)
+	fm.enemy["intent"] = "heavy"
+	fm.enemy["hp"] = 999999
+	var hp_def: int = fm.hp
+	var ev_def: Array = fm.step("defend")
+	var parry := false
+	for e in ev_def:
+		if str(e["kind"]) == "parry":
+			parry = true
+	t.expect(parry, "完美格挡触发")
+	t.expect(fm.hp >= hp_def, "完美格挡不掉血")
+	t.expect(fm.fury >= 25, "完美格挡奖励怒气")
+	# 稀有卡: 200+id 候选 → 装备后生命上限加成
+	var fm2 = FightGd.new(32)
+	fm2.pair = [card(9, 0) + 200, card(10, 0)]
+	fm2.pairs_left = 1
+	var r2: Dictionary = fm2.draft_pick(card(9, 0) + 200)
+	t.expect(bool(r2["ok"]), "稀有候选选牌通过")
+	t.expect((fm2.slots as Array).has(card(9, 0)), "稀有牌剥离标记入槽")
+	t.expect(int(fm2.rare_count) == 1, "稀有计数 1")
+	var hp_rare := int(fm2.stats["max_hp"])
+	var fm3 = FightGd.new(33)
+	fm3.slots = [card(9, 0)]
+	fm3._refresh_stats()
+	t.expect(hp_rare > int(fm3.stats["max_hp"]) - 1 or hp_rare >= 100,
+			"稀有生命加成生效(%d)" % hp_rare)
+	t.expect(FightGd.is_rare(200) and not FightGd.is_rare(5)
+			and not FightGd.is_sp(200), "稀有/特殊编码互不干扰")

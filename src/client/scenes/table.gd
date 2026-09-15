@@ -619,10 +619,15 @@ func _show_rogue_choice() -> void:
 				meta = m
 				break
 		var idx := i
+		var rar := str(meta.get("rar", "common"))
+		var rar_col: Color = Color("ffd166") if rar == "legend" 				else (Color("b070e0") if rar == "epic" else Color.WHITE)
+		var rar_tag: String = str({"legend": "★ 传说", "epic": "◆ 史诗",
+				"common": ""}.get(rar, ""))
 		var pick := AppTheme.make_button(
-				"【%s】%s
-%s" % [meta.get("glyph", "?"), meta.get("name", ""),
+				"%s【%s】%s
+%s" % [rar_tag, meta.get("glyph", "?"), meta.get("name", ""),
 				meta.get("desc", "")], Vector2(330, 130), 16)
+		pick.add_theme_color_override("font_color", rar_col)
 		pick.pressed.connect(func() -> void:
 			Audio.play("win")
 			if mode == "online" and net != null:

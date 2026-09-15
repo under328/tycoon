@@ -211,6 +211,7 @@ static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> v
 	var b := {
 		"hp": {}, "max_hp": {}, "shield": {}, "stats": {}, "combo": {},
 		"guard": {}, "chilled": {}, "skill_cd": {}, "first_used": {},
+		"fury": {},
 		"turn": -1, "battle_round": 0,
 	}
 	for seat in st["fighters"]:
@@ -227,6 +228,7 @@ static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> v
 		b["chilled"][seat] = false
 		b["skill_cd"][seat] = 0
 		b["first_used"][seat] = false
+		b["fury"][seat] = 0
 	var fa: int = st["fighters"][0]
 	var fb: int = st["fighters"][1]
 	var ra: int = FightGd.TIER_RANK.find(str(b["combo"][fa]["tier"]))
@@ -246,15 +248,20 @@ static func apply_action(st: Dictionary, seat: int, action: String,
 		return {"ok": false, "error": "not_fighter", "events": []}
 	if int(b["turn"]) != seat:
 		return {"ok": false, "error": "not_turn", "events": []}
-	if not action in ["attack", "skill", "defend"]:
+	if not action in ["attack", "skill", "defend", "ult"]:
 		return {"ok": false, "error": "bad_action", "events": []}
 	if action == "skill" and int(b["skill_cd"][seat]) > 0:
 		return {"ok": false, "error": "skill_cd", "events": []}
+	if action == "ult" and int(b["fury"][seat]) < 100:
+		return {"ok": false, "error": "no_fury", "events": []}
 	b["battle_round"] = int(b["battle_round"]) + 1
 	var foe := foe_of(st, seat)
 	var evs := _resolve(st, seat, foe, action, rng)
+	if action != "ult":
+		b["fury"][seat] = mini(int(b["fury"][seat]) + 4, 100)   # 基础积攒
 	# 击倒对方 → 胜; 荆棘反杀自己 → 对方胜(都不再轮转)
 	if int(b["hp"][foe]) <= 0:
+		b["fury"][seat] = mini(int(b["fury"][seat]) + 30, 100)   # 击倒奖励
 		_end_round(st, seat)
 	elif int(b["hp"][seat]) <= 0:
 		b["hp"][seat] = 0
@@ -272,7 +279,7 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 	var f: Dictionary = b["stats"][foe]
 	if action != "skill" and int(b["skill_cd"][actor]) > 0:
 		b["skill_cd"][actor] = int(b["skill_cd"][actor]) - 1
-	# 泉涌
+	# 受击积怒气(泉涌处理前统一放在命中结算后)
 	if bool(a.get("regen", false)):
 		var hp_now: int = int(b["hp"][actor])
 		var mh: int = int(b["max_hp"][actor])
@@ -294,6 +301,7 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 			dmg = _hit(b, actor, foe, dmg, _mitigate(int(f["def"])), guard_on)
 			evs.append(_ev(actor, foe, "crit" if crit else "dmg", dmg))
 			_vamp(b, actor, dmg, evs)
+			b["fury"][actor] = mini(int(b["fury"][actor]) + 12, 100)
 		"skill":
 			var dmg := maxi(int(float(a["skill"]) * rng.randf_range(0.9, 1.2)), 1)
 			var kind := str(a.get("skill_kind", "fire"))
@@ -315,12 +323,23 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 			evs.append(_ev(actor, foe, "skill", dmg))
 			_vamp(b, actor, dmg, evs)
 			b["skill_cd"][actor] = 2
+			b["fury"][actor] = mini(int(b["fury"][actor]) + 8, 100)
 		"defend":
 			b["guard"][actor] = true
 			var heal := maxi(int(b["max_hp"][actor]) / 25, 3)
 			b["hp"][actor] = mini(int(b["hp"][actor]) + heal,
 					int(b["max_hp"][actor]))
 			evs.append(_ev(actor, actor, "defend", heal))
+		"ult":
+			# 奥义: 2.2 倍攻击必中(无视减伤) + 回复 15% 生命, 怒气清零
+			var dmg := maxi(int(float(a["atk"]) * 2.2), 1)
+			dmg = _hit(b, actor, foe, dmg, 1.0, false)
+			b["fury"][actor] = 0
+			var uhl := maxi(int(int(b["max_hp"][actor]) * 0.15), 1)
+			b["hp"][actor] = mini(int(b["hp"][actor]) + uhl,
+					int(b["max_hp"][actor]))
+			evs.append(_ev(actor, actor, "heal", uhl))
+			evs.append(_ev(actor, foe, "ult", dmg))
 	# 顺子追击
 	if action != "defend" and bool(a.get("straight", false)) \
 			and int(b["battle_round"]) % 3 == 0 and int(b["hp"][foe]) > 0:
@@ -365,6 +384,7 @@ static func _hit(b: Dictionary, actor: int, foe: int, dmg: int,
 		b["shield"][foe] = sh - absorbed
 		dmg -= absorbed
 	b["hp"][foe] = int(b["hp"][foe]) - dmg
+	b["fury"][foe] = mini(int(b["fury"][foe]) + 8, 100)   # 受击积怒气
 	return dmg
 
 
@@ -462,6 +482,7 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 		v["hp"] = (b["hp"] as Dictionary).duplicate()
 		v["max_hp"] = (b["max_hp"] as Dictionary).duplicate()
 		v["shield"] = (b["shield"] as Dictionary).duplicate()
+		v["fury"] = (b["fury"] as Dictionary).duplicate()
 		v["skill_cd"] = (b["skill_cd"] as Dictionary).duplicate()
 		v["my_turn"] = int(b["turn"]) == my_seat and str(st["phase"]) == "battle"
 		v["hands"] = {}

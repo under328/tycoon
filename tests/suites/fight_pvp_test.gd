@@ -16,6 +16,7 @@ func run(t: T) -> void:
 	_test_controller(t)
 	_test_manager_integration(t)
 	_test_bot_full_match(t)
+	_test_fury(t)
 
 
 ## ── 模式配置: mode 字段与 rogue 开关双向同步 ──
@@ -263,3 +264,42 @@ func _test_bot_full_match(t: T) -> void:
 	t.expect(m.rooms.get(code) != null and m.rooms[code].match_ctl == null,
 			"人机格斗可自动打完(%d tick)" % guard)
 	t.expect(out.size() > 0, "开局有广播")
+
+
+## 联机奥义: 怒气满可放大招, 未满被拒, 击倒奖励怒气
+func _test_fury(t) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 808
+	var st := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+	FightPvpGd.open_round(st, rng)
+	var guard := 0
+	while str(st["phase"]) == "draft" and guard < 40:
+		guard += 1
+		for seat in st["fighters"]:
+			var per: Dictionary = st["per"][seat]
+			if not bool(per["done"]):
+				var cand: int = (per["pair"] as Array)[0]
+				var slot := -1
+				if cand < 100 and (per["slots"] as Array).size() >= 5:
+					slot = 0
+				FightPvpGd.draft_pick(st, int(seat), cand, slot, rng)
+	t.expect(str(st["phase"]) == "battle", "编成完成进入对战")
+	# 怒气未满 → 奥义被拒
+	var turn := int(st["battle"]["turn"])
+	st["battle"]["fury"][turn] = 0
+	var bad: Dictionary = FightPvpGd.apply_action(st, turn, "ult", rng)
+	t.expect(str(bad["error"]) == "no_fury", "怒气未满奥义被拒")
+	# 怒气满 → 奥义: 大伤害 + 回血 + 清零
+	st["battle"]["fury"][turn] = 100
+	var foe := FightPvpGd.foe_of(st, turn)
+	var hp0 := int(st["battle"]["hp"][foe])
+	var ok: Dictionary = FightPvpGd.apply_action(st, turn, "ult", rng)
+	t.expect(bool(ok["ok"]), "奥义可用")
+	t.expect(int(st["battle"]["hp"][foe]) < hp0, "奥义造成伤害")
+	t.expect(int(st["battle"]["fury"][turn]) == 0, "奥义后怒气清零")
+	t.expect((ok["events"] as Array).any(
+			func(e: Dictionary) -> bool: return str(e["kind"]) == "ult"),
+			"奥义事件存在")
+	# 视图下发 fury
+	var v: Dictionary = FightPvpGd.view(st, turn)
+	t.expect((v.get("fury", {}) as Dictionary).has(turn), "视图下发怒气")

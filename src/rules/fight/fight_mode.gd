@@ -81,6 +81,9 @@ var locked := -1           # 锁环保留的候选(下回合重新出现)
 var comp := false          # 当前候选组是否为补抽(普通限定)
 
 var hp := 0
+var hits := 0              # 连击数(连续进攻不被打断; 被击中清零)
+var fury := 0              # 怒气 0-100(满则可释放奥义大招)
+var rare_count := 0        # 已装备稀有卡数(每张 +8% 生命上限)
 var stats := {}            # 派生属性(含特殊牌修正)
 var combo := {}            # 当前装备牌型
 var enemy := {}            # {name, kind, group, hp, max_hp, atk, intent}
@@ -121,7 +124,16 @@ func _shuffle(a: Array) -> void:
 # ---------------------------------------------------------------- 抽牌阶段
 
 static func is_sp(cand: int) -> bool:
-	return cand >= 100
+	return cand >= 100 and cand < 200
+
+
+## 稀有普通牌(金框): 装备后永久 +8% 生命上限
+static func is_rare(cand: int) -> bool:
+	return cand >= 200
+
+
+static func card_of(cand: int) -> int:
+	return cand - 200 if cand >= 200 else cand
 
 
 static func sp_of(cand: int) -> int:
@@ -140,7 +152,10 @@ func _roll_candidate(normal_only: bool) -> int:
 		return 100 + sp
 	if deck.is_empty():  # 理论不会发生(52 张远大于消耗)
 		return rng.randi_range(0, 51)
-	return deck.pop_at(rng.randi() % deck.size())
+	var card: int = deck.pop_at(rng.randi() % deck.size())
+	if rng.randf() < 0.12:   # 稀有普通牌(金框)
+		return 200 + card
+	return card
 
 
 ## 开启本回合候选组
@@ -206,15 +221,19 @@ func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 		else:
 			_after_pair_resolved()
 			return {"ok": true, "error": ""}
-	# 普通牌
+	# 普通牌(稀有牌剥离金框标记后入槽)
 	if slots.size() >= 5:
 		if slot < 0 or slot >= 5:
 			return {"ok": false, "error": "need_slot"}   # 等待 UI 选槽/跳过
-		slots[slot] = cand
+		slots[slot] = card_of(cand)
 		_log(tr("替换装备: 槽位 %d → %s") % [slot + 1, CardsGd.label(cand)])
 	else:
-		slots.append(cand)
+		slots.append(card_of(cand))
 		_log(tr("装备 %s(%d/5)") % [CardsGd.label(cand), slots.size()])
+	if is_rare(cand):
+		rare_count += 1
+		fury = mini(fury + 20, 100)
+		_log(tr("稀有卡! 生命上限永久 +8%"))
 	_refresh_stats()
 	# 锁环: 记录本组未选中的候选(补抽组不触发, 仅主组)
 	if specials.has(1) and not comp:
@@ -262,6 +281,7 @@ func _start_battle() -> void:
 	_skill_cd = 0
 	_battle_round = 0
 	_first_used = false
+	hits = 0
 	var plan: Dictionary = ROUND_PLAN[clampi(round_num - 1, 0, ROUNDS - 1)]
 	var kind := str(plan["kind"])
 	var v := rng.randf_range(0.88, 1.12)
@@ -313,6 +333,8 @@ func step(action: String) -> Array:
 	var evs: Array = []
 	if phase != "battle":
 		return evs
+	if action == "ult" and fury < 100:
+		return evs   # 怒气未满, 奥义不可用
 	_battle_round += 1
 	if _skill_cd > 0:
 		_skill_cd -= 1
@@ -323,6 +345,7 @@ func step(action: String) -> Array:
 		evs.append({"who": "p", "kind": "heal", "v": rg})
 	match action:
 		"attack":
+			hits = mini(hits + 1, 11)
 			var crit: bool = rng.randf() < float(stats["crit_rate"])
 			if bool(stats.get("first", false)) and not _first_used:
 				crit = true
@@ -330,9 +353,13 @@ func step(action: String) -> Array:
 			var dmg := int(float(stats["atk"]) * rng.randf_range(0.9, 1.1))
 			if crit:
 				dmg = int(dmg * float(stats["crit_dmg"]))
+			dmg = int(dmg * (1.0 + 0.06 * mini(maxi(hits - 1, 0), 10)))   # 连击伤害加成
 			dmg = maxi(dmg - 2, 1)
 			enemy["hp"] = int(enemy["hp"]) - dmg
+			fury = mini(fury + 12, 100)
 			evs.append({"who": "p", "kind": "crit" if crit else "dmg", "v": dmg})
+			if hits >= 2:
+				evs.append({"who": "p", "kind": "combo", "v": hits})
 			_vamp_heal(evs, dmg)
 		"skill":
 			var dmg := maxi(int(float(stats["skill"]) * rng.randf_range(0.9, 1.2)), 1)
@@ -349,13 +376,29 @@ func step(action: String) -> Array:
 			evs.append({"who": "p", "kind": "skill", "v": dmg,
 					"skill_kind": kind_name})
 			_vamp_heal(evs, dmg)
+			hits = mini(hits + 1, 11)
+			fury = mini(fury + 8, 100)
+			if hits >= 2:
+				evs.append({"who": "p", "kind": "combo", "v": hits})
 			_skill_cd = 2
 		"defend":
+			hits = 0   # 防御打断连击(攻与守的取舍)
 			var heal := maxi(int(stats["max_hp"]) / 25, 3)
 			hp = mini(hp + heal, int(stats["max_hp"]))
 			evs.append({"who": "p", "kind": "defend", "v": heal})
+		"ult":
+			# 奥义: 2.5 倍攻击必中 + 回复 20% 生命, 怒气清零
+			var udmg := maxi(int(float(stats["atk"]) * 2.5), 1)
+			enemy["hp"] = int(enemy["hp"]) - udmg
+			fury = 0
+			hits = mini(hits + 1, 11)
+			var uhl := maxi(int(int(stats["max_hp"]) * 0.2), 1)
+			hp = mini(hp + uhl, int(stats["max_hp"]))
+			evs.append({"who": "p", "kind": "ult", "v": udmg})
+			evs.append({"who": "p", "kind": "heal", "v": uhl})
+			_vamp_heal(evs, udmg)
 	# 顺子: 每 3 回合追加一次普攻
-	if action != "defend" and bool(stats.get("straight", false)) \
+	if action != "defend" and action != "ult" and bool(stats.get("straight", false)) \
 			and _battle_round % 3 == 0 and int(enemy["hp"]) > 0:
 		var dmg2 := maxi(int(float(stats["atk"]) * 0.7), 1)
 		enemy["hp"] = int(enemy["hp"]) - dmg2
@@ -377,6 +420,18 @@ func step(action: String) -> Array:
 		edmg = maxi(int(edmg * 60.0 / (60.0 + float(stats["mres"]))), 1)
 	else:
 		edmg = maxi(int(edmg * 80.0 / (80.0 + float(stats["def"]))), 1)
+	if action == "defend" and intent == "heavy":
+		# 完美格挡: 零伤害 + 反击, 重读意图的奖励
+		var counter := maxi(int(float(stats["atk"]) * 1.0), 1)
+		enemy["hp"] = int(enemy["hp"]) - counter
+		fury = mini(fury + 25, 100)
+		evs.append({"who": "p", "kind": "parry", "v": counter})
+		_choose_intent()
+		if int(enemy["hp"]) <= 0:
+			enemy["hp"] = 0
+			evs.append({"who": "e", "kind": "die", "v": 0})
+			_win_round()
+		return evs
 	if action == "defend":
 		edmg = int(edmg * 0.4)
 	if bool(enemy.get("chilled", false)):
@@ -384,6 +439,7 @@ func step(action: String) -> Array:
 		enemy["chilled"] = false
 	edmg = maxi(edmg, 1)
 	_damage_player(edmg)
+	fury = mini(fury + 8, 100)
 	evs.append({"who": "e", "kind": "spell" if spell else ("heavy" if heavy else "dmg"),
 			"v": edmg})
 	# 荆棘: 反弹物理伤害 30%
@@ -421,6 +477,7 @@ func _vamp_heal(evs: Array, dmg: int) -> void:
 ## 本回合胜利: 回 25% 生命, 下一回合(或通关)
 func _win_round() -> void:
 	phase = "round_end"
+	fury = mini(fury + 30, 100)
 	var heal := int(int(stats["max_hp"]) * 0.25)
 	hp = mini(hp + heal, int(stats["max_hp"]))
 	if round_num >= ROUNDS:

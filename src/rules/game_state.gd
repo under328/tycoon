@@ -15,25 +15,25 @@ const HAND_SIZE := 13
 ## 肉鸽模式『命运卡』目录: 每局开始随机抽一张生效(单局有效)。
 ## 引擎读取 st["cfg"]["rogue_mod"]; 目录同时供牌桌揭示 UI 与帮助图鉴使用。
 const ROGUE_MODS := [
-	{"id": "joker_x2", "name": "王者归来", "glyph": "王", "cat": "发牌",
+	{"id": "joker_x2", "name": "王者归来", "glyph": "王", "cat": "发牌", "rar": "legend",
 		"desc": "本局牌堆多 2 张王(共 4 张), 压制与反转更疯狂"},
-	{"id": "revolution_start", "name": "天生革命", "glyph": "革", "cat": "规则",
+	{"id": "revolution_start", "name": "天生革命", "glyph": "革", "cat": "规则", "rar": "epic",
 		"desc": "本局从开局起就处于革命状态, 大小颠倒"},
-	{"id": "short_hands", "name": "缩地成寸", "glyph": "缩", "cat": "发牌",
+	{"id": "short_hands", "name": "缩地成寸", "glyph": "缩", "cat": "发牌", "rar": "common",
 		"desc": "本局每人只发 10 张牌, 节奏更快"},
-	{"id": "chaos_exchange", "name": "混沌换牌", "glyph": "混", "cat": "规则",
+	{"id": "chaos_exchange", "name": "混沌换牌", "glyph": "混", "cat": "规则", "rar": "epic",
 		"desc": "本局换牌张数随机(1~3 张), 强弱易位更难预料"},
-	{"id": "joker_rage", "name": "龙王之怒", "glyph": "怒", "cat": "触发",
+	{"id": "joker_rage", "name": "龙王之怒", "glyph": "怒", "cat": "触发", "rar": "epic",
 		"desc": "本局任何人打出王, 革命状态立即翻转"},
-	{"id": "double_stakes", "name": "双倍赌局", "glyph": "×2", "cat": "结算",
+	{"id": "double_stakes", "name": "双倍赌局", "glyph": "×2", "cat": "结算", "rar": "legend",
 		"desc": "本局身份积分变动 ×2, 大起大落"},
-	{"id": "joker_ban", "name": "无王之地", "glyph": "禁", "cat": "发牌",
+	{"id": "joker_ban", "name": "无王之地", "glyph": "禁", "cat": "发牌", "rar": "common",
 		"desc": "本局牌堆不含王, 全凭真本事"},
-	{"id": "no_exchange", "name": "免战之约", "glyph": "免", "cat": "规则",
+	{"id": "no_exchange", "name": "免战之约", "glyph": "免", "cat": "规则", "rar": "common",
 		"desc": "本局跳过换牌阶段, 开局直接亮牌开打"},
-	{"id": "score_negate", "name": "福祸反转", "glyph": "反", "cat": "结算",
+	{"id": "score_negate", "name": "福祸反转", "glyph": "反", "cat": "结算", "rar": "common",
 		"desc": "本局身份积分正负反转, 垫底反而得分"},
-	{"id": "eight_gift", "name": "八喜临门", "glyph": "喜", "cat": "触发",
+	{"id": "eight_gift", "name": "八喜临门", "glyph": "喜", "cat": "触发", "rar": "common",
 		"desc": "本局打出 8 切时, 立即从死牌堆摸 1 张"},
 ]
 
@@ -61,9 +61,26 @@ static func _roll_choices(st: Dictionary, round_idx: int) -> Array:
 		return [lock, lock]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(str(st["seed"], ":rc:", round_idx))
-	var a: int = rng.randi() % ROGUE_MODS.size()
-	var b: int = (a + 1 + rng.randi() % (ROGUE_MODS.size() - 1)) % ROGUE_MODS.size()
+	var weights: Array = []
+	for m in ROGUE_MODS:
+		weights.append({"common": 5, "epic": 3, "legend": 1}[str(m.get("rar", "common"))])
+	var a := _weighted_pick(ROGUE_MODS, weights, rng)
+	var b := _weighted_pick(ROGUE_MODS, weights, rng)
+	while b == a:   # 两张不同
+		b = _weighted_pick(ROGUE_MODS, weights, rng)
 	return [str(ROGUE_MODS[a]["id"]), str(ROGUE_MODS[b]["id"])]
+
+
+static func _weighted_pick(mods: Array, weights: Array, rng: RandomNumberGenerator) -> int:
+	var total := 0
+	for w in weights:
+		total += int(w)
+	var roll := rng.randi() % total
+	for i in weights.size():
+		roll -= int(weights[i])
+		if roll < 0:
+			return i
+	return 0
 
 
 static func _rogue_mod_id(st: Dictionary) -> String:

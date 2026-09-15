@@ -450,6 +450,12 @@ func _build_act_row(row: HBoxContainer) -> void:
 	var def := AppTheme.make_button("🛡 防御", Vector2(160, 54), 18)
 	def.pressed.connect(func() -> void: _send_act("defend"))
 	row.add_child(def)
+	var my_fury: int = int((view.get("fury", {}) as Dictionary).get(my_seat, 0))
+	var ult := AppTheme.make_button("⚡ 奥义", Vector2(160, 54), 18)
+	ult.disabled = my_fury < 100
+	ult.tooltip_text = "怒气满 100 释放"
+	ult.pressed.connect(func() -> void: _send_act("ult"))
+	row.add_child(ult)
 
 
 var _turn_remain := -1.0
@@ -502,6 +508,8 @@ func _play_next() -> void:
 			_floater("❄ 被冻结", x, y, Color("9fd8ff"))
 		"thorns":
 			_floater("荆棘 -%d" % v, x, y, Color("7dd87d"))
+		"ult":
+			_floater(tr("奥义 -%d") % v, x, y, AppTheme.GOLD)
 	var tw := create_tween()
 	tw.tween_interval(0.45)
 	tw.tween_callback(_play_next)
