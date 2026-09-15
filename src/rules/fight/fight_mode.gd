@@ -107,7 +107,7 @@ func _init(seed_v: int = -1) -> void:
 	hp = 100
 	_refresh_stats()
 	_open_round()
-	_log("第 1 回合 — %s 地下城" % str(GROUPS[group]["name"]))
+	_log(tr("第 1 回合 — %s 地下城") % str(GROUPS[group]["name"]))
 
 
 func _shuffle(a: Array) -> void:
@@ -199,7 +199,7 @@ func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 					locked = int(c)
 		if slots.size() < 5:
 			# 补抽一组普通牌 — 保证 Boss 战前集齐 5 张装备
-			_log("奇物【%s】生效 — 补抽一张普通牌" % str(sp_meta(sp_of(cand))["name"]))
+			_log(tr("奇物【%s】生效 — 补抽一张普通牌") % str(sp_meta(sp_of(cand))["name"]))
 			pair = [_roll_candidate(true), _roll_candidate(true)]
 			comp = true
 			return {"ok": true, "error": ""}
@@ -211,10 +211,10 @@ func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 		if slot < 0 or slot >= 5:
 			return {"ok": false, "error": "need_slot"}   # 等待 UI 选槽/跳过
 		slots[slot] = cand
-		_log("替换装备: 槽位 %d → %s" % [slot + 1, CardsGd.label(cand)])
+		_log(tr("替换装备: 槽位 %d → %s") % [slot + 1, CardsGd.label(cand)])
 	else:
 		slots.append(cand)
-		_log("装备 %s(%d/5)" % [CardsGd.label(cand), slots.size()])
+		_log(tr("装备 %s(%d/5)") % [CardsGd.label(cand), slots.size()])
 	_refresh_stats()
 	# 锁环: 记录本组未选中的候选(补抽组不触发, 仅主组)
 	if specials.has(1) and not comp:
@@ -228,7 +228,7 @@ func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 func _take_special(sp_id: int) -> void:
 	specials.append(sp_id)
 	var meta: Dictionary = sp_meta(sp_id)
-	_log("获得奇物【%s】%s" % [str(meta["name"]), str(meta["desc"])])
+	_log(tr("获得奇物【%s】%s") % [str(meta["name"]), str(meta["desc"])])
 	_refresh_stats()
 
 
@@ -287,9 +287,9 @@ func _start_battle() -> void:
 	_choose_intent()
 	# 玉障: 每场战斗开始 20% 生命护盾
 	shield = int(int(stats["max_hp"]) * 0.2) if specials.has(6) else 0
-	var kind_name: String = str({"mob": "小怪", "elite": "精英怪",
-			"boss": "BOSS"}[kind])
-	_log("第 %d 回合 %s: %s 出现! HP %d / 攻击 %d" % [
+	var kind_name: String = str({"mob": tr("小怪"),
+			"elite": tr("精英怪"), "boss": "BOSS"}[kind])
+	_log(tr("第 %d 回合 %s: %s 出现! HP %d / 攻击 %d") % [
 		round_num, kind_name, name_txt, e_hp, e_atk])
 
 
@@ -426,9 +426,9 @@ func _win_round() -> void:
 	if round_num >= ROUNDS:
 		run_won = true
 		phase = "over"
-		_log("BOSS 击破! 试炼通关!")
+		_log(tr("BOSS 击破! 试炼通关!"))
 	else:
-		_log("%s 被击破! 回复 %d 生命" % [str(enemy["name"]), heal])
+		_log(tr("%s 被击破! 回复 %d 生命") % [str(enemy["name"]), heal])
 
 
 ## round_end 展示完毕后由 UI 调用 → 下一回合
@@ -437,7 +437,7 @@ func advance_round() -> void:
 		return
 	round_num += 1
 	_open_round()
-	_log("第 %d 回合开始" % round_num)
+	_log(tr("第 %d 回合开始") % round_num)
 
 
 func player_dead() -> bool:
@@ -448,7 +448,7 @@ func player_dead() -> bool:
 func revive() -> void:
 	hp = maxi(int(int(stats["max_hp"]) * 0.6), 1)
 	shield = 0
-	_log("复活币发光 — 你重新站了起来!")
+	_log(tr("复活币发光 — 你重新站了起来!"))
 
 
 func skill_cd() -> int:

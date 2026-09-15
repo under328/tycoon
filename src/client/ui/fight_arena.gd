@@ -104,10 +104,10 @@ func _apply(v: Dictionary, events: Array) -> void:
 	view = v
 	var phase := str(v.get("phase", ""))
 	phase_lbl.text = {
-		"draft": "第 %d/%d 回合 — 二选一编成" % [int(v.get("round_num", 1)),
+		"draft": tr("第 %d/%d 回合 — 二选一编成") % [int(v.get("round_num", 1)),
 				int(v.get("rounds_total", 5))],
-		"battle": "第 %d 回合 — 对战!" % int(v.get("round_num", 1)),
-		"round_end": "第 %d 回合 结束" % int(v.get("round_num", 1)),
+		"battle": tr("第 %d 回合 — 对战!") % int(v.get("round_num", 1)),
+		"round_end": tr("第 %d 回合 结束") % int(v.get("round_num", 1)),
 		"over": "终局",
 	}.get(phase, phase)
 	var sc: Dictionary = v.get("score", {})
@@ -153,10 +153,10 @@ func _refresh_sides() -> void:
 			(p["avatar"] as Control).skin_id = net.skin_of_seat(seat)
 		# 回合分
 		var sc: Dictionary = view.get("score", {})
-		(p["score"] as Label).text = "回合胜 %d" % int(sc.get(seat, 0))
+		(p["score"] as Label).text = tr("回合胜 %d") % int(sc.get(seat, 0))
 		# 编成进度(奇物/装备数) — draft 阶段唯一可见信息
 		var per: Dictionary = (view.get("per", {}) as Dictionary).get(seat, {})
-		(p["prog"] as Label).text = "装备 %d/5 · 奇物 %d" % [
+		(p["prog"] as Label).text = tr("装备 %d/5 · 奇物 %d") % [
 				int(per.get("slots_count", 0)), int(per.get("specials_count", 0))]
 		(p["done"] as Label).visible = str(view.get("phase", "")) == "draft"
 		(p["done"] as Label).text = "已编成" if bool(per.get("done", false)) \
@@ -258,11 +258,11 @@ func _rebuild_bottom() -> void:
 			var turn := int(view.get("turn", -1))
 			var nm: String = str((view.get("names", {}) as Dictionary)
 					.get(turn, "对方"))
-			_status_line(row, "等待 %s 行动…" % nm)
+			_status_line(row, tr("等待 %s 行动…") % nm)
 	elif phase == "round_end":
 		var rw := int(view.get("round_winner", -1))
 		var nm: String = str((view.get("names", {}) as Dictionary).get(rw, ""))
-		_status_line(row, "%s 拿下本回合 — 即将进入下一回合…" % nm)
+		_status_line(row, tr("%s 拿下本回合 — 即将进入下一回合…") % nm)
 	else:
 		_status_line(row, "对局已结束 — 可等待房主开始下一局")
 
@@ -284,8 +284,8 @@ func _build_draft_ui(box: VBoxContainer) -> void:
 		return
 	if _pending_cand < 0:
 		var title := AppTheme.make_label(15, AppTheme.GOLD)
-		title.text = ("🟣 奇物生效! 补抽一张普通牌" if bool(my.get("comp", false))
-				else "二选一 — 点选 1 张 (装备 %d/5%s)" % [
+		title.text = (tr("🟣 奇物生效! 补抽一张普通牌") if bool(my.get("comp", false))
+				else tr("二选一 — 点选 1 张 (装备 %d/5%s)") % [
 				(my.get("slots", []) as Array).size(),
 				"，本回合有额外候选组!" if int(my.get("pairs_left", 1)) > 1 else ""])
 		box.add_child(title)
@@ -536,14 +536,14 @@ func _show_result() -> void:
 	var title := "终 局"
 	var sc: Dictionary = view.get("score", {})
 	var f: Array = view.get("fighters", [])
-	var body := "比分 %d : %d — 胜者 %s" % [int(sc.get(int(f[0]) if f.size() > 0 else 0, 0)),
+	var body := tr("比分 %d : %d — 胜者 %s") % [int(sc.get(int(f[0]) if f.size() > 0 else 0, 0)),
 			int(sc.get(int(f[1]) if f.size() > 1 else 1, 0)),
 			str((view.get("names", {}) as Dictionary).get(winner, "—"))]
 	if fighter:
 		var win: bool = winner == my_seat
 		title = "胜 利 !" if win else "败 北…"
 		var r: Dictionary = Wallet.grant_pvp_result(win)
-		body += "\n奖励: %+d 金币 %+d 钻石 已入账" % [int(r["gold"]),
+		body += "\n" + tr("奖励: %+d 金币 %+d 钻石 已入账") % [int(r["gold"]),
 				int(r["diamonds"])]
 		Audio.play("win" if win else "fall")
 	_show_overlay(title, body)

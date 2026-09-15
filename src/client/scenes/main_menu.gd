@@ -352,7 +352,7 @@ func _show_mode_select() -> void:
 			"local_game", "rogue", "rogue_help.gd"],
 		["格斗试炼", "化身头像人物, 五回合二选一编成 5 张装备, 决战 BOSS",
 			"fight_mode", "fight", "fight_help.gd"],
-		["每日挑战", "全设备同一天同一布局, 每日一局冲击最佳成绩",
+		["每日挑战", "全设备同一天同一布局, 冲击今日最佳成绩",
 			"fight_daily", "daily", "fight_help.gd"],
 	]
 	for m: Array in modes:

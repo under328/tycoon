@@ -22,7 +22,7 @@ var vsync_enabled := true       # 显示偏好: 垂直同步(持久化)
 var window_size := Vector2i.ZERO  # 显示偏好: 窗口尺寸(ZERO=不改)
 var vibration := true           # 触感偏好: 震动反馈(移动端)
 var ai_level := "normal"        # 本地 AI 难度: easy/normal
-var language := "zh_CN"         # 界面语言(16 种, 见 I18n.LANGUAGES)
+var language := ""              # 界面语言(空=首次启动, 按 OS 语言检测)
 var card_counter := true        # 记牌器 HUD 开关
 
 
@@ -45,13 +45,28 @@ func load_settings() -> void:
 		host_port = int(cf.get_value("net", "host_port", host_port))
 		var lv := str(cf.get_value("game", "ai_level", ai_level))
 		ai_level = lv if lv in ["easy", "normal"] else "normal"
-		language = str(cf.get_value("game", "language", language))
+		language = str(cf.get_value("game", "language", ""))
+		if language == "":
+			language = detect_language()   # 首启: 跟随系统语言
 		card_counter = bool(cf.get_value("game", "card_counter", card_counter))
 		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
 		vsync_enabled = bool(cf.get_value("display", "vsync", vsync_enabled))
 		vibration = bool(cf.get_value("haptics", "vibration", true))
 		window_size = Vector2i(cf.get_value("display", "window_size_x", 0),
 				cf.get_value("display", "window_size_y", 0))
+
+
+## 按 OS 语言检测默认界面语言(仅首启; 此后以玩家设置为准)
+func detect_language() -> String:
+	var lang := OS.get_locale_language()          # "zh"/"en"/"ja"…
+	if lang.begins_with("zh"):
+		var loc := OS.get_locale().to_upper()
+		return "zh_TW" if ("TW" in loc or "HK" in loc or "HANT" in loc) 				else "zh_CN"
+	for supported in ["ja", "ko", "es", "fr", "de", "pt", "it", "ru",
+			"ar", "th", "vi", "id", "tr"]:
+		if lang == supported:
+			return lang
+	return "en"
 
 
 func save_settings() -> void:

@@ -117,6 +117,13 @@ func _build_library() -> void:
 		Synth.sweep(0.16, 1500.0, 260.0, 0.30), Synth.snap(0.12, 0.40, 30.0),
 	]))
 	library["fall"] = Synth.wav(Synth.sweep(0.55, 520.0, 70.0, 0.30))
+	# 格斗专用: 命中/暴击/受击(短促冲击感, 与牌桌音效区分)
+	library["hit"] = Synth.wav(Synth.mix_over(Synth.snap(0.07, 0.5, 55.0),
+			Synth.tone(0.09, 130.0, 0.30, 30.0), 0.0))
+	library["crit"] = Synth.wav(Synth.concat([
+		Synth.snap(0.06, 0.55, 70.0), Synth.tone(0.16, 1318.5, 0.24, 9.0),
+	]))
+	library["hurt"] = Synth.wav(Synth.sweep(0.22, 320.0, 80.0, 0.32))
 	library["result"] = Synth.result_fanfare()
 
 

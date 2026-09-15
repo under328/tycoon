@@ -92,7 +92,7 @@ static func open_round(st: Dictionary, rng: RandomNumberGenerator) -> void:
 		per["pairs_left"] = 1 + (1 if (per["specials"] as Array).has(0) else 0)
 	for seat in st["fighters"]:
 		_deal_pair(st, int(seat), rng)
-	_log(st, "第 %d 回合 — 二选一编成" % int(st["round_num"]))
+	_log(st, TranslationServer.translate("第 %d 回合 — 二选一编成") % int(st["round_num"]))
 
 
 ## 把该格斗者的下一候选组发到手上:
@@ -128,7 +128,7 @@ static func _take_special(st: Dictionary, seat: int, sp_id: int) -> void:
 	var per: Dictionary = st["per"][seat]
 	(per["specials"] as Array).append(sp_id)
 	var meta: Dictionary = FightGd.sp_meta(sp_id)
-	_log(st, "%s 获得奇物【%s】" % [st["names"][seat], str(meta["name"])])
+	_log(st, TranslationServer.translate("%s 获得奇物【%s】") % [st["names"][seat], str(meta["name"])])
 
 
 ## 派生该格斗者当前属性(含奇物修正)
@@ -201,7 +201,7 @@ static func draft_pick(st: Dictionary, seat: int, cand: int, slot: int,
 static func _log_pick(st: Dictionary, seat: int, cand: int) -> void:
 	if cand < 0 or is_sp(cand):
 		return
-	_log(st, "%s 装备 %s(%d/5)" % [st["names"][seat], CardsGd.label(cand),
+	_log(st, TranslationServer.translate("%s 装备 %s(%d/5)") % [st["names"][seat], CardsGd.label(cand),
 			(st["per"][seat]["slots"] as Array).size()])
 
 
@@ -233,7 +233,7 @@ static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> v
 	var rb: int = FightGd.TIER_RANK.find(str(b["combo"][fb]["tier"]))
 	b["turn"] = fa if ra <= rb else fb
 	st["battle"] = b
-	_log(st, "对战开始 — %s 先攻" % st["names"][int(b["turn"])])
+	_log(st, TranslationServer.translate("对战开始 — %s 先攻") % st["names"][int(b["turn"])])
 
 
 ## 行动: attack/skill/defend。返回 {ok, error, events}。
@@ -389,14 +389,14 @@ static func _end_round(st: Dictionary, winner: int) -> void:
 	st["phase"] = "round_end"
 	st["round_winner"] = winner
 	st["score"][winner] = int(st["score"].get(winner, 0)) + 1
-	_log(st, "%s 拿下第 %d 回合! (比分 %d:%d)" % [
+	_log(st, TranslationServer.translate("%s 拿下第 %d 回合! (比分 %d:%d)") % [
 		st["names"][winner], int(st["round_num"]),
 		int(st["score"].get(st["fighters"][0], 0)),
 		int(st["score"].get(st["fighters"][1], 0))])
 	if int(st["score"][winner]) >= WIN_SCORE:
 		st["phase"] = "over"
 		st["winner"] = winner
-		_log(st, "★ %s 赢得整场格斗对战!" % st["names"][winner])
+		_log(st, TranslationServer.translate("★ %s 赢得整场格斗对战!") % st["names"][winner])
 
 
 ## round_end 展示完毕 → 下一回合(比分未达标时)

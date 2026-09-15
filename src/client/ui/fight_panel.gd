@@ -250,7 +250,7 @@ func _label(size_num: int, color: Color) -> Label:
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
 	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
-		else "") + "第 %d/%d 回合 · %s" % [fm.round_num, FightModeGd.ROUNDS,
+		else "") + tr("第 %d/%d 回合 · %s") % [fm.round_num, FightModeGd.ROUNDS,
 			str(FightModeGd.GROUPS[fm.group]["name"])]
 	_refresh_slots()
 	_refresh_bars()
@@ -279,7 +279,7 @@ func _render() -> void:
 		if Wallet.try_consume_revive():
 			fm.revive()
 			_refresh_bars()
-			_floater("复活币生效!", _px(0.17), _py(0.42), AppTheme.GOLD)
+			_floater(tr("复活币生效!"), _px(0.17), _py(0.42), AppTheme.GOLD)
 		else:
 			_finish_run()
 
@@ -288,7 +288,7 @@ func _fill_enemy_view() -> void:
 	(monster as Control).group = int(fm.enemy.get("group", 0))
 	(monster as Control).kind = str(fm.enemy.get("kind", "mob"))
 	(monster as Control).variant = int(fm.enemy.get("variant", 0))
-	var kind_txt: String = {"mob": "小怪", "elite": "精英怪",
+	var kind_txt: String = {"mob": tr("小怪"), "elite": tr("精英怪"),
 			"boss": "BOSS"}.get(str(fm.enemy.get("kind", "mob")), "")
 	e_name.text = "%s · %s" % [str(fm.enemy.get("name", "")), kind_txt]
 	_refresh_bars()
@@ -343,7 +343,7 @@ func _refresh_slots() -> void:
 	if fm.slots.is_empty():
 		_combo_lbl.text = "集齐 5 张触发牌型协同"
 	else:
-		_combo_lbl.text = "牌型 %s · %s" % [fm.combo["name"], fm.combo["desc"]]
+		_combo_lbl.text = tr("牌型 %s · %s") % [tr(str(fm.combo["name"])), tr(str(fm.combo["desc"]))]
 
 
 func _replace_mode() -> bool:
@@ -364,7 +364,7 @@ func _on_slot_clicked(idx: int) -> void:
 
 func _after_pick_feedback(cand: int, _slot: int) -> void:
 	if cand >= 0 and cand < 100:
-		_floater("装备 %s" % CardsGd.label(cand),
+		_floater(tr("装备 %s") % CardsGd.label(cand),
 				_px(0.17), _py(0.30), AppTheme.GOLD)
 
 
@@ -375,9 +375,9 @@ func _render_draft() -> void:
 	for c in draft_ops.get_children():
 		c.queue_free()
 	if fm.comp:
-		draft_title.text = "🟣 奇物已生效 — 补抽一张普通牌 (装备 %d/5)" % fm.slots.size()
+		draft_title.text = tr("🟣 奇物已生效 — 补抽一张普通牌 (装备 %d/5)") % fm.slots.size()
 	else:
-		draft_title.text = "第 %d 回合 — 二选一 (装备 %d/5)%s" % [fm.round_num,
+		draft_title.text = tr("第 %d 回合 — 二选一 (装备 %d/5)%s") % [fm.round_num,
 				fm.slots.size(),
 				"，额外候选组!" if fm.pairs_left > 1 else ""]
 	for cand in fm.pair:
@@ -420,9 +420,9 @@ func _build_normal_card(card: int) -> Control:
 	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
 	if fm.slots.size() >= 5:
-		hint.text = "替换后 %s" % str(combo["name"])
+		hint.text = tr("替换后 %s") % tr(str(combo["name"]))
 	else:
-		hint.text = "装备后 %s" % str(combo["name"])
+		hint.text = tr("装备后 %s") % tr(str(combo["name"]))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -498,7 +498,7 @@ func _refresh_bars() -> void:
 		var eh: int = maxi(int(fm.enemy["max_hp"]), 1)
 		ehp_fg.size = Vector2(236.0 * clampi(int(fm.enemy["hp"]), 0, eh) / float(eh), 14)
 		ehp_txt.text = "HP %d / %d" % [maxi(int(fm.enemy["hp"]), 0), eh]
-		e_intent.text = "意图: %s" % _intent_text()
+		e_intent.text = tr("意图: %s") % _intent_text()
 
 
 func _intent_text() -> String:
@@ -519,7 +519,7 @@ func _refresh_actions() -> void:
 	var label := "火球" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
 	act_skill.disabled = cd > 0
 	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 \
-			else ("%s 冷却 %d" % [icon, cd])
+			else (tr("%s 冷却 %d") % [icon, cd])
 
 
 func _on_action(action: String) -> void:
@@ -546,8 +546,8 @@ func _run_events(evs: Array) -> void:
 	var ty := _py(0.36) if is_enemy_target else _py(0.34)
 	match kind:
 		"crit":
-			_floater("暴击 -%d" % int(ev["v"]), tx, ty, Color("ffd166"))
-			_sfx("play_card")
+			_floater(tr("暴击 -%d") % int(ev["v"]), tx, ty, Color("ffd166"))
+			_sfx("crit")
 		"skill":
 			var sk := str(ev.get("skill_kind", "fire"))
 			var stxt: String = str({"fire": "火球", "frost": "冰霜",
@@ -555,7 +555,7 @@ func _run_events(evs: Array) -> void:
 			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, Color("7ec8ff"))
 			_sfx("exchange")
 		"heavy":
-			_floater("重击 -%d" % int(ev["v"]), tx, ty, Color("ff5050"))
+			_floater(tr("重击 -%d") % int(ev["v"]), tx, ty, Color("ff5050"))
 			_enemy_strike("slam" if str(fm.enemy.get("kind")) != "mob" else "lunge")
 			_sfx("fall")
 		"dmg":
@@ -564,11 +564,12 @@ func _run_events(evs: Array) -> void:
 			if is_enemy_target:
 				_hit_flash(monster)
 			else:
-				_sfx("play_card")
+				_sfx("hit")
 		"thorns":
-			_floater("荆棘 -%d" % int(ev["v"]), tx, ty, Color("7dd87d"))
+			_floater(tr("荆棘 -%d") % int(ev["v"]), tx, ty, Color("7dd87d"))
 		"heal":
-			_floater("+%d" % int(ev["v"]), _px(0.17), _py(0.30), Color("7dd87d"))
+			_floater(tr("+%d") % int(ev["v"]), _px(0.17), _py(0.30), Color("7dd87d"))
+			_sfx("pop")
 		"defend":
 			_floater("防御", _px(0.17), _py(0.30), Color("7ec8ff"))
 		"chilled":
@@ -578,6 +579,7 @@ func _run_events(evs: Array) -> void:
 	if kind == "heavy" or kind == "spell":
 		_hit_flash(avatar)
 		_shake(6.0)
+		_sfx("hurt")
 	if kind == "dmg" and not is_enemy_target:
 		_enemy_strike("lunge")
 		_hit_flash(avatar)
@@ -596,7 +598,7 @@ func _after_events() -> void:
 			fm.revive()
 			_refresh_bars()
 			_refresh_actions()
-			_floater("复活币生效!", _px(0.17), _py(0.30), AppTheme.GOLD)
+			_floater(tr("复活币生效!"), _px(0.17), _py(0.30), AppTheme.GOLD)
 			_busy = false
 			act_row.visible = true
 			return
@@ -739,18 +741,19 @@ func _finish_run() -> void:
 		"mode": "格斗", "floor": cleared, "rank": 0, "points": 0,
 		"gold": 0, "diamonds": _run_diamonds,
 	})
-	var title := "试炼通关!" if fm.run_won else "试炼结束"
-	var body := "通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账" % [
+	var title := (tr("每日挑战通关!") if fm.run_won else tr("每日挑战结束")) \
+			if daily else (tr("试炼通关!") if fm.run_won else tr("试炼结束"))
+	var body := tr("通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账") % [
 		cleared, int(r["best"]), _run_diamonds]
 	if daily:
 		var hp_pct := int(100.0 * clampi(fm.hp, 0, int(fm.stats["max_hp"]))
 				/ float(maxi(int(fm.stats["max_hp"]), 1)))
 		var d: Dictionary = Wallet.record_daily(cleared, hp_pct)
-		var best_txt := ("通关! 剩余生命 %d%%" % int(d["best_hp"])) \
+		var best_txt := (tr("通关! 剩余生命 %d%%") % int(d["best_hp"])) \
 				if int(d["best_round"]) >= 5 \
-				else "到达第 %d 回合" % int(d["best_round"])
-		body += "\n今日最佳: %s%s" % [best_txt,
-				" (新纪录!)" if bool(d["better"]) else ""]
+				else tr("到达第 %d 回合") % int(d["best_round"])
+		body += "\n" + tr("今日最佳: %s%s") % [best_txt,
+				tr(" (新纪录!)") if bool(d["better"]) else ""]
 	_show_overlay(title, body, "返回菜单", func() -> void:
 		_close_overlay()
 		closed.emit()

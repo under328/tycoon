@@ -126,7 +126,7 @@ func _build_achievements() -> void:
 			done += 1
 		_grid.add_child(_ach_row(a, unlocked))
 	var head := AppTheme.make_label(15, AppTheme.DIM)
-	head.text = "已解锁 %d / %d" % [done, WalletGd.ACHIEVEMENTS.size()]
+	head.text = tr("已解锁 %d / %d") % [done, WalletGd.ACHIEVEMENTS.size()]
 	var wrap := PanelContainer.new()
 	wrap.add_theme_stylebox_override("panel",
 			AppTheme.flat(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0))
@@ -225,17 +225,17 @@ func _build_missions() -> void:
 ## 统计: 各模式场次/胜率/最佳一览
 func _build_stats() -> void:
 	var rows := [
-		["🂡 大富豪", "场次 %d · 胜 %d · 胜率 %d%%" % [Wallet.local_matches,
+		["🂡 大富豪", tr("场次 %d · 胜 %d · 胜率 %d%%") % [Wallet.local_matches,
 				Wallet.local_wins,
 				(100 * Wallet.local_wins / Wallet.local_matches)
 						if Wallet.local_matches > 0 else 0]],
-		["🎲 肉鸽模式", "场次 %d · 胜 %d" % [Wallet.rogue_runs, Wallet.rogue_wins]],
-		["⚔ 格斗试炼", "局数 %d · 通关 %d · 最远第 %d 回合 · 击破 BOSS %d" % [
+		["🎲 肉鸽模式", tr("场次 %d · 胜 %d") % [Wallet.rogue_runs, Wallet.rogue_wins]],
+		["⚔ 格斗试炼", tr("局数 %d · 通关 %d · 最远第 %d 回合 · 击破 BOSS %d") % [
 				Wallet.fight_runs, Wallet.fight_clears, Wallet.fight_best,
 				Wallet.fight_bosses]],
-		["🥊 联机格斗对战", "胜场 %d" % Wallet.pvp_wins],
-		["📅 每日挑战", "%s · 累计参与 %d 天" % [_daily_text(), Wallet.daily_days]],
-		["📕 命运卡图鉴", "已见 %d / %d 种" % [Wallet.mod_seen.size(),
+		["🥊 联机格斗对战", tr("胜场 %d") % Wallet.pvp_wins],
+		["📅 每日挑战", "%s · " + tr("累计参与 %d 天") % Wallet.daily_days],
+		["📕 命运卡图鉴", tr("已见 %d / %d 种") % [Wallet.mod_seen.size(),
 				_preload_mods().size()]],
 	]
 	for r in rows:
@@ -263,10 +263,10 @@ func _build_stats() -> void:
 func _daily_text() -> String:
 	var today := Time.get_date_string_from_system()
 	if Wallet.daily_day != today:
-		return "今日未挑战"
+		return tr("今日未挑战")
 	if int(Wallet.daily_best_round) >= 5:
-		return "今日已通关(剩余生命 %d%%)" % Wallet.daily_best_hp
-	return "今日最佳: 到达第 %d 回合" % Wallet.daily_best_round
+		return tr("今日已通关(剩余生命 %d%%)") % Wallet.daily_best_hp
+	return tr("今日最佳: 到达第 %d 回合") % Wallet.daily_best_round
 
 
 func _preload_mods() -> Array:
@@ -278,11 +278,11 @@ func _build_history() -> void:
 	var total := Wallet.local_matches
 	var wins := Wallet.local_wins
 	var head := AppTheme.make_label(16, AppTheme.WHITE)
-	head.text = "共 %d 场 · 胜 %d 场 · 胜率 %d%% · 称号 %s" % [total, wins,
+	head.text = tr("共 %d 场 · 胜 %d 场 · 胜率 %d%% · 称号 %s") % [total, wins,
 			(100 * wins / total) if total > 0 else 0, Wallet.rank_title()]
 	_grid.add_child(head)
 	var fight := AppTheme.make_label(16, AppTheme.GOLD)
-	fight.text = "⚔ 格斗试炼最高纪录: 第 %d 层" % Wallet.fight_best
+	fight.text = tr("⚔ 格斗试炼最高纪录: 第 %d 回合") % Wallet.fight_best
 	_grid.add_child(fight)
 	if (Wallet.history as Array).is_empty():
 		var empty := AppTheme.make_label(15, AppTheme.DIM)

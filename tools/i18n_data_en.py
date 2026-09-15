@@ -45,7 +45,6 @@ T = {
     "保存并关闭": "Save & Close",
     "保存设置": "Save Settings",
     "全屏": "Fullscreen",
-    "全设备同一天同一布局, 每日一局冲击最佳成绩": "Same layout on all devices each day. One run a day — chase your best!",
     "分辨率": "Resolution",
     "剪贴板中没有有效的邀请码(请先复制房主发的邀请信息)": "No valid invite code in clipboard (copy the host's invite first)",
     "加入": "Join",
@@ -175,5 +174,4 @@ T = {
     "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)": "Same Wi-Fi friends: [Nearby Hosts] in the online page joins instantly\nRemote friends: send them [Copy Invite Code] (contains all addresses)",
     "Tailscale 已就绪 — 点【本机开房】创建房间, 把邀请码发给朋友;\n或点【粘贴邀请码, 一键加入】朋友的主机。": "Tailscale ready — tap [Host Locally] to create a room and share the code;\nor tap [Paste Invite Code] to join a friend's host.",
     "复活币生效!": "Revive Coin activated!",
-    "轮到你出牌了": "Your turn to play",
 }
