@@ -47,11 +47,11 @@ const SPECIAL_RATE := 0.25
 
 ## ── 回合计划: 5 回合固定日程(数值 ±12% 随机) ──
 const ROUND_PLAN := [
-	{"kind": "mob", "hp": 40, "atk": 9},
-	{"kind": "mob", "hp": 70, "atk": 12},
-	{"kind": "elite", "hp": 115, "atk": 15},
-	{"kind": "mob", "hp": 150, "atk": 18},
-	{"kind": "boss", "hp": 240, "atk": 24},
+	{"kind": "mob", "hp": 40, "atk": 10},
+	{"kind": "mob", "hp": 80, "atk": 16},
+	{"kind": "elite", "hp": 150, "atk": 22},
+	{"kind": "mob", "hp": 230, "atk": 30},
+	{"kind": "boss", "hp": 430, "atk": 40},
 ]
 const ROUNDS := 5
 ## 怪物主题组(引擎只存组号与名字, 形象由 UI 按组号+类别绘制;
@@ -530,7 +530,7 @@ static func derive_stats(cards: Array, combo: Dictionary) -> Dictionary:
 	var def := 5 + dia * 3
 	var mres := 3 + dia * 2
 	var skill := club * 10
-	var max_hp := 100 + heart * 25
+	var max_hp := 100 + heart * 12
 	match tier:
 		"straight_flush":
 			atk = int(atk * 1.6)

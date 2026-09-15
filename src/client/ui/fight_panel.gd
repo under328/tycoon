@@ -54,6 +54,7 @@ var cand_row: HBoxContainer
 var draft_ops: HBoxContainer
 var battle_box: Control
 var _shake_t := 0.0
+var overlay: CenterContainer = null   # 结算弹窗(成员持有, 关闭可靠)
 var _bob_t := 0.0
 var _player_home: Vector2
 var _enemy_home: Vector2
@@ -407,8 +408,13 @@ func _build_normal_card(card: int) -> Control:
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cc.add_child(cv)
 	box.add_child(cc)
-	var combo: Dictionary = FightModeGd.evaluate_combo(
-			((fm.slots as Array) + [card]).slice(0, 5))
+	# 预览牌型: 未满按追加, 槽满按替换 0 号位估算
+	var preview: Array = (fm.slots as Array).duplicate()
+	if preview.size() < 5:
+		preview.append(card)
+	else:
+		preview[0] = card
+	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
 	if fm.slots.size() >= 5:
 		hint.text = "替换后 %s" % str(combo["name"])
@@ -586,6 +592,7 @@ func _after_events() -> void:
 		if Wallet.try_consume_revive():
 			fm.revive()
 			_refresh_bars()
+			_refresh_actions()
 			_floater("复活币生效!", _px(0.17), _py(0.30), AppTheme.GOLD)
 			_busy = false
 			act_row.visible = true
@@ -739,7 +746,8 @@ func _finish_run() -> void:
 
 func _show_overlay(title: String, body: String, btn_text: String,
 		on_btn: Callable) -> void:
-	var overlay := CenterContainer.new()
+	_close_overlay()
+	overlay = CenterContainer.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
@@ -778,9 +786,9 @@ func _show_overlay(title: String, body: String, btn_text: String,
 
 
 func _close_overlay() -> void:
-	for c in get_children():
-		if c is CenterContainer:
-			c.queue_free()
+	if overlay != null and is_instance_valid(overlay):
+		overlay.queue_free()
+	overlay = null
 
 
 ## ── 布局 ──

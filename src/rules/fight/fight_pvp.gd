@@ -253,10 +253,14 @@ static func apply_action(st: Dictionary, seat: int, action: String,
 	b["battle_round"] = int(b["battle_round"]) + 1
 	var foe := foe_of(st, seat)
 	var evs := _resolve(st, seat, foe, action, rng)
-	if int(b["hp"][foe]) > 0:
-		b["turn"] = foe   # 行动后轮转到对方(击杀则回合直接结束)
+	# 击倒对方 → 胜; 荆棘反杀自己 → 对方胜(都不再轮转)
 	if int(b["hp"][foe]) <= 0:
 		_end_round(st, seat)
+	elif int(b["hp"][seat]) <= 0:
+		b["hp"][seat] = 0
+		_end_round(st, foe)
+	else:
+		b["turn"] = foe   # 行动后轮转到对方
 	return {"ok": true, "error": "", "events": evs}
 
 
