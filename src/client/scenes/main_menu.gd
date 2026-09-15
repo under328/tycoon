@@ -134,24 +134,48 @@ func _build_title() -> void:
 	seal_char.position = Vector2(10, 2)
 	seal.add_child(seal_char)
 
-	# 余额徽章(锚右上): 铜钱/宝石图标 + 数字 + 称号/战绩行(随胜场晋升)
+	# 资产面板(锚右上): 双层金框 · 无倾斜 · 三行(货币/称号/操作按钮)
 	_badge = PanelContainer.new()
-	_badge.add_theme_stylebox_override("panel", AppTheme.flat(
-			Color(0.08, 0.08, 0.18, 0.9), Color(AppTheme.GOLD, 0.6), 4, 0))
+	var b_outer := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.92),
+			Color(AppTheme.GOLD, 0.75), 6, 2)
+	b_outer.content_margin_left = 14
+	b_outer.content_margin_right = 14
+	b_outer.content_margin_top = 10
+	b_outer.content_margin_bottom = 10
+	b_outer.shadow_color = Color(0, 0, 0, 0.5)
+	b_outer.shadow_size = 8
+	_badge.add_theme_stylebox_override("panel", b_outer)
 	_badge.position = Vector2(1040, 30)
-	_badge.rotation = -0.03
 	add_child(_badge)
 	var badge_box := VBoxContainer.new()
-	badge_box.add_theme_constant_override("separation", 2)
+	badge_box.add_theme_constant_override("separation", 4)
 	_badge.add_child(badge_box)
+
+	# ── 第一行: 金币/钻石(图标+数值, 等宽对齐) ──
 	_balance = Icons.CurrencyText.new(19)
 	_balance.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
 	badge_box.add_child(_balance)
+
+	# ── 金色分隔线 ──
+	var div := ColorRect.new()
+	div.color = Color(AppTheme.GOLD, 0.30)
+	div.custom_minimum_size = Vector2(0, 1)
+	badge_box.add_child(div)
+
+	# ── 第二行: 称号徽章 + 胜负比 ──
+	var rank_row := HBoxContainer.new()
+	rank_row.add_theme_constant_override("separation", 6)
+	badge_box.add_child(rank_row)
+	var trophy := _label(14, AppTheme.GOLD)
+	trophy.text = "🏆"
+	rank_row.add_child(trophy)
 	_rank_lbl = AppTheme.make_label(13, AppTheme.GOLD)
-	_rank_lbl.text = "称号 %s · %d胜/%d场" % [Wallet.rank_title(),
+	_rank_lbl.text = "%s · %d胜/%d场" % [Wallet.rank_title(),
 			Wallet.local_wins, Wallet.local_matches]
 	_rank_lbl.reset_size()
-	badge_box.add_child(_rank_lbl)
+	rank_row.add_child(_rank_lbl)
+
+	# ── 第三行: 签到 + 成就·战绩 按钮行 ──
 	var ops := HBoxContainer.new()
 	ops.add_theme_constant_override("separation", 6)
 	badge_box.add_child(ops)
