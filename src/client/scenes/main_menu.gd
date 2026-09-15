@@ -319,39 +319,51 @@ func _show_mode_select() -> void:
 					other.set_pressed_no_signal(false))
 		diff_btns.append(b)
 		diff_row.add_child(b)
-	# 普通模式
-	var normal := AppTheme.make_button("普通模式", Vector2(420, 64), 22)
-	normal.pressed.connect(func() -> void:
-		Audio.play("click")
-		_close_mode_select()
-		local_game.emit("normal"))
-	box.add_child(normal)
-	var d1 := AppTheme.make_label(14, AppTheme.DIM)
-	d1.text = "经典大富豪: 换牌 / 革命 / 8切, 回合制排名结算"
-	box.add_child(d1)
-	# 肉鸽模式
-	var rogue := AppTheme.make_button("肉鸽模式", Vector2(420, 64), 22)
-	rogue.pressed.connect(func() -> void:
-		Audio.play("click")
-		_close_mode_select()
-		local_game.emit("rogue"))
-	box.add_child(rogue)
-	var d2 := AppTheme.make_label(14, AppTheme.DIM)
-	d2.text = "每局随机一张『命运卡』增强随机性, 规则主体与普通一致"
-	d2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(d2)
-	# 格斗试炼(第三模式: 无尽动作牌斗)
-	var fight := AppTheme.make_button("格斗试炼", Vector2(420, 56), 20)
-	fight.pressed.connect(func() -> void:
-		Audio.play("click")
-		_close_mode_select()
-		fight_mode.emit())
-	box.add_child(fight)
-	var d0 := AppTheme.make_label(14, AppTheme.DIM)
-	d0.text = "化身头像人物, 5 张扑克定属性, 闯无尽楼层斩妖除魔"
-	box.add_child(d0)
+	# 模式行: 按钮 + 右上 ?(各自图文说明)
+	var modes := [
+		["普通模式", "经典大富豪: 换牌 / 革命 / 8切, 回合制排名结算",
+			"local_game", "normal", "normal_help.gd"],
+		["肉鸽模式", "每局『命运二选一』定规则: 10 种命运卡随机登场",
+			"local_game", "rogue", "rogue_help.gd"],
+		["格斗试炼", "化身头像人物, 5 张扑克定属性, 无尽楼层斩妖除魔",
+			"fight_mode", "fight", "fight_help.gd"],
+	]
+	for m: Array in modes:
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 10)
+		box.add_child(mrow)
+		var mbtn := AppTheme.make_button(str(m[0]), Vector2(340, 60), 21)
+		var mmode := str(m[3])
+		var msig := str(m[2])
+		mbtn.pressed.connect(func() -> void:
+			Audio.play("click")
+			_close_mode_select()
+			if msig == "fight_mode":
+				fight_mode.emit()
+			else:
+				local_game.emit(mmode))
+		mrow.add_child(mbtn)
+		var q := AppTheme.make_button("?", Vector2(40, 40), 20)
+		q.tooltip_text = "查看 %s 玩法说明" % str(m[0])
+		var help_script := str(m[4])
+		q.pressed.connect(func() -> void:
+			Audio.play("click")
+			_open_mode_help(help_script))
+		mrow.add_child(q)
+		var dsc := AppTheme.make_label(13, AppTheme.DIM)
+		dsc.text = str(m[1])
+		dsc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dsc.custom_minimum_size = Vector2(380, 0)
+		box.add_child(dsc)
 	_mode_dlg = dlg
 	add_child(dlg)
+
+
+## 打开模式说明页(图文), 关闭后回到模式选择弹窗
+func _open_mode_help(script_name: String) -> void:
+	var h: Control = (load("res://src/client/ui/" + script_name) as GDScript).new()
+	h.closed.connect(func() -> void: h.queue_free())
+	add_child(h)
 
 
 ## 每日签到弹窗: 7 天奖励轨道 + 今日领取
