@@ -1427,6 +1427,9 @@ func _refresh() -> void:
 
 
 func _refresh_view(view: Dictionary) -> void:
+	if view.is_empty() or not view.has("phase") \
+			or not view.has("round") or not view.has("rounds_total"):
+		return  # 服务器 view 尚未就绪, 跳过本帧刷新
 	var phase: String = view["phase"]
 
 	# 回合制展示: 一回合 = 3 局 → "第 X 回合 第 Y/Z 局"

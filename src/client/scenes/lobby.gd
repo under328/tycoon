@@ -574,7 +574,7 @@ func _build_ui() -> void:
 
 	# 本机开房: 同进程内嵌服务器并自动建房, 朋友粘贴邀请码即可加入
 	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(264, 52), 17)
-	host_btn.position = Vector2(770, 228)
+	host_btn.position = Vector2(830, 228)  # 与搜索附近主机左对齐
 	host_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
