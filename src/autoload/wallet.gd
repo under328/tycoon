@@ -545,6 +545,7 @@ func buy_item(item_id: String) -> bool:
 			"tday":
 				diamond_mult_day = _today()
 				diamond_mult = 3
+				double_diamond_day = _today()  # 三倍覆盖双倍(同日只留一条记录)
 		purchases += 1
 		check_achievements()
 		_mark_dirty()
