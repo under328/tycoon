@@ -133,15 +133,18 @@ func _refresh() -> void:
 				else _item_panel(_tab, item))
 
 
-## 特殊道具面板: 描述 + 金币价 + 购买/生效中状态(无装备概念)
+## 特殊道具面板: 描述 + 价格(金币/钻石) + 购买/生效中/持有数量
 func _special_panel(item: Dictionary) -> Control:
 	var id := str(item["id"])
-	var active := id == "item_double_diamond" and Wallet.double_diamond_active()
+	var effect := str(item.get("effect", ""))
+	var active := _item_active(id, effect)
+	var count := Wallet.item_count(id)
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(300, 232)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
-			AppTheme.GOLD if active else Color(1, 1, 1, 0.15), 12, 2 if not active else 3)
+	var sb := AppTheme.flat(
+			Color(0.13, 0.13, 0.28), AppTheme.GOLD if active
+					else Color(1, 1, 1, 0.15), 12, 2 if not active else 3)
 	sb.content_margin_left = 22
 	sb.content_margin_right = 22
 	sb.content_margin_top = 14
@@ -162,9 +165,8 @@ func _special_panel(item: Dictionary) -> Control:
 		var tag := AppTheme.make_label(13, AppTheme.GREEN)
 		tag.text = "生效中·今日"
 		head.add_child(tag)
-	# 预览井: 钻石×2 图示
 	var well := PanelContainer.new()
-	well.custom_minimum_size = Vector2(0, 100)
+	well.custom_minimum_size = Vector2(0, 84)
 	var well_sb := AppTheme.flat(Color(0.07, 0.07, 0.17, 0.9), Color(1, 1, 1, 0.08), 8, 1)
 	well_sb.content_margin_left = 12
 	well_sb.content_margin_right = 12
@@ -174,41 +176,73 @@ func _special_panel(item: Dictionary) -> Control:
 	v.add_child(well)
 	var well_center := CenterContainer.new()
 	well.add_child(well_center)
-	var art: HBoxContainer = Icons.CurrencyText.new(30)
-	art.text("对局钻石 ", AppTheme.WHITE)
-	art.amount("gem", "×2", AppTheme.GOLD)
+	var art: HBoxContainer = Icons.CurrencyText.new(26)
+	match effect:
+		"dday":
+			art.text("对局钻石 ", AppTheme.WHITE)
+			art.amount("gem", "×2", AppTheme.GOLD)
+		"tday":
+			art.text("对局钻石 ", AppTheme.WHITE)
+			art.amount("gem", "×3", AppTheme.GOLD)
+		"revive":
+			art.text("倒下时 ", AppTheme.WHITE)
+			art.amount("coin", "原地复活", AppTheme.GOLD)
+		"fdice":
+			art.text("命运二选一 ", AppTheme.WHITE)
+			art.amount("gem", "重抽", AppTheme.GOLD)
+		"rticket":
+			art.text("选牌重抽 ", AppTheme.WHITE)
+			art.amount("coin", "+1", AppTheme.GOLD)
 	well_center.add_child(art)
-	# 描述
 	var desc := AppTheme.make_label(14, AppTheme.DIM)
 	desc.text = str(item["desc"])
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.custom_minimum_size = Vector2(324, 0)
+	desc.custom_minimum_size = Vector2(300, 0)
 	v.add_child(desc)
-	# 底行: 金币价 + 购买/生效中
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 10)
 	v.add_child(foot)
 	var price_row: HBoxContainer = Icons.CurrencyText.new(16)
 	price_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	price_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	price_row.amount("coin", str(int(item["price"])), AppTheme.WHITE)
-	foot.add_child(price_row)
-	if active:
-		var done := AppTheme.make_button("已激活", Vector2(112, 40), 15)
-		done.disabled = true
-		foot.add_child(done)
+	if count > 0:
+		price_row.amount("coin", "持有 %d" % count, AppTheme.WHITE)
+	if str(item.get("currency", "gold")) == "gold":
+		price_row.amount("coin", str(int(item["price"])), AppTheme.WHITE)
 	else:
-		var buy := AppTheme.make_button("购 买", Vector2(112, 40), 15)
-		buy.disabled = Wallet.gold < int(item["price"])
-		buy.pressed.connect(func() -> void:
-			if Wallet.buy_special(id):
-				Audio.play("win")
-				_refresh()
-				_toast_msg("双倍钻石卡已激活! 今日对局钻石翻倍")
-			else:
-				_toast_msg("金币不足, 打几局赚金币吧"))
-		foot.add_child(buy)
+		price_row.amount("gem", str(int(item["price"])), AppTheme.WHITE)
+	foot.add_child(price_row)
+	var buy := AppTheme.make_button("购 买", Vector2(112, 40), 15)
+	if effect == "dday":
+		buy.disabled = Wallet.double_diamond_active()
+	elif effect == "tday":
+		buy.disabled = Wallet.diamond_triple_active()
+	else:
+		buy.disabled = Wallet.gold < int(item["price"]) 				and Wallet.diamonds < int(item["price"])
+	buy.pressed.connect(func() -> void:
+		if Wallet.buy_item(id):
+			Audio.play("win")
+			_refresh()
+			_toast_msg("购买成功, 已生效!")
+		else:
+			_toast_msg("余额不足, 先去赚一赚吧"))
+	foot.add_child(buy)
 	return panel
+
+
+func _item_active(id: String, effect: String) -> bool:
+	match effect:
+		"dday":
+			return Wallet.double_diamond_active()
+		"tday":
+			return Wallet.diamond_triple_active()
+		"revive":
+			return Wallet.item_count(id) > 0
+		"fdice":
+			return Wallet.item_count(id) > 0
+		"rticket":
+			return Wallet.item_count(id) > 0
+	return false
 
 
 func _item_panel(kind: String, item: Dictionary) -> Control:

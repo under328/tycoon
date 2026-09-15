@@ -117,10 +117,14 @@ func _ready() -> void:
 	btn_row.add_theme_constant_override("separation", 16)
 	cc.add_child(btn_row)
 	_reroll_btn = AppTheme.make_button("🔄 重抽候选", Vector2(200, 52), 18)
+	_reroll_btn.tooltip_text = "持有重抽券可额外重抽"
 	_reroll_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_rerolled = true
-		_reroll_btn.disabled = true
+		if Wallet.item_count("item_reroll_ticket") > 0:
+			Wallet.consume_item("item_reroll_ticket")
+		else:
+			_reroll_btn.disabled = true
 		for c in cards_row.get_children():
 			c.queue_free()
 		_cards_ui.clear()
@@ -446,6 +450,15 @@ func _run_events(evs: Array) -> void:
 
 func _after_events() -> void:
 	if fm.player_dead():
+		# 复活币: 有库存自动消耗, 以 60% 生命原地复活
+		if Wallet.try_consume_revive():
+			fm.hp = int(int(fm.stats["max_hp"]) * 0.6)
+			_floater("复活币生效!", 260.0, 240.0, AppTheme.GOLD)
+			_log("复活币发光 — 你重新站了起来!")
+			_refresh_bars()
+			_refresh_actions()
+			_busy = false
+			return
 		_finish_run()
 		return
 	if fm.encounter_cleared():

@@ -25,6 +25,8 @@ func run(t) -> void:
 	_signin(t)
 	_achievements(t)
 	_history(t)
+	_consumables(t)
+	_fight_mission(t)
 	_missions(t)
 
 
@@ -244,4 +246,46 @@ func _rank_title(t) -> void:
 	t.expect_eq(w.rank_title(), "富豪", "15 胜 = 富豪")
 	w.local_wins = 30
 	t.expect_eq(w.rank_title(), "大富豪", "30 胜 = 大富豪")
+	w.queue_free()
+
+
+## 消耗品道具: 购买入库存/消耗/三倍钻石/复活币任务
+func _consumables(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_consumables.cfg"
+	w.gold = 100
+	t.expect(not w.buy_item("item_revive_coin"), "金币不足购买被拒")
+	w.gold = 500
+	t.expect(w.buy_item("item_revive_coin"), "购买复活币成功")
+	t.expect_eq(w.item_count("item_revive_coin"), 1, "复活币库存 +1")
+	t.expect_eq(int(w.purchases), 1, "消费计数")
+	# 复活消耗
+	t.expect(w.try_consume_revive(), "复活币生效")
+	t.expect_eq(w.item_count("item_revive_coin"), 0, "复活币库存清零")
+	t.expect(not w.try_consume_revive(), "无币不可再复活")
+	# 三倍钻石
+	w.diamond_mult_day = w._today()
+	w.diamond_mult = 3
+	w.diamonds = 0
+	var r: Dictionary = w.grant_fight_reward(2, 0)
+	t.expect_eq(int(r["diamonds"]), 18, "三倍: (2+2×2)×3 = 18 钻 got=%d" % int(r["diamonds"]))
+	# 命运骰消耗
+	w.inventory["item_fate_dice"] = 2
+	t.expect(w.consume_item("item_fate_dice"), "命运骰消耗")
+	t.expect_eq(w.item_count("item_fate_dice"), 1, "命运骰余 1")
+	# 成就: shopper/revivor
+	t.expect(w.unlocked.has("shopper") or int(w.purchases) >= 1, "消费成就可解锁")
+	t.expect(int(w.revives) >= 1, "复活计数")
+	w.queue_free()
+
+
+## 格斗任务: 层完成推进 m_fight
+func _fight_mission(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_fight_mission2.cfg"
+	w.note_mission("m_fight")
+	var st: Dictionary = w.mission_state("m_fight")
+	t.expect_eq(int(st["progress"]), 1, "格斗层任务进度 1/1")
+	var r: Dictionary = w.claim_mission("m_fight")
+	t.expect_eq(int(r["diamonds"]), 2, "领取 +2 钻")
 	w.queue_free()

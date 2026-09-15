@@ -47,12 +47,30 @@ const ACHIEVEMENTS := [
 	{"id": "fight_5", "name": "登塔者", "desc": "格斗试炼到达第 5 层"},
 	{"id": "fight_10", "name": "无尽征服者", "desc": "格斗试炼到达第 10 层"},
 	{"id": "fight_boss_3", "name": "屠龙勇士", "desc": "累计击败 3 个 Boss"},
+	{"id": "shopper", "name": "大买家", "desc": "商城累计消费 5 次"},
+	{"id": "revivor", "name": "向死而生", "desc": "使用复活币重返战场"},
 ]
 
-## 特殊道具(消耗型/限时增益, 非装扮): currency=购买所用货币
+## 特殊道具: effect 决定生效方式
+##   dday=当日对局钻石×2  tday=×3(覆盖双倍)  revive=格斗死亡自动复活
+##   fdice=肉鸽命运二选一可重抽候选  rticket=格斗选牌额外重抽
+##   stack=true 的道具按库存计数、随用随消耗
 const SPECIALS := [
 	{"id": "item_double_diamond", "name": "双倍钻石卡", "price": 120,
-		"currency": "gold", "desc": "激活后至当日结束, 对局获得的钻石翻倍"},
+		"currency": "gold", "effect": "dday", "stack": false,
+		"desc": "激活后至当日结束, 对局获得的钻石 ×2"},
+	{"id": "item_triple_diamond", "name": "三倍钻石卡", "price": 300,
+		"currency": "gold", "effect": "tday", "stack": false,
+		"desc": "激活后至当日结束, 对局获得的钻石 ×3 (覆盖双倍卡)"},
+	{"id": "item_revive_coin", "name": "复活币", "price": 150,
+		"currency": "gold", "effect": "revive", "stack": true,
+		"desc": "格斗试炼倒下时自动消耗 1 枚, 以 60% 生命原地复活"},
+	{"id": "item_fate_dice", "name": "命运骰", "price": 120,
+		"currency": "diamonds", "effect": "fdice", "stack": true,
+		"desc": "肉鸽命运二选一界面可掷骰重抽候选(每次消耗 1 枚)"},
+	{"id": "item_reroll_ticket", "name": "重抽券", "price": 80,
+		"currency": "diamonds", "effect": "rticket", "stack": true,
+		"desc": "格斗选牌界面额外重抽次数 +1 (每次消耗 1 张)"},
 ]
 
 var gold := 500       # 默认 500 金币
@@ -73,6 +91,11 @@ var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
 var fight_best := 0            # 格斗试炼历史最高层数
 var fight_runs := 0            # 累计格斗局数
 var fight_bosses := 0          # 累计击败 Boss 数
+var purchases := 0             # 累计商城消费次数
+var revives := 0               # 累计使用复活币次数
+var inventory := {}            # 消耗品库存: id -> 数量
+var diamond_mult_day := ""     # 三倍钻石生效日期
+var diamond_mult := 1          # 当前钻石倍率
 var mission_day := ""          # 任务所属日期
 var mission_progress := {}     # id -> 进度
 var mission_claimed := {}      # id -> true(已领取)
@@ -126,6 +149,11 @@ func _reset_defaults() -> void:
 	fight_best = 0
 	fight_runs = 0
 	fight_bosses = 0
+	purchases = 0
+	revives = 0
+	inventory = {}
+	diamond_mult_day = ""
+	diamond_mult = 1
 	mission_day = ""
 	mission_progress = {}
 	mission_claimed = {}
@@ -178,6 +206,12 @@ func _read_into(path: String) -> bool:
 	fight_best = int(cf.get_value("wallet", "fight_best", 0))
 	fight_runs = int(cf.get_value("wallet", "fight_runs", 0))
 	fight_bosses = int(cf.get_value("wallet", "fight_bosses", 0))
+	purchases = int(cf.get_value("wallet", "purchases", 0))
+	revives = int(cf.get_value("wallet", "revives", 0))
+	var inv = cf.get_value("wallet", "inventory", {})
+	inventory = inv if inv is Dictionary else {}
+	diamond_mult_day = str(cf.get_value("wallet", "dm_day", ""))
+	diamond_mult = int(cf.get_value("wallet", "dm_mult", 1))
 	mission_day = str(cf.get_value("wallet", "mission_day", ""))
 	var mp = cf.get_value("wallet", "mission_progress", {})
 	mission_progress = mp if mp is Dictionary else {}
@@ -210,6 +244,11 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "fight_best", fight_best)
 	cf.set_value("wallet", "fight_runs", fight_runs)
 	cf.set_value("wallet", "fight_bosses", fight_bosses)
+	cf.set_value("wallet", "purchases", purchases)
+	cf.set_value("wallet", "revives", revives)
+	cf.set_value("wallet", "inventory", inventory)
+	cf.set_value("wallet", "dm_day", diamond_mult_day)
+	cf.set_value("wallet", "dm_mult", diamond_mult)
 	cf.set_value("wallet", "mission_day", mission_day)
 	cf.set_value("wallet", "mission_progress", mission_progress)
 	cf.set_value("wallet", "mission_claimed", mission_claimed)
@@ -299,9 +338,12 @@ func buy_special(item_id: String) -> bool:
 
 ## 通关/终局发放: 层数越高钻石越多(2 + 层数×2); 记录历史最高层
 func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
-	fight_runs += 1
-	fight_bosses += bosses
-	var d := 2 + floor_num * 2
+	var mult := 1
+	if diamond_triple_active():
+		mult = 3
+	elif double_diamond_active():
+		mult = 2
+	var d := (2 + floor_num * 2) * mult
 	diamonds += d
 	diamonds_earned += d
 	var best := maxi(fight_best, floor_num)
@@ -311,7 +353,7 @@ func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 	_mark_dirty()
 	balance_changed.emit()
 	return {"diamonds": d, "best": best, "new_record": new_record,
-			"achievements": newly}
+			"mult": mult, "achievements": newly}
 
 
 ## ── 每日任务 ──
@@ -417,7 +459,8 @@ func check_achievements() -> Array:
 		"skins": owned_skins.size(), "cards": owned_cards.size(),
 		"special_bought": special_bought, "sign_streak": sign_streak,
 		"fight_best": fight_best, "fight_runs": fight_runs,
-		"fight_bosses": fight_bosses,
+		"fight_bosses": fight_bosses, "purchases": purchases,
+		"revives": revives,
 	}
 	var newly: Array = []
 	for a in ACHIEVEMENTS:
@@ -449,6 +492,8 @@ func _ach_met(id: String, s: Dictionary) -> bool:
 		"fight_10": return int(s["fight_best"]) >= 10
 		"fight_1": return int(s["fight_runs"]) >= 1
 		"fight_boss_3": return int(s["fight_bosses"]) >= 3
+		"shopper": return int(s.get("purchases", 0)) >= 5
+		"revivor": return int(s.get("revives", 0)) >= 1
 	return false
 
 
@@ -473,6 +518,66 @@ func rank_title() -> String:
 	return "新人"
 
 
+## ── 消耗品道具 ──
+
+func item_count(item_id: String) -> int:
+	return int(inventory.get(item_id, 0))
+
+
+## 购买消耗品: 扣费入库存, 成功返回 true
+func buy_item(item_id: String) -> bool:
+	for it in SPECIALS:
+		if str(it["id"]) != item_id:
+			continue
+		var price := int(it["price"])
+		if str(it["currency"]) == "gold":
+			if gold < price:
+				return false
+			gold -= price
+		else:
+			if diamonds < price:
+				return false
+			diamonds -= price
+		inventory[item_id] = item_count(item_id) + 1
+		match str(it.get("effect", "")):
+			"dday":
+				double_diamond_day = _today()
+			"tday":
+				diamond_mult_day = _today()
+				diamond_mult = 3
+		purchases += 1
+		check_achievements()
+		_mark_dirty()
+		balance_changed.emit()
+		return true
+	return false
+
+
+## 复活币: 有库存则消耗并复活
+func try_consume_revive() -> bool:
+	if item_count("item_revive_coin") > 0 and consume_item("item_revive_coin"):
+		revives += 1
+		check_achievements()
+		return true
+	return false
+
+
+## 三倍钻石卡生效中
+func diamond_triple_active() -> bool:
+	return diamond_mult_day == _today() and diamond_mult >= 3
+
+
+## 消耗一枚道具
+func consume_item(item_id: String) -> bool:
+	if item_count(item_id) <= 0:
+		return false
+	inventory[item_id] = item_count(item_id) - 1
+	_mark_dirty()
+	balance_changed.emit()
+	return true
+
+
+## 复活币: 有库存则消耗并复活
 func double_diamond_active() -> bool:
 	return double_diamond_day == _today()
 

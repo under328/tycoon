@@ -277,6 +277,19 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 	return _ok(st)
 
 
+## 命运骰: draft 阶段重抽二选一候选(消耗由 UI/钱包扣)
+static func rogue_reroll_choices(st: Dictionary) -> Array:
+	if str(st["phase"]) != "draft":
+		return st.get("rogue_choices", [])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(str(st["seed"], ":rr:", st["round"], Time.get_ticks_msec()))
+	var i_a := rng.randi() % ROGUE_MODS.size()
+	var i_b := (i_a + 1 + rng.randi() % (ROGUE_MODS.size() - 1)) % ROGUE_MODS.size()
+	var ch := [str(ROGUE_MODS[i_a]["id"]), str(ROGUE_MODS[i_b]["id"])]
+	st["rogue_choices"] = ch
+	return ch
+
+
 ## 肉鸽: 玩家在二选一中选定命运卡 → 应用效果并发牌开局
 ## (发牌类/规则类/触发类效果由此即刻生效; 结算类在收尾时生效)
 static func _do_rogue_pick(st: Dictionary, idx: int) -> Dictionary:

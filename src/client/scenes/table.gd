@@ -630,6 +630,22 @@ func _show_rogue_choice() -> void:
 				state = r["state"]
 			_show_rogue_reveal())
 		row.add_child(pick)
+	var dice_row := HBoxContainer.new()
+	dice_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dice_row.add_theme_constant_override("separation", 10)
+	box.add_child(dice_row)
+	if Wallet.item_count("item_fate_dice") > 0:
+		var dice := AppTheme.make_button(
+				"🎲 掷命运骰重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
+				Vector2(320, 44), 15)
+		dice.pressed.connect(func() -> void:
+			Audio.play("click")
+			if Wallet.consume_item("item_fate_dice"):
+				var rr := GameStateGd.rogue_reroll_choices(state)
+				state["rogue_choices"] = rr
+				_close_rogue_reveal()
+				_show_rogue_choice())
+		dice_row.add_child(dice)
 	var hint := AppTheme.make_label(14, AppTheme.DIM)
 	hint.text = "选定的命运卡在本层生效"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
