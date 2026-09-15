@@ -25,6 +25,11 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED:
+		queue_redraw()
+
+
 func _draw() -> void:
 	var s := size
 	# 斜切色带
@@ -48,5 +53,5 @@ func _draw() -> void:
 		for xx in range(0, 8):
 			draw_circle(Vector2(s.x - 80 + xx * 10, 12 + yy * 12), 2.0,
 					Color(AppTheme.GOLD, 0.3))
-	draw_string(AppTheme.body_font(), Vector2(62, s.y / 2.0 + 8), text,
+	draw_string(AppTheme.body_font(), Vector2(62, s.y / 2.0 + 8), tr(text),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 22, AppTheme.WHITE)

@@ -50,6 +50,11 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED:
+		queue_redraw()
+
+
 func _draw() -> void:
 	var skew := 30.0
 	var pts := PackedVector2Array([
@@ -87,7 +92,7 @@ func _draw() -> void:
 
 	# 文字
 	var f := AppTheme.display_font()
-	draw_string(f, Vector2(edge_bot + gap + pw + 16.0, size.y / 2.0 + 10), text,
+	draw_string(f, Vector2(edge_bot + gap + pw + 16.0, size.y / 2.0 + 10), tr(text),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 25, AppTheme.WHITE)
 	if badge != "":
 		var bf := AppTheme.accent_font()

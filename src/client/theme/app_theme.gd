@@ -26,31 +26,50 @@ static var _theme: Theme
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
 
+## 多语言系统字体兜底: 文楷缺韩文/阿拉伯/泰文字形, 由 OS 字体补齐
+static var _sys_fallback: SystemFont
+
+static func system_fallback() -> SystemFont:
+	if _sys_fallback == null:
+		var sf := SystemFont.new()
+		sf.font_names = PackedStringArray([
+			"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR",
+			"Segoe UI", "Tahoma", "Noto Sans", "Noto Sans Thai",
+			"Noto Naskh Arabic", "Noto Sans Arabic", "sans-serif"])
+		_sys_fallback = sf
+	return _sys_fallback
+
+
+static func _with_fallback(f: FontFile) -> FontFile:
+	f.fallbacks = [system_fallback()]
+	return f
+
+
 ## 志莽行书（主标题/勝利敗北/朱印）
 static func title_font() -> FontFile:
 	if _title_font == null:
-		_title_font = load(FONT_TITLE_PATH)
+		_title_font = _with_fallback(load(FONT_TITLE_PATH))
 	return _title_font
 
 
 ## 站酷快乐体（点缀标签）
 static func accent_font() -> FontFile:
 	if _accent_font == null:
-		_accent_font = load(FONT_ACCENT_PATH)
+		_accent_font = _with_fallback(load(FONT_ACCENT_PATH))
 	return _accent_font
 
 
 ## 站酷黄油体（按钮/HUD/卡面点数）
 static func display_font() -> FontFile:
 	if _display_font == null:
-		_display_font = load(FONT_DISPLAY_PATH)
+		_display_font = _with_fallback(load(FONT_DISPLAY_PATH))
 	return _display_font
 
 
 ## 思源黑体（正文/聊天）
 static func body_font() -> FontFile:
 	if _body_font == null:
-		_body_font = load(FONT_BODY_PATH)
+		_body_font = _with_fallback(load(FONT_BODY_PATH))
 	return _body_font
 
 

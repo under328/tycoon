@@ -14,6 +14,7 @@ var _display_ctrls: Array = []   # 图像设置控件(移动端无意义, 整组
 var _fullscreen_btn: CheckButton
 var _vsync_btn: CheckButton
 var _resolution_btn: OptionButton
+var _lang_btn: OptionButton
 var _toast: Label
 var _back_btn: Button
 var _scroll: ScrollContainer
@@ -78,6 +79,28 @@ func _ready() -> void:
 	box.add_child(_section("音量"))
 	_bgm_slider = _slider(box, "音乐", _on_bgm_changed)
 	_sfx_slider = _slider(box, "音效", _on_sfx_changed)
+
+	# ── 语言(16 种, 即时切换) ──
+	box.add_child(_section("语言"))
+	var lang_row := HBoxContainer.new()
+	lang_row.add_theme_constant_override("separation", 12)
+	box.add_child(lang_row)
+	_lang_btn = OptionButton.new()
+	_lang_btn.custom_minimum_size = Vector2(220, 38)
+	var cur_lang := 0
+	var i18n := get_node_or_null("/root/I18n")
+	for i in I18n.LANGUAGES.size():
+		var l: Dictionary = I18n.LANGUAGES[i]
+		_lang_btn.add_item(str(l["name"]))
+		_lang_btn.set_item_metadata(i, str(l["code"]))
+		if str(l["code"]) == str(I18n.language()):
+			cur_lang = i
+	_lang_btn.select(cur_lang)
+	_lang_btn.item_selected.connect(_on_language)
+	lang_row.add_child(_lang_btn)
+	var lang_hint := AppTheme.make_label(13, AppTheme.DIM)
+	lang_hint.text = "切换后全界面即时生效"
+	lang_row.add_child(lang_hint)
 
 	# ── 触感(触屏专属): 震动反馈 ──
 	if Responsive.is_touch():
@@ -180,7 +203,7 @@ func open() -> void:
 
 func _section(text: String) -> Label:
 	var lb := AppTheme.make_label(16, AppTheme.GOLD)
-	lb.text = "── " + text
+	lb.text = "── " + tr(text)   # 内文先翻译, 装饰线不参与查表
 	return lb
 
 
@@ -258,6 +281,13 @@ func _save_display(fullscreen, vsync, res: Vector2i) -> void:
 	if res != Vector2i.ZERO:
 		g.window_size = res
 	g.save_settings()
+
+
+func _on_language(idx: int) -> void:
+	Audio.play("click")
+	var code := str(_lang_btn.get_item_metadata(idx))
+	I18n.set_language(code)
+	_toast.text = "Language: %s" % I18n.LANGUAGES[idx]["name"]
 
 
 func _on_bgm_changed(v: float) -> void:

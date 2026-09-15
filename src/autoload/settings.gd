@@ -22,6 +22,7 @@ var vsync_enabled := true       # 显示偏好: 垂直同步(持久化)
 var window_size := Vector2i.ZERO  # 显示偏好: 窗口尺寸(ZERO=不改)
 var vibration := true           # 触感偏好: 震动反馈(移动端)
 var ai_level := "normal"        # 本地 AI 难度: easy/normal
+var language := "zh_CN"         # 界面语言(16 种, 见 I18n.LANGUAGES)
 var card_counter := true        # 记牌器 HUD 开关
 
 
@@ -44,6 +45,7 @@ func load_settings() -> void:
 		host_port = int(cf.get_value("net", "host_port", host_port))
 		var lv := str(cf.get_value("game", "ai_level", ai_level))
 		ai_level = lv if lv in ["easy", "normal"] else "normal"
+		language = str(cf.get_value("game", "language", language))
 		card_counter = bool(cf.get_value("game", "card_counter", card_counter))
 		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
 		vsync_enabled = bool(cf.get_value("display", "vsync", vsync_enabled))
@@ -62,6 +64,7 @@ func save_settings() -> void:
 	cf.set_value("net", "host", host)
 	cf.set_value("net", "host_port", host_port)
 	cf.set_value("game", "ai_level", ai_level)
+	cf.set_value("game", "language", language)
 	cf.set_value("game", "card_counter", card_counter)
 	cf.set_value("display", "fullscreen", fullscreen)
 	cf.set_value("display", "vsync", vsync_enabled)
