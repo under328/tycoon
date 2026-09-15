@@ -306,6 +306,11 @@ func c_room_join(data: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func c_rogue_pick(data: Dictionary) -> void:
+	if manager != null:
+		_flush(manager.rogue_pick(_sender(), int(data.get("idx", 0))))
+
+
 func c_room_settings(data: Dictionary) -> void:
 	if not is_server:
 		return
@@ -627,6 +632,10 @@ func kick_seat(seat: int) -> void:
 
 
 ## 房主：修改房间规则（对局未开始时）
+func send_rogue_pick(idx: int) -> void:
+	_c_send("c_rogue_pick", {"idx": idx})
+
+
 func set_settings(rules: Dictionary) -> void:
 	_c_send("c_room_settings", {"rules": rules})
 

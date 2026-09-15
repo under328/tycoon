@@ -29,6 +29,8 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"exchange": (st["exchange"] as Array).duplicate(true),
 		"exchange_return": _pending_return(st),
 		"must_include": st["must_include"],
+		"rogue_mod": str(st["cfg"].get("rogue_mod", "")),
+		"rogue_choices": (st.get("rogue_choices", []) as Array).duplicate(),
 	}
 
 

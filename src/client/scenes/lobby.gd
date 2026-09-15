@@ -68,6 +68,7 @@ var discover_btn: Button
 var _join_seq := 0            # 候选探测序号(用户发起新连接时作废陈旧回调)
 var _cand := {"ips": [], "port": 0, "i": 0, "seq": -1}  # 多地址加入进度
 var kick_btn: Button
+var mode_option: OptionButton
 var help_btn: Button
 var back_btn: Button
 var title_lbl: Label
@@ -729,6 +730,18 @@ func _build_ui() -> void:
 		_set_status("已复制: " + payload + " , 发给朋友即可加入", COLOR_GREEN))
 	add_child(copy_btn)
 
+	# 模式选择(房主专用, 联机肉鸽/普通)
+	var mode_lbl := AppTheme.make_label(15, AppTheme.WHITE)
+	mode_lbl.text = "模式"
+	mode_lbl.position = Vector2(830, 545)
+	add_child(mode_lbl)
+	mode_option = OptionButton.new()
+	mode_option.addItem("普通模式")
+	mode_option.addItem("肉鸽模式")
+	mode_option.select(0)
+	mode_option.position = Vector2(880, 541)
+	mode_option.custom_minimum_size = Vector2(120, 34)
+	add_child(mode_option)
 	# 规则设置
 	rules_lbl = AppTheme.section_label("规则设置")
 	rules_lbl.position = Vector2(830, 310)
@@ -1114,11 +1127,15 @@ func _bind_net() -> void:
 
 
 func _gather_rules() -> Dictionary:
+	var rogue := false
+	if mode_option != null:
+		rogue = mode_option.selected == 1
 	return {
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
 		"rounds": rounds_option.get_selected_id(),
 		"stakes": stakes_option.get_selected_id(),
+		"rogue": rogue,
 	}
 
 

@@ -326,6 +326,21 @@ func fill_bots(peer: int) -> Array:
 	return out
 
 
+## 肉鸽 draft: 任意玩家选一张命运卡(先到先得)
+func rogue_pick(peer: int, idx: int) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl == null:
+		return out
+	if str(room.match_ctl.state.get("phase", "")) != "draft":
+		return out
+	var r: Dictionary = room.match_ctl.human_apply(
+			{"t": "rogue_pick", "idx": idx}, Time.get_ticks_msec())
+	if bool(r["changed"]):
+		_after_state_change(out, room, r)
+	return out
+
+
 func start(peer: int, now_ms: int = -1) -> Array:
 	var out := []
 	var room = _room_of(peer)

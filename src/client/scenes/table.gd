@@ -324,7 +324,7 @@ func _advance() -> void:
 					advancing = false
 					_show_rogue_choice()
 					break
-		elif phase == "draft" and rogue:
+		elif phase == "draft":
 			_advance_gen += 1
 			advancing = false
 			_show_rogue_choice()
@@ -623,10 +623,13 @@ func _show_rogue_choice() -> void:
 				meta.get("desc", "")], Vector2(330, 130), 16)
 		pick.pressed.connect(func() -> void:
 			Audio.play("win")
-			var r := GameStateGd.apply(state,
-					{"t": "rogue_pick", "idx": idx})
-			if bool(r["ok"]):
-				state = r["state"]
+			if mode == "online" and net != null:
+				net.send_rogue_pick(idx)
+			else:
+				var r := GameStateGd.apply(state,
+						{"t": "rogue_pick", "idx": idx})
+				if bool(r["ok"]):
+					state = r["state"]
 			_show_rogue_reveal())
 		row.add_child(pick)
 	var dice_row := HBoxContainer.new()
@@ -736,7 +739,7 @@ func _update_rogue_lbl() -> void:
 	if rogue_lbl == null:
 		return
 	var mod_id := str(state["cfg"].get("rogue_mod", ""))
-	var show := rogue and _rogue_dlg == null and mod_id != "" 			and str(state["phase"]) in ["play", "exchange"]
+	var show := mod_id != "" and _rogue_dlg == null 			and str(state["phase"]) in ["play", "exchange"]
 	rogue_lbl.visible = show
 	if show:
 		var meta := {}
