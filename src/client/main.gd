@@ -16,6 +16,7 @@ var lobby = null
 var table = null
 var net = null
 var fight_panel: Control = null # 格斗试炼页(非空=试炼进行中)
+var _fight_arena: Control = null # 联机格斗对战竞技场(非空=对战中)
 var embed_server: Node = null   # 本机开房的内嵌服务器(非空=正在做主机)
 var _fit_target: Control = null # 最近一次做过安全区适配的可见场景
 var _resume_dlg: Control = null # "返回上一局?"确认框
@@ -134,6 +135,10 @@ func _notification(what: int) -> void:
 func _handle_android_back() -> void:
 	if _resume_dlg != null and is_instance_valid(_resume_dlg):
 		_close_resume_dialog()
+		return
+	if _fight_arena != null and is_instance_valid(_fight_arena) \
+				and _fight_arena.visible:
+		_fight_arena._do_leave()
 		return
 	if table != null and is_instance_valid(table) and table.visible:
 		table._on_leave_pressed()
@@ -289,7 +294,38 @@ func _start_online() -> void:
 		lobby.start_game.connect(_enter_table)
 		lobby.back_to_menu.connect(_back_to_menu)
 		lobby.host_requested.connect(_start_host)
+		# 格斗对战房间不发 game_view(大富豪视图), 由 s_fight_state 驱动进场
+		net.fight_state.connect(_on_fight_state)
 	lobby.visible = true
+
+
+## 收到格斗对战视图: 大厅页签在场则直接切入竞技场
+## (普通/肉鸽房间走 lobby.start_game → _enter_table, 两条路径互斥)
+func _on_fight_state(view: Dictionary) -> void:
+	if _fight_arena != null and is_instance_valid(_fight_arena):
+		return  # 已在场: 竞技场自己监听 net.fight_state 刷新
+	if net == null or not net.in_room:
+		return
+	if lobby != null:
+		lobby.visible = false
+	_fight_arena = (load("res://src/client/ui/fight_arena.gd") as GDScript).new()
+	_fight_arena.name = "FightArena"
+	_fight_arena.net = net
+	add_child(_fight_arena)
+	_fit_safe_area(_fight_arena)
+	_fight_arena.finished.connect(_leave_fight_arena, CONNECT_ONE_SHOT)
+
+
+func _leave_fight_arena() -> void:
+	if _fight_arena != null:
+		_fight_arena.queue_free()
+		_fight_arena = null
+	if lobby != null:
+		lobby.visible = true
+		_fit_safe_area(lobby)
+		if lobby.has_method("return_to_entry"):
+			lobby.return_to_entry()
+	Audio.play_bgm("lobby")
 
 
 ## 本机开房: 内嵌专用服务器 + 本机客户端自动连入; 朋友在大厅填本机 IP 直连。
@@ -334,10 +370,6 @@ func _enter_table() -> void:
 
 
 func _leave_table() -> void:
-	var tf := FileAccess.open("C:/Users/Administrator/AppData/Local/Temp/leave_dbg.txt", FileAccess.WRITE)
-	if tf != null:
-		tf.store_line("leave_table called")
-		tf.close()
 	if table != null:
 		table.queue_free()
 		table = null

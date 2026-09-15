@@ -356,6 +356,30 @@ func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 			"mult": mult, "achievements": newly}
 
 
+## 联机格斗对战结算(客户端本地入账, 与联机大富豪同策略):
+## 胜 +40 金币 +2 钻石, 败 +10 金币; 计入场次/胜负(称号进度)与每日任务。
+func grant_pvp_result(win: bool) -> Dictionary:
+	var g := 40 if win else 10
+	var d := 2 if win else 0
+	gold = maxi(gold + g, 0)
+	diamonds += d
+	diamonds_earned += d
+	local_matches += 1
+	if win:
+		local_wins += 1
+		_mission_add("m_win", 1)
+	_mission_add("m_play", 1)
+	var newly := check_achievements()
+	push_history({
+		"day": Time.get_date_string_from_system(),
+		"mode": "格斗对战", "floor": 0, "rank": 1 if win else 2,
+		"points": 0, "gold": g, "diamonds": d,
+	})
+	_mark_dirty()
+	balance_changed.emit()
+	return {"gold": g, "diamonds": d, "achievements": newly}
+
+
 ## ── 每日任务 ──
 
 ## 跨日重置任务(惰性)

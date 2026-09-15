@@ -13,6 +13,7 @@ static func defaults() -> Dictionary:
 		"turn_seconds": 20,
 		"exchange_seconds": 15,
 		"stakes": 1,
+		"mode": "normal",   # normal | rogue | fight(联机格斗对战: 前2座互殴, 其余观战)
 		"rogue": false,
 		"rogue_mod": "",
 	}
@@ -30,4 +31,11 @@ static func normalize(cfg: Dictionary) -> Dictionary:
 	out["turn_seconds"] = clampi(int(out["turn_seconds"]), 5, 120)
 	out["exchange_seconds"] = clampi(int(out["exchange_seconds"]), 5, 60)
 	out["stakes"] = clampi(int(out["stakes"]), 1, 3)
+	# 房间模式白名单(未知值回退普通); 模式与肉鸽开关互相同步:
+	# 新调用方传 mode, 旧调用方(本地 {"rogue": true}) 经 rogue 反推 mode
+	if not str(out["mode"]) in ["normal", "rogue", "fight"]:
+		out["mode"] = "normal"
+	if str(out["mode"]) == "normal" and bool(out["rogue"]):
+		out["mode"] = "rogue"
+	out["rogue"] = str(out["mode"]) == "rogue"
 	return out

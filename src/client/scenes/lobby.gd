@@ -736,8 +736,9 @@ func _build_ui() -> void:
 	mode_lbl.position = Vector2(830, 545)
 	add_child(mode_lbl)
 	mode_option = OptionButton.new()
-	mode_option.addItem("普通模式")
-	mode_option.addItem("肉鸽模式")
+	mode_option.add_item("普通模式")
+	mode_option.add_item("肉鸽模式")
+	mode_option.add_item("格斗对战(2人)")
 	mode_option.select(0)
 	mode_option.position = Vector2(880, 541)
 	mode_option.custom_minimum_size = Vector2(120, 34)
@@ -908,6 +909,8 @@ func _build_ui() -> void:
 	_reg_room(rounds_lbl, Vector2(830, 224), "right")
 	_reg_room(rounds_option, Vector2(880, 220), "right")
 	_reg_room(save_settings_btn, Vector2(830, 264), "right")
+	_reg_room(mode_lbl, Vector2(830, 545), "right")
+	_reg_room(mode_option, Vector2(880, 541), "right")
 	for i in _emoji_btns.size():
 		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
 
@@ -1127,15 +1130,18 @@ func _bind_net() -> void:
 
 
 func _gather_rules() -> Dictionary:
-	var rogue := false
+	var mode := "normal"
 	if mode_option != null:
-		rogue = mode_option.selected == 1
+		match mode_option.selected:
+			1: mode = "rogue"
+			2: mode = "fight"
 	return {
 		"with_joker": chk_joker.button_pressed,
 		"revolution": chk_revolution.button_pressed,
 		"rounds": rounds_option.get_selected_id(),
 		"stakes": stakes_option.get_selected_id(),
-		"rogue": rogue,
+		"mode": mode,
+		"rogue": mode == "rogue",
 	}
 
 
@@ -1150,6 +1156,11 @@ func _apply_settings(settings: Dictionary) -> void:
 	for i in rounds_option.item_count:
 		if int(rounds_option.get_item_id(i)) == rounds:
 			rounds_option.select(i)
+	if mode_option != null:
+		match str(settings.get("mode", "normal")):
+			"rogue": mode_option.select(1)
+			"fight": mode_option.select(2)
+			_: mode_option.select(0)
 
 
 func _on_room_state(state: Dictionary) -> void:
@@ -1170,13 +1181,15 @@ func _on_room_state(state: Dictionary) -> void:
 			ip_show += " 等%d个地址" % host_invite_ips.size()
 		ip_txt = "服务器 %s · " % ip_show
 	invite_lbl.text = ip_txt + "点【复制邀请码】发给朋友 → 朋友点【粘贴邀请码, 一键加入】或【搜索附近主机】"
-	# 座位卡
+	# 座位卡(格斗对战房间: 1/2 号位=格斗者, 3/4 号位=观战)
+	var fight_room: bool = str((state.get("settings", {}) as Dictionary)
+			.get("mode", "normal")) == "fight"
 	for i in 4:
 		var nm: Label = _seat_cards[i]["name"]
 		var tag: Label = _seat_cards[i]["tag"]
 		nm.text = "(空位)"
 		nm.add_theme_color_override("font_color", COLOR_DIM)
-		tag.text = "等待加入"
+		tag.text = "等待加入" if not fight_room else ("格斗位" if i < 2 else "观战位")
 		tag.add_theme_color_override("font_color", COLOR_DIM)
 		for p in state.get("players", []):
 			if int(p.get("seat", -1)) != i:
@@ -1192,6 +1205,8 @@ func _on_room_state(state: Dictionary) -> void:
 				bits.append("AI")
 			elif not bool(p.get("online", true)):
 				bits.append("离线·AI 代管")
+			if fight_room:
+				bits.append("格斗者" if i < 2 else "观战中")
 			tag.text = " · ".join(bits)
 			tag.add_theme_color_override("font_color",
 					COLOR_GOLD if i == host_seat else COLOR_DIM)

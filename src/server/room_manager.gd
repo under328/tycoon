@@ -341,6 +341,36 @@ func rogue_pick(peer: int, idx: int) -> Array:
 	return out
 
 
+## 格斗对战: 选牌(仅格斗者座位合法, 观战者/重复选牌被拒)
+func fight_pick(peer: int, cards: Array) -> Array:
+	return _fight_action(peer, "pick", cards)
+
+
+## 格斗对战: 回合行动 attack/skill/defend(仅当前回合格斗者合法)
+func fight_act(peer: int, action: String) -> Array:
+	return _fight_action(peer, "act", action)
+
+
+func _fight_action(peer: int, kind: String, payload) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl == null \
+			or str(room.match_ctl.kind) != "fight":
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "no_match", "msg": "没有进行中的格斗对局"}})
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	var r: Dictionary = (room.match_ctl.human_pick(seat, payload, Time.get_ticks_msec())
+			if kind == "pick"
+			else room.match_ctl.human_act(seat, str(payload), Time.get_ticks_msec()))
+	if not bool(r["changed"]):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": str(r.get("error", "invalid")), "msg": "非法操作"}})
+		return out
+	_bcast_fight(out, room, r.get("events", []))
+	return out
+
+
 func start(peer: int, now_ms: int = -1) -> Array:
 	var out := []
 	var room = _room_of(peer)
@@ -401,6 +431,9 @@ func tick(now_ms: int) -> Array:
 		if room.match_ctl == null:
 			continue
 		var ctl = room.match_ctl
+		if str(ctl.get("kind")) == "fight":
+			_tick_fight(out, room, now_ms)
+			continue
 		var r: Dictionary = ctl.tick(now_ms)
 		if bool(r["changed"]):
 			_after_state_change(out, room, r)
@@ -412,6 +445,17 @@ func tick(now_ms: int) -> Array:
 			else:
 				_bcast_room_state(out, room)
 	return out
+
+
+## 格斗房间时钟: AI/超时驱动 + 结束收尾
+func _tick_fight(out: Array, room, now_ms: int) -> void:
+	var ctl = room.match_ctl
+	var r: Dictionary = ctl.tick(now_ms)
+	if bool(r["changed"]):
+		_bcast_fight(out, room, r.get("events", []))
+	if ctl.game_finished(now_ms):
+		room.end_match()
+		_bcast_room_state(out, room)
 
 
 ## 状态变化后：广播事件 + 给每个在线人类发私有 view（含 game_turn）。
@@ -463,11 +507,23 @@ func _bcast_views(out: Array, room) -> void:
 
 func _view_msg(room, seat: int) -> Dictionary:
 	var ctl = room.match_ctl
+	if str(ctl.get("kind")) == "fight":
+		return {"peer": int(room.seats[seat]["peer"]), "event": "s_fight_state",
+				"data": {"view": ctl.view_for(seat), "events": []}}
 	var view := ViewGd.build(ctl.state, seat)
 	var data := {"view": view}
 	if str(ctl.state["phase"]) == "play":
 		data["turn_seat"] = int(ctl.state["turn"])
 	return {"peer": int(room.seats[seat]["peer"]), "event": "s_game_view", "data": data}
+
+
+## 格斗对战广播: 全房在线人类(格斗者+观战者)都收到按座位裁剪的战斗视图
+func _bcast_fight(out: Array, room, events: Array) -> void:
+	for s in 4:
+		if _human_online(room, s):
+			out.append({"peer": int(room.seats[s]["peer"]), "event": "s_fight_state",
+					"data": {"view": room.match_ctl.view_for(s),
+							"events": events}})
 
 
 func _bcast_event(out: Array, room, event: String, data: Dictionary) -> void:

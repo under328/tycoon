@@ -15,6 +15,7 @@ signal game_event(event: String, data: Dictionary)
 signal errored(code: String, msg: String)
 signal kicked_off(reason: String)
 signal stats_updated(entry: Dictionary)
+signal fight_state(view: Dictionary)   # 联机格斗对战: 按座位裁剪的战斗视图
 
 const MsgC = preload("res://src/protocol/msg.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
@@ -35,6 +36,7 @@ var _disc: PacketPeerUDP = null   # 局域网发现应答(游戏端口+2)
 
 # --- 客户端侧 ---
 var latest_view: Dictionary = {}
+var latest_fight: Dictionary = {}   # 最近一次格斗对战视图(重连/迟到挂载时恢复画面)
 var last_room_state: Dictionary = {}
 var my_seat := -1
 var in_room := false
@@ -307,8 +309,23 @@ func c_room_join(data: Dictionary) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func c_rogue_pick(data: Dictionary) -> void:
-	if manager != null:
-		_flush(manager.rogue_pick(_sender(), int(data.get("idx", 0))))
+	if not is_server:
+		return
+	_flush(manager.rogue_pick(_sender(), int(data.get("idx", 0))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_fight_pick(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.fight_pick(_sender(), data.get("cards", [])))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_fight_act(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.fight_act(_sender(), str(data.get("action", "attack"))))
 
 
 func c_room_settings(data: Dictionary) -> void:
@@ -476,6 +493,14 @@ func s_game_end(data: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+func s_fight_state(data: Dictionary) -> void:
+	if is_server:
+		return
+	latest_fight = data.get("view", {}).duplicate(true)
+	fight_state.emit(latest_fight)
+
+
+@rpc("authority", "call_remote", "reliable")
 func s_kicked(data: Dictionary) -> void:
 	if is_server:
 		return
@@ -583,6 +608,7 @@ func leave_room() -> void:
 	in_room = false
 	my_seat = -1
 	latest_view = {}
+	latest_fight = {}
 
 
 func disconnect_all() -> void:
@@ -624,6 +650,16 @@ func pass_turn() -> void:
 ## 换牌阶段: 返还 n 张牌
 func exchange_return(cards: Array) -> void:
 	_c_send("c_exchange_return", {"cards": cards})
+
+
+## 格斗对战: 提交选牌(5 张)
+func send_fight_pick(cards: Array) -> void:
+	_c_send("c_fight_pick", {"cards": cards})
+
+
+## 格斗对战: 回合行动 attack/skill/defend
+func send_fight_act(action: String) -> void:
+	_c_send("c_fight_act", {"action": action})
 
 
 ## 房主：移除指定座位的人类玩家
@@ -692,6 +728,7 @@ func _on_conn_failed() -> void:
 
 func _on_server_disconnected() -> void:
 	latest_view = {}
+	latest_fight = {}
 	_welcomed = false
 	if auto_reconnect and _want_connection:
 		_arm_retry()
