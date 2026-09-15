@@ -317,13 +317,12 @@ func _advance() -> void:
 			if bool(r["ok"]):
 				state = r["state"]
 				_counter_reset()
-				if rogue:
-					# 揭示期间停循环, 关闭后重启。必须同步清 advancing:
-					# gen 已自增, 循环尾部的清位不会执行, 否则关闭弹窗时
-					# 看到 advancing==true 直接 return → 第 2 局起永久卡死
+				if rogue and str(state["phase"]) == "draft":
+					# 引擎进入 draft(还有下一局) → 弹命运二选一;
+					# 最后一局 next_round 返回 game_end → 走常规结算, 不抽牌
 					_advance_gen += 1
 					advancing = false
-					_show_rogue_choice()  # 次局命运二选一
+					_show_rogue_choice()
 					break
 		elif phase == "draft" and rogue:
 			_advance_gen += 1
