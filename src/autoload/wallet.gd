@@ -44,11 +44,18 @@ const ACHIEVEMENTS := [
 	{"id": "gambler", "name": "赌性坚强", "desc": "购入一张双倍钻石卡"},
 	{"id": "signer_7", "name": "风雨无阻", "desc": "连续签到满 7 天"},
 	{"id": "fight_1", "name": "初入试炼", "desc": "完成一次格斗试炼"},
-	{"id": "fight_5", "name": "登塔者", "desc": "格斗试炼到达第 5 层"},
-	{"id": "fight_10", "name": "无尽征服者", "desc": "格斗试炼到达第 10 层"},
-	{"id": "fight_boss_3", "name": "屠龙勇士", "desc": "累计击败 3 个 Boss"},
+	{"id": "fight_5", "name": "登塔者", "desc": "格斗试炼打进第 5 回合(BOSS 战)"},
+	{"id": "fight_boss_3", "name": "屠龙勇士", "desc": "通关格斗试炼 3 次"},
 	{"id": "shopper", "name": "大买家", "desc": "商城累计消费 5 次"},
 	{"id": "revivor", "name": "向死而生", "desc": "使用复活币重返战场"},
+	{"id": "fight_clear", "name": "试炼制霸", "desc": "通关格斗试炼(击败 BOSS)"},
+	{"id": "fight_clear_5", "name": "试炼大师", "desc": "通关格斗试炼 5 次"},
+	{"id": "daily_1", "name": "每日战士", "desc": "完成一次每日挑战"},
+	{"id": "daily_3", "name": "持之以恒", "desc": "累计 3 天参与每日挑战"},
+	{"id": "rogue_win_1", "name": "命运之子", "desc": "肉鸽模式取得 1 场胜利"},
+	{"id": "rogue_win_10", "name": "命运主宰", "desc": "肉鸽模式取得 10 场胜利"},
+	{"id": "codex_all", "name": "命运收藏家", "desc": "图鉴见齐全部 10 张命运卡"},
+	{"id": "pvp_win_1", "name": "擂台新人", "desc": "联机格斗对战取得 1 场胜利"},
 ]
 
 ## 特殊道具: effect 决定生效方式
@@ -88,9 +95,19 @@ var diamonds_earned := 0       # 累计获得钻石(成就统计)
 var special_bought := 0        # 累计购入特殊道具数(成就统计)
 var unlocked: Array = []       # 已解锁成就 id
 var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
-var fight_best := 0            # 格斗试炼历史最高层数
+var fight_best := 0            # 格斗试炼历史最远回合(1-5)
 var fight_runs := 0            # 累计格斗局数
 var fight_bosses := 0          # 累计击败 Boss 数
+var fight_clears := 0          # 格斗试炼通关次数
+var rogue_runs := 0            # 肉鸽模式局数
+var rogue_wins := 0            # 肉鸽模式胜场
+var pvp_wins := 0              # 联机格斗对战胜场
+var daily_day := ""            # 每日挑战最近参与日期
+var daily_best_round := 0      # 当日最佳到达回合(0-5)
+var daily_best_hp := 0         # 当日最佳剩余生命百分比(0-100)
+var daily_days := 0            # 累计参与每日挑战天数
+var mod_seen := {}             # 命运卡图鉴: mod_id → 出现次数
+var mod_taken := {}            # 命运卡图鉴: mod_id → 选用次数
 var purchases := 0             # 累计商城消费次数
 var revives := 0               # 累计使用复活币次数
 var inventory := {}            # 消耗品库存: id -> 数量
@@ -149,6 +166,16 @@ func _reset_defaults() -> void:
 	fight_best = 0
 	fight_runs = 0
 	fight_bosses = 0
+	fight_clears = 0
+	rogue_runs = 0
+	rogue_wins = 0
+	pvp_wins = 0
+	daily_day = ""
+	daily_best_round = 0
+	daily_best_hp = 0
+	daily_days = 0
+	mod_seen = {}
+	mod_taken = {}
 	purchases = 0
 	revives = 0
 	inventory = {}
@@ -206,6 +233,18 @@ func _read_into(path: String) -> bool:
 	fight_best = int(cf.get_value("wallet", "fight_best", 0))
 	fight_runs = int(cf.get_value("wallet", "fight_runs", 0))
 	fight_bosses = int(cf.get_value("wallet", "fight_bosses", 0))
+	fight_clears = int(cf.get_value("wallet", "fight_clears", 0))
+	rogue_runs = int(cf.get_value("wallet", "rogue_runs", 0))
+	rogue_wins = int(cf.get_value("wallet", "rogue_wins", 0))
+	pvp_wins = int(cf.get_value("wallet", "pvp_wins", 0))
+	daily_day = str(cf.get_value("wallet", "daily_day", ""))
+	daily_best_round = int(cf.get_value("wallet", "daily_best_round", 0))
+	daily_best_hp = int(cf.get_value("wallet", "daily_best_hp", 0))
+	daily_days = int(cf.get_value("wallet", "daily_days", 0))
+	var ms = cf.get_value("wallet", "mod_seen", {})
+	mod_seen = ms if ms is Dictionary else {}
+	var mt = cf.get_value("wallet", "mod_taken", {})
+	mod_taken = mt if mt is Dictionary else {}
 	purchases = int(cf.get_value("wallet", "purchases", 0))
 	revives = int(cf.get_value("wallet", "revives", 0))
 	var inv = cf.get_value("wallet", "inventory", {})
@@ -244,6 +283,16 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "fight_best", fight_best)
 	cf.set_value("wallet", "fight_runs", fight_runs)
 	cf.set_value("wallet", "fight_bosses", fight_bosses)
+	cf.set_value("wallet", "fight_clears", fight_clears)
+	cf.set_value("wallet", "rogue_runs", rogue_runs)
+	cf.set_value("wallet", "rogue_wins", rogue_wins)
+	cf.set_value("wallet", "pvp_wins", pvp_wins)
+	cf.set_value("wallet", "daily_day", daily_day)
+	cf.set_value("wallet", "daily_best_round", daily_best_round)
+	cf.set_value("wallet", "daily_best_hp", daily_best_hp)
+	cf.set_value("wallet", "daily_days", daily_days)
+	cf.set_value("wallet", "mod_seen", mod_seen)
+	cf.set_value("wallet", "mod_taken", mod_taken)
 	cf.set_value("wallet", "purchases", purchases)
 	cf.set_value("wallet", "revives", revives)
 	cf.set_value("wallet", "inventory", inventory)
@@ -268,7 +317,8 @@ func save_wallet() -> void:
 ## 场次结算: 金币 = 总积分 × 2 × 输赢倍率(可为负, 钱包下限 0);
 ## 钻石按最终身份: 大富豪 +2, 富豪 +1, 其余 +0。rank 1=大富豪…4=大贫民。
 ## 双倍钻石卡生效中(当日)钻石翻倍; 当日首胜额外 +3 钻(每日首胜奖励)。
-func grant_match_reward(points: int, rank: int, stakes: int = 1) -> Dictionary:
+func grant_match_reward(points: int, rank: int, stakes: int = 1,
+		mode: String = "normal") -> Dictionary:
 	var gold_delta := points * GOLD_PER_POINT * clampi(stakes, 1, 3)
 	var dia_delta := 0
 	match clampi(rank - 1, 0, 3):
@@ -287,6 +337,10 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1) -> Dictionary:
 	diamonds += dia_delta + bonus
 	diamonds_earned += dia_delta + bonus
 	local_matches += 1
+	if mode == "rogue":
+		rogue_runs += 1
+		if rank == 1:
+			rogue_wins += 1
 	if rank == 1:
 		local_wins += 1
 	_mission_add("m_play", 1)
@@ -338,6 +392,10 @@ func buy_special(item_id: String) -> bool:
 
 ## 通关/终局发放: 层数越高钻石越多(2 + 层数×2); 记录历史最高层
 func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
+	fight_runs += 1
+	if floor_num >= 5:
+		fight_clears += 1
+	fight_bosses += maxi(bosses, 0)
 	var mult := 1
 	if diamond_triple_active():
 		mult = 3
@@ -367,6 +425,7 @@ func grant_pvp_result(win: bool) -> Dictionary:
 	local_matches += 1
 	if win:
 		local_wins += 1
+		pvp_wins += 1
 		_mission_add("m_win", 1)
 	_mission_add("m_play", 1)
 	var newly := check_achievements()
@@ -378,6 +437,48 @@ func grant_pvp_result(win: bool) -> Dictionary:
 	_mark_dirty()
 	balance_changed.emit()
 	return {"gold": g, "diamonds": d, "achievements": newly}
+
+
+## ── 每日挑战(格斗试炼) ──
+
+## 当日固定种子: 全设备同一天同一开局布局(日期数字, 平台无关)
+func daily_seed() -> int:
+	return int(str(_today()).replace("-", ""))
+
+
+## 每日挑战结算: 记录当日最佳(回合优先, 同回合比剩余生命%);
+## 跨日首次参与计入天数。返回 {new_day, better, best_round, best_hp}
+func record_daily(rounds: int, hp_pct: int) -> Dictionary:
+	var today := _today()
+	var new_day: bool = daily_day != today
+	if new_day:
+		daily_day = today
+		daily_best_round = 0
+		daily_best_hp = 0
+		daily_days += 1
+	var better: bool = rounds > daily_best_round 			or (rounds == daily_best_round and hp_pct > daily_best_hp)
+	if better:
+		daily_best_round = maxi(rounds, 0)
+		daily_best_hp = clampi(hp_pct, 0, 100)
+	var newly := check_achievements()
+	_mark_dirty()
+	return {"new_day": new_day, "better": better,
+			"best_round": daily_best_round, "best_hp": daily_best_hp,
+			"achievements": newly}
+
+
+## 命运卡图鉴计数(出现/选用)
+func note_rogue_mod(mod_id: String, taken: bool) -> void:
+	var id := str(mod_id)
+	if taken:
+		mod_taken[id] = int(mod_taken.get(id, 0)) + 1
+		# 选用隐含出现过: 图鉴未见则补记一次(不重复计)
+		if int(mod_seen.get(id, 0)) == 0:
+			mod_seen[id] = 1
+	else:
+		mod_seen[id] = int(mod_seen.get(id, 0)) + 1
+	_mark_dirty()
+	check_achievements()   # 图鉴收集成就即时解锁(不等下局结算)
 
 
 ## ── 每日任务 ──
@@ -484,7 +585,9 @@ func check_achievements() -> Array:
 		"special_bought": special_bought, "sign_streak": sign_streak,
 		"fight_best": fight_best, "fight_runs": fight_runs,
 		"fight_bosses": fight_bosses, "purchases": purchases,
-		"revives": revives,
+		"revives": revives, "fight_clears": fight_clears,
+		"rogue_wins": rogue_wins, "pvp_wins": pvp_wins,
+		"daily_days": daily_days, "codex_seen": mod_seen.size(),
 	}
 	var newly: Array = []
 	for a in ACHIEVEMENTS:
@@ -513,11 +616,18 @@ func _ach_met(id: String, s: Dictionary) -> bool:
 		"gambler": return int(s["special_bought"]) >= 1
 		"signer_7": return int(s["sign_streak"]) >= 7
 		"fight_5": return int(s["fight_best"]) >= 5
-		"fight_10": return int(s["fight_best"]) >= 10
 		"fight_1": return int(s["fight_runs"]) >= 1
-		"fight_boss_3": return int(s["fight_bosses"]) >= 3
+		"fight_boss_3": return int(s.get("fight_clears", 0)) >= 3
 		"shopper": return int(s.get("purchases", 0)) >= 5
 		"revivor": return int(s.get("revives", 0)) >= 1
+		"fight_clear": return int(s.get("fight_clears", 0)) >= 1
+		"fight_clear_5": return int(s.get("fight_clears", 0)) >= 5
+		"daily_1": return int(s.get("daily_days", 0)) >= 1
+		"daily_3": return int(s.get("daily_days", 0)) >= 3
+		"rogue_win_1": return int(s.get("rogue_wins", 0)) >= 1
+		"rogue_win_10": return int(s.get("rogue_wins", 0)) >= 10
+		"codex_all": return int(s.get("codex_seen", 0)) >= 10
+		"pvp_win_1": return int(s.get("pvp_wins", 0)) >= 1
 	return false
 
 

@@ -15,6 +15,7 @@ const AvatarScript = preload("res://src/client/ui/avatar.gd")
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
+var daily := false           # 每日挑战: 当日固定种子, 结算计入每日最佳
 var fm: FightModeGd
 var phase := "run"           # run(试炼中) / over(已结束)
 var _run_diamonds := 0
@@ -64,7 +65,8 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	size = get_parent_area_size()
-	fm = FightModeGd.new()
+	fm = FightModeGd.new(Wallet.daily_seed()) if daily \
+			else FightModeGd.new()
 
 	var bg := ColorRect.new()
 	bg.color = Color("191934")
@@ -72,7 +74,7 @@ func _ready() -> void:
 	add_child(bg)
 
 	header = preload("res://src/client/ui/p5_header.gd").new()
-	header.text = "格斗试炼"
+	header.text = "每日挑战" if daily else "格斗试炼"
 	header.icon = "card"
 	header.position = Vector2(36, 22)
 	header.custom_minimum_size = Vector2(360, 54)
@@ -247,7 +249,8 @@ func _label(size_num: int, color: Color) -> Label:
 
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
-	round_lbl.text = "第 %d/%d 回合 · %s" % [fm.round_num, FightModeGd.ROUNDS,
+	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
+		else "") + "第 %d/%d 回合 · %s" % [fm.round_num, FightModeGd.ROUNDS,
 			str(FightModeGd.GROUPS[fm.group]["name"])]
 	_refresh_slots()
 	_refresh_bars()
@@ -727,7 +730,8 @@ func _finish_run() -> void:
 		return
 	phase = "over"
 	var cleared := fm.round_num - 1 if not fm.run_won else fm.round_num
-	var r: Dictionary = Wallet.grant_fight_reward(cleared)
+	var r: Dictionary = Wallet.grant_fight_reward(cleared,
+			1 if fm.run_won else 0)   # 通关即击破 1 个 BOSS
 	_run_diamonds += int(r["diamonds"])
 	Wallet.note_mission("m_fight")
 	Wallet.push_history({
@@ -738,6 +742,15 @@ func _finish_run() -> void:
 	var title := "试炼通关!" if fm.run_won else "试炼结束"
 	var body := "通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账" % [
 		cleared, int(r["best"]), _run_diamonds]
+	if daily:
+		var hp_pct := int(100.0 * clampi(fm.hp, 0, int(fm.stats["max_hp"]))
+				/ float(maxi(int(fm.stats["max_hp"]), 1)))
+		var d: Dictionary = Wallet.record_daily(cleared, hp_pct)
+		var best_txt := ("通关! 剩余生命 %d%%" % int(d["best_hp"])) \
+				if int(d["best_round"]) >= 5 \
+				else "到达第 %d 回合" % int(d["best_round"])
+		body += "\n今日最佳: %s%s" % [best_txt,
+				" (新纪录!)" if bool(d["better"]) else ""]
 	_show_overlay(title, body, "返回菜单", func() -> void:
 		_close_overlay()
 		closed.emit()

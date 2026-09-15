@@ -6,6 +6,7 @@ const SkinsLib = preload("res://src/client/ui/skins.gd")
 const AvatarPix = preload("res://src/client/ui/avatar_pix.gd")
 const CardViewGd = preload("res://src/client/ui/card_view.gd")
 const WalletGd = preload("res://src/autoload/wallet.gd")
+const GameStateGd = preload("res://src/rules/game_state.gd")
 const RoomManagerGd = preload("res://src/server/room_manager.gd")
 
 const NEW_SKINS := ["skin_dball", "skin_ninja", "skin_rx"]
@@ -24,6 +25,7 @@ func run(t) -> void:
 	_rank_title(t)
 	_signin(t)
 	_achievements(t)
+	_retention(t)
 	_history(t)
 	_consumables(t)
 	_fight_mission(t)
@@ -196,6 +198,61 @@ func _achievements(t) -> void:
 		w.owned_skins.append("skin_x%d" % i)
 	w.check_achievements()
 	t.expect(w.unlocked.has("collector"), "8 件装扮解锁收藏家")
+	w.queue_free()
+
+
+## 留存: 每日挑战 / 命运卡图鉴 / 新计数器与成就 II
+func _retention(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_retain_wallet.cfg"
+	# 每日种子: 平台无关的当日确定性
+	t.expect_eq(w.daily_seed(),
+			int(str(Time.get_date_string_from_system()).replace("-", "")),
+			"每日种子=日期数字")
+	# 首次参与: 计天数, 记录最佳
+	var d1: Dictionary = w.record_daily(3, 40)
+	t.expect(bool(d1["new_day"]) and int(d1["best_round"]) == 3,
+			"每日挑战首录")
+	t.expect(w.unlocked.has("daily_1"), "首挑战解锁每日战士")
+	# 同日更好成绩
+	var d2: Dictionary = w.record_daily(5, 60)
+	t.expect(bool(d2["better"]) and int(d2["best_round"]) == 5,
+			"同日更优成绩覆盖")
+	# 同日较差成绩保留最佳
+	var d3: Dictionary = w.record_daily(2, 99)
+	t.expect(not bool(d3["better"]) and int(d3["best_round"]) == 5,
+			"较差成绩不覆盖最佳")
+	# 跨日: 新一天重新计
+	w.daily_day = "2000-01-01"
+	var d4: Dictionary = w.record_daily(4, 10)
+	t.expect(bool(d4["new_day"]) and int(w.daily_days) == 2,
+			"跨日重新计数")
+	t.expect(w.unlocked.has("daily_3") == false or int(w.daily_days) >= 3,
+			"持之以恒按天数解锁")
+	# 命运卡图鉴
+	w.note_rogue_mod("joker_x2", false)
+	w.note_rogue_mod("joker_x2", false)
+	w.note_rogue_mod("joker_x2", true)
+	t.expect(int(w.mod_seen.get("joker_x2", 0)) == 2
+			and int(w.mod_taken.get("joker_x2", 0)) == 1,
+			"图鉴出现/选用分别计数")
+	for m in GameStateGd.ROGUE_MODS:
+		w.note_rogue_mod(str(m["id"]), false)
+	t.expect(w.unlocked.has("codex_all"), "见齐 10 张解锁命运收藏家")
+	# 格斗计数: 通关/局数
+	w.grant_fight_reward(5)
+	t.expect(int(w.fight_clears) == 1 and int(w.fight_runs) == 1,
+			"格斗通关/局数计数")
+	t.expect(w.unlocked.has("fight_clear"), "通关解锁试炼制霸")
+	# 肉鸽模式计数
+	w.grant_match_reward(10, 1, 1, "rogue")
+	t.expect(int(w.rogue_runs) == 1 and int(w.rogue_wins) == 1,
+			"肉鸽场次/胜场计数")
+	t.expect(w.unlocked.has("rogue_win_1"), "肉鸽首胜解锁命运之子")
+	# PvP 胜场
+	w.grant_pvp_result(true)
+	t.expect(int(w.pvp_wins) == 1 and w.unlocked.has("pvp_win_1"),
+			"PvP 首胜解锁擂台新人")
 	w.queue_free()
 
 

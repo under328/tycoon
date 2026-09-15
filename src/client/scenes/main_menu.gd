@@ -6,6 +6,7 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 signal local_game(mode: String)
 signal online_game
 signal fight_mode
+signal fight_daily
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
 const SettingsPanelScript = preload("res://src/client/ui/settings_panel.gd")
@@ -349,8 +350,10 @@ func _show_mode_select() -> void:
 			"local_game", "normal", "normal_help.gd"],
 		["肉鸽模式", "每局『命运二选一』定规则: 10 种命运卡随机登场",
 			"local_game", "rogue", "rogue_help.gd"],
-		["格斗试炼", "化身头像人物, 5 张扑克定属性, 无尽楼层斩妖除魔",
+		["格斗试炼", "化身头像人物, 五回合二选一编成 5 张装备, 决战 BOSS",
 			"fight_mode", "fight", "fight_help.gd"],
+		["每日挑战", "全设备同一天同一布局, 每日一局冲击最佳成绩",
+			"fight_daily", "daily", "fight_help.gd"],
 	]
 	for m: Array in modes:
 		var mrow := HBoxContainer.new()
@@ -364,6 +367,8 @@ func _show_mode_select() -> void:
 			_close_mode_select()
 			if msig == "fight_mode":
 				fight_mode.emit()
+			elif msig == "fight_daily":
+				fight_daily.emit()
 			else:
 				local_game.emit(mmode))
 		mrow.add_child(mbtn)

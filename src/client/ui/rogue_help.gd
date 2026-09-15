@@ -13,9 +13,10 @@ const PAGES := [
 	["肉鸽模式 · 玩法",
 		"规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n"
 		+ "区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。\n"
-		+ "命运卡来自固定图鉴(共 6 种, 见后两页), 抽到哪张全凭运气——随机性与可玩性由此而来。", 0],
+		+ "命运卡来自固定图鉴(共 10 种, 见后几页), 抽到哪张全凭运气——随机性与可玩性由此而来。", 0],
 	["命运卡图鉴 · 发牌与规则", "发牌类与规则类命运卡:", 1],
 	["命运卡图鉴 · 触发与结算", "触发类与结算类命运卡:", 2],
+	["命运卡图鉴 · 我的进度", "本机记录每张命运卡的出现与选用次数:", 3],
 ]
 
 var page := 0
@@ -270,6 +271,27 @@ func _build_fig(kind: int) -> void:
 				_card_small(Vector2(80 + (i % 2) * 440, 16 + (i / 2) * 128), m2)
 			_text("触发类在对局中实时播报; 结算奖励与普通模式完全一致",
 					Vector2(240, 292), AppTheme.GOLD, 15)
+		3:
+			# 图鉴进度: 全部命运卡的出现/选用计数(双列)
+			for i in GameStateGd.ROGUE_MODS.size():
+				var m3: Dictionary = GameStateGd.ROGUE_MODS[i]
+				var mid := str(m3["id"])
+				var seen: int = int(Wallet.mod_seen.get(mid, 0))
+				var taken: int = int(Wallet.mod_taken.get(mid, 0))
+				var col := i % 2
+				var row := i / 2
+				var lb := _label(15, AppTheme.WHITE if seen > 0 else AppTheme.DIM)
+				lb.text = "%s %s — 出现 %d · 选用 %d" % [str(m3.get("glyph", "?")),
+						str(m3.get("name", "")), seen, taken]
+				lb.position = Vector2(60 + col * 480, 20 + row * 52)
+				_fig.add_child(lb)
+			var done := 0
+			for m4 in GameStateGd.ROGUE_MODS:
+				if int(Wallet.mod_seen.get(str(m4["id"]), 0)) > 0:
+					done += 1
+			_text("收集进度 %d/%d — 见齐全部命运卡解锁隐藏成就" % [done,
+					GameStateGd.ROGUE_MODS.size()], Vector2(240, 292),
+					AppTheme.GOLD, 15)
 
 
 func _label(size: int, color: Color) -> Label:

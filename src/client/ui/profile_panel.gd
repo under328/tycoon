@@ -6,12 +6,14 @@ signal closed
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const WalletGd = preload("res://src/autoload/wallet.gd")
+const GameStateGd = preload("res://src/rules/game_state.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
 var _tab := "ach"
 var _tab_ach_btn: Button
 var _tab_hist_btn: Button
 var _tab_mission_btn: Button
+var _tab_stats_btn: Button
 var _scroll: ScrollContainer
 var _grid: VBoxContainer
 var _toast: Label
@@ -59,6 +61,11 @@ func _ready() -> void:
 	_tab_mission_btn.toggle_mode = true
 	_tab_mission_btn.pressed.connect(func() -> void: _set_tab("mission"))
 	add_child(_tab_mission_btn)
+	_tab_stats_btn = AppTheme.make_button("统  计", Vector2(200, 46), 18)
+	_tab_stats_btn.position = Vector2(685, 110)
+	_tab_stats_btn.toggle_mode = true
+	_tab_stats_btn.pressed.connect(func() -> void: _set_tab("stats"))
+	add_child(_tab_stats_btn)
 
 	_scroll = ScrollContainer.new()
 	_scroll.position = Vector2(40, 170)
@@ -92,6 +99,8 @@ func _set_tab(tab: String) -> void:
 	_tab = tab
 	_tab_ach_btn.button_pressed = tab == "ach"
 	_tab_hist_btn.button_pressed = tab == "hist"
+	_tab_mission_btn.button_pressed = tab == "mission"
+	_tab_stats_btn.button_pressed = tab == "stats"
 	_refresh()
 
 
@@ -102,6 +111,8 @@ func _refresh() -> void:
 		_build_achievements()
 	elif _tab == "mission":
 		_build_missions()
+	elif _tab == "stats":
+		_build_stats()
 	else:
 		_build_history()
 
@@ -209,6 +220,57 @@ func _build_missions() -> void:
 				_toast.text = "任务奖励: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])]
 			_refresh())
 		h.add_child(btn)
+
+
+## 统计: 各模式场次/胜率/最佳一览
+func _build_stats() -> void:
+	var rows := [
+		["🂡 大富豪", "场次 %d · 胜 %d · 胜率 %d%%" % [Wallet.local_matches,
+				Wallet.local_wins,
+				(100 * Wallet.local_wins / Wallet.local_matches)
+						if Wallet.local_matches > 0 else 0]],
+		["🎲 肉鸽模式", "场次 %d · 胜 %d" % [Wallet.rogue_runs, Wallet.rogue_wins]],
+		["⚔ 格斗试炼", "局数 %d · 通关 %d · 最远第 %d 回合 · 击破 BOSS %d" % [
+				Wallet.fight_runs, Wallet.fight_clears, Wallet.fight_best,
+				Wallet.fight_bosses]],
+		["🥊 联机格斗对战", "胜场 %d" % Wallet.pvp_wins],
+		["📅 每日挑战", "%s · 累计参与 %d 天" % [_daily_text(), Wallet.daily_days]],
+		["📕 命运卡图鉴", "已见 %d / %d 种" % [Wallet.mod_seen.size(),
+				_preload_mods().size()]],
+	]
+	for r in rows:
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(1180, 0)
+		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28), Color(1, 1, 1, 0.12), 10, 1)
+		sb.content_margin_left = 18
+		sb.content_margin_right = 18
+		sb.content_margin_top = 12
+		sb.content_margin_bottom = 12
+		panel.add_theme_stylebox_override("panel", sb)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		panel.add_child(h)
+		var nm := AppTheme.make_label(18, AppTheme.GOLD)
+		nm.text = str(r[0])
+		nm.custom_minimum_size = Vector2(220, 0)
+		h.add_child(nm)
+		var v := AppTheme.make_label(16, AppTheme.WHITE)
+		v.text = str(r[1])
+		h.add_child(v)
+		_grid.add_child(panel)
+
+
+func _daily_text() -> String:
+	var today := Time.get_date_string_from_system()
+	if Wallet.daily_day != today:
+		return "今日未挑战"
+	if int(Wallet.daily_best_round) >= 5:
+		return "今日已通关(剩余生命 %d%%)" % Wallet.daily_best_hp
+	return "今日最佳: 到达第 %d 回合" % Wallet.daily_best_round
+
+
+func _preload_mods() -> Array:
+	return GameStateGd.ROGUE_MODS
 
 
 ## 战绩: 头部汇总 + 最近记录行(模式/名次/积分/奖励)

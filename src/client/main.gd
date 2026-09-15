@@ -49,6 +49,7 @@ func _ready() -> void:
 	menu.local_game.connect(_start_local)
 	menu.online_game.connect(_start_online)
 	menu.fight_mode.connect(_start_fight)
+	menu.fight_daily.connect(_start_fight_daily)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
 
@@ -256,13 +257,23 @@ func _resume_local_game() -> void:
 	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)  # 重连一次性信号
 
 
-## 格斗试炼(无尽模式): 独立全屏页, 关闭后回主菜单
+## 格斗试炼(回合制): 独立全屏页, 关闭后回主菜单
 func _start_fight() -> void:
+	_open_fight(false)
+
+
+## 每日挑战: 当日固定种子(全设备同布局)
+func _start_fight_daily() -> void:
+	_open_fight(true)
+
+
+func _open_fight(daily: bool) -> void:
 	if fight_panel != null and is_instance_valid(fight_panel):
 		return
 	menu.visible = false
 	fight_panel = (load("res://src/client/ui/fight_panel.gd") as GDScript).new()
 	fight_panel.name = "Fight"
+	fight_panel.daily = daily   # add_child 前置: _ready 按此选种子
 	add_child(fight_panel)
 	_fit_safe_area(fight_panel)
 	fight_panel.closed.connect(_close_fight)

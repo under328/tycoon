@@ -610,6 +610,8 @@ func _show_rogue_choice() -> void:
 	row.add_theme_constant_override("separation", 24)
 	box.add_child(row)
 	var choices: Array = state.get("rogue_choices", [])
+	for c in choices:
+		Wallet.note_rogue_mod(str(c), false)   # 图鉴: 出现计数
 	for i in choices.size():
 		var meta := {}
 		for m in GameStateGd.ROGUE_MODS:
@@ -663,6 +665,8 @@ func _show_rogue_reveal() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		_rogue_dlg.queue_free()
 	var mod_id := str(state["cfg"].get("rogue_mod", ""))
+	if mod_id != "" and str(state["phase"]) != "draft":
+		Wallet.note_rogue_mod(mod_id, true)   # 图鉴: 选用计数
 	var meta := {}
 	for m in GameStateGd.ROGUE_MODS:
 		if str(m["id"]) == mod_id:
@@ -1561,7 +1565,8 @@ func _refresh_view(view: Dictionary) -> void:
 			var my_rank := int(view["identities"][seat_me]) + 1  # 1=大富豪…4=大贫民
 			var pts := int(view["scores"][seat_me])
 			var stake_n := int(view["rules"].get("stakes", 1))
-			reward = Wallet.grant_match_reward(pts, my_rank, stake_n)
+			reward = Wallet.grant_match_reward(pts, my_rank, stake_n,
+					"rogue" if rogue else "normal")
 			reward["wallet_gold"] = Wallet.gold
 			reward["wallet_diamonds"] = Wallet.diamonds
 			Wallet.push_history({
