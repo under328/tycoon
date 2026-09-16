@@ -1055,8 +1055,8 @@ func _build_ui() -> void:
 	# 出牌条目流式排布: 牌多时自动折两行, 不超出出牌区
 	field_box = HFlowContainer.new()
 	field_box.alignment = FlowContainer.ALIGNMENT_CENTER
-	field_box.position = Vector2(20, 40)
-	field_box.custom_minimum_size = Vector2(600, 196)
+	field_box.position = Vector2(20, 12)   # 紧贴出牌区上边框
+	field_box.custom_minimum_size = Vector2(600, 202)
 	field_box.add_theme_constant_override("h_separation", 16)
 	field_box.add_theme_constant_override("v_separation", 8)
 	field_panel.add_child(field_box)
@@ -1417,8 +1417,9 @@ func _relayout() -> void:
 	field_panel.position = Vector2(field_x, field_y)
 	field_panel.custom_minimum_size = Vector2(field_w, field_h)
 	field_panel.size = Vector2(field_w, field_h)
-	field_box.position = Vector2(20, 36)
-	field_box.size = Vector2(field_w - 40, field_h - 64)
+	field_box.position = Vector2(20, 12)
+	field_box.size = Vector2(field_w - 40, field_h - 46)
+	_trim_field()   # 宽度/行容量变化后重新裁剪
 	# 紧凑档: 两侧座位面板上移至顶部带(避开出牌区), 牌背列上移至顶角(避开面板)
 	if compact:
 		_seat_panels[2].position = Vector2(16, 220)
@@ -1882,13 +1883,18 @@ func _refresh_field(view: Dictionary) -> void:
 		var hz := HBoxContainer.new()
 		hz.add_theme_constant_override("separation", 4)
 		var fw := 70.0 if Responsive.is_touch() else 56.0
-		var fh := 98.0 if Responsive.is_touch() else 78.0
+		var fh := 98.0 if Responsive.is_touch() else (70.0 if size.y < 660.0 else 78.0)
 		for c in entry["combo"]["cards"]:
 			var old_card: Control = _make_card(int(c), fw, fh, false, false)
 			old_card.modulate = Color.WHITE
 			hz.add_child(old_card)
 		holder.add_child(hz)
+		var cards_n: int = (entry["combo"]["cards"] as Array).size()
+		var entry_w: float = maxf(fw * cards_n + 4.0 * (cards_n - 1), 60.0)
+		holder.custom_minimum_size = Vector2(entry_w, 0)
+		holder.set_meta("w", entry_w)   # 容量裁剪用条目宽
 		field_box.add_child(holder)
+		_trim_field()
 		_had_field = true
 		_say_combo(entry["combo"], int(entry["seat"]))   # 语音播报牌型
 		# 最新一手高亮: 淡入 + 弹性缩放; 上一手降为做旧
@@ -1923,11 +1929,48 @@ func _refresh_field(view: Dictionary) -> void:
 			var hz := HBoxContainer.new()
 			hz.add_theme_constant_override("separation", 4)
 			var fw := 70.0 if Responsive.is_touch() else 56.0
-			var fh := 98.0 if Responsive.is_touch() else 78.0
+			var fh := 98.0 if Responsive.is_touch() else (70.0 if size.y < 660.0 else 78.0)
 			for c in entry["combo"]["cards"]:
 				hz.add_child(_make_card(int(c), fw, fh, false, false))
 			holder.add_child(hz)
+			var cards_n: int = (entry["combo"]["cards"] as Array).size()
+			var entry_w: float = maxf(fw * cards_n + 4.0 * (cards_n - 1), 60.0)
+			holder.custom_minimum_size = Vector2(entry_w, 0)
+			holder.set_meta("w", entry_w)
 			field_box.add_child(holder)
+		_trim_field()
+
+
+## 出牌区容量裁剪: 手机最多 1 行 / PC·Pad 最多 2 行;
+## 超出容量时把最早的几手移出显示, 始终保留最新的几手。
+## (仅影响显示 — 记牌器计数与上轮回顾仍记录完整历史)
+func _trim_field() -> void:
+	var box_w: float = field_box.size.x
+	if box_w < 60.0:
+		return
+	var max_lines := 1 if (Responsive.is_touch() and size.x < 1100.0) else 2
+	# 从最新(末尾)往回逐手模拟折行, 数出容量内能保留的手数
+	var kept: Array = []
+	var x := 0.0
+	var lines := 1
+	var kids := field_box.get_children()
+	kids.reverse()
+	for child in kids:
+		if not is_instance_valid(child) or (child as Control).is_queued_for_deletion():
+			continue
+		var cw: float = child.get_meta("w", (child as Control).size.x)
+		if x > 0.0 and x + cw > box_w:
+			lines += 1
+			x = 0.0
+			if lines > max_lines:
+				break
+		x += cw + 16.0
+		kept.append(child)
+	# 旧的、装不下的移出显示
+	for child in field_box.get_children():
+		if not kept.has(child) and not child.is_queued_for_deletion():
+			field_box.remove_child(child)
+			child.queue_free()
 
 
 func _make_card(card_id: int, w: float, h: float, is_selected: bool, _clickable := true) -> Control:
