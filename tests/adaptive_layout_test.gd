@@ -209,12 +209,15 @@ func _check_scene(i: int, w: float, h: float) -> void:
 							s.ops_row.position.x])
 			if s._leave_dlg != null:
 				s._leave_dlg.size = s.size  # 换档后随牌桌尺寸
-		3:  # 商城
-			expect(s._back_btn.position.x + s._back_btn.size.x <= w - 20.0,
-					"shop 返回按钮未锚右缘")
-			expect(absf(s._scroll.size.x - (w - 80.0)) <= 1.0, "shop 商品区宽度未随窗口")
-			expect(absf(s._scroll.size.y - (h - 236.0)) <= 1.0, "shop 商品区高度未随窗口")
-			expect(absf(s._toast.position.y - (h - 60.0)) <= 1.0, "shop 提示未贴底缘")
+		3:  # 商城(容器化自适应: 头行/页签/滚动区纵向排布, 网格列数随宽度)
+			expect(s._back_btn.position.x + s._back_btn.size.x <= w + 1.0,
+					"shop 返回按钮越右缘")
+			expect(s._scroll.size.x <= w + 1.0 and s._scroll.size.x >= w * 0.5,
+					"shop 商品区宽度异常 x=%s w=%s" % [s._scroll.size.x, w])
+			expect(s._scroll.size.y <= h - 80.0, "shop 商品区超高 y=%s h=%s"
+					% [s._scroll.size.y, h])
+			expect(s._grid.columns >= 1 and s._grid.columns <= 4,
+					"shop 网格列数异常 %d" % s._grid.columns)
 		4:  # 联机帮助
 			expect(absf(s._prev_btn.position.x - (w / 2.0 - 300.0)) <= 1.0,
 					"help 上一页未居中左")

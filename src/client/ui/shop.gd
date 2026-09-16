@@ -22,6 +22,8 @@ var _tab_card_btn: Button
 var _tab_item_btn: Button
 var _back_btn: Button
 var _scroll: ScrollContainer
+var _header: Control
+var _tabs: HBoxContainer
 
 
 
@@ -38,79 +40,107 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var header: Control = P5Header.new()
-	header.text = "商  城"
-	header.icon = "bag"
-	header.position = Vector2(36, 22)
-	header.custom_minimum_size = Vector2(300, 54)
-	header.size = Vector2(300, 54)
-	add_child(header)
+	# 纵向主排布(容器化自适应: 头行 / 页签行 / 滚动商品区 / 提示行)
+	var touch := Responsive.is_touch()
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16 if touch else 30)
+	margin.add_theme_constant_override("margin_right", 16 if touch else 30)
+	margin.add_theme_constant_override("margin_top", 12 if touch else 18)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	add_child(margin)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	margin.add_child(v)
 
-	_bal_row = Icons.CurrencyText.new(20)
-	_bal_row.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
-	add_child(_bal_row)
-
-	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
-	_back_btn.position = Vector2(1150, 24)
+	# 顶行: 返回 + 标题(弹性占中) + 余额
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	v.add_child(top)
+	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 16)
+	_back_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close())
-	add_child(_back_btn)
+	top.add_child(_back_btn)
+	_header = P5Header.new()
+	_header.text = "商  城"
+	_header.icon = "bag"
+	_header.custom_minimum_size = Vector2(200, 54)
+	_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(_header)
+	_bal_row = Icons.CurrencyText.new(19)
+	_bal_row.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
+	_bal_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(_bal_row)
 
-	# 分类页签
-	_tab_skin_btn = AppTheme.make_button("人 物 皮 肤", Vector2(200, 46), 18)
-	_tab_skin_btn.position = Vector2(40, 110)
+	# 分类页签(居中)
+	_tabs = HBoxContainer.new()
+	_tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+	_tabs.add_theme_constant_override("separation", 10)
+	v.add_child(_tabs)
+	_tab_skin_btn = AppTheme.make_button("人 物 皮 肤",
+			Vector2(150, 46 if touch else 42), 15)
 	_tab_skin_btn.toggle_mode = true
 	_tab_skin_btn.pressed.connect(func() -> void: _set_tab("skin"))
-	add_child(_tab_skin_btn)
-	_tab_card_btn = AppTheme.make_button("卡 牌 面 貌", Vector2(200, 46), 18)
-	_tab_card_btn.position = Vector2(255, 110)
+	_tabs.add_child(_tab_skin_btn)
+	_tab_card_btn = AppTheme.make_button("卡 牌 面 貌",
+			Vector2(150, 46 if touch else 42), 15)
 	_tab_card_btn.toggle_mode = true
 	_tab_card_btn.pressed.connect(func() -> void: _set_tab("card"))
-	add_child(_tab_card_btn)
-	_tab_item_btn = AppTheme.make_button("特 殊 道 具", Vector2(200, 46), 18)
-	_tab_item_btn.position = Vector2(470, 110)
+	_tabs.add_child(_tab_card_btn)
+	_tab_item_btn = AppTheme.make_button("特 殊 道 具",
+			Vector2(150, 46 if touch else 42), 15)
 	_tab_item_btn.toggle_mode = true
 	_tab_item_btn.pressed.connect(func() -> void: _set_tab("item"))
-	add_child(_tab_item_btn)
+	_tabs.add_child(_tab_item_btn)
 
-	# 商品网格
+	# 商品网格(滚动区: 触摸滑动/滚轮; 网格列数随视口宽自适应)
 	_scroll = ScrollContainer.new()
-	_scroll.position = Vector2(40, 170)
-	_scroll.custom_minimum_size = Vector2(1200, 484)
-	add_child(_scroll)
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(_scroll)
 	_grid = GridContainer.new()
 	_grid.columns = 3
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_grid.add_theme_constant_override("h_separation", 18)
-	_grid.add_theme_constant_override("v_separation", 18)
+	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
+	_grid.add_theme_constant_override("h_separation", 14)
+	_grid.add_theme_constant_override("v_separation", 14)
 	_scroll.add_child(_grid)
 
-	_toast = AppTheme.make_label(16, AppTheme.RED)
-	_toast.position = Vector2(40, 660)
-	_toast.custom_minimum_size = Vector2(600, 30)
-	add_child(_toast)
+	_toast = AppTheme.make_label(15, AppTheme.RED)
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.custom_minimum_size = Vector2(0, 30)
+	v.add_child(_toast)
 
 	Wallet.balance_changed.connect(_refresh)
 	Responsive.watch(self, _relayout)
+	_relayout()   # 先按当前宽度定列数, 再建商品(网格最小宽度不膨胀)
 	_set_tab("skin")
 
 
-## 多设备自适应: 余额/返回锚右上, 商品区随窗口伸缩, 提示行贴底缘;
-## 商品网格列数随宽度 2/3/4 列, 卡片等宽填满(不再留右侧死空间)。
+## 多设备自适应: 布局由容器承担, 这里只做网格列数随视口宽分档
+## (≥1500 四列 / ≥960 三列 / ≥640 两列 / 更窄(手机竖屏)单列)。
 func _relayout() -> void:
 	var w := size.x
-	var h := size.y
-	if w < 100.0 or h < 100.0:
+	if w < 100.0:
 		return
-	_bal_row.position = Vector2(w - _bal_row.get_combined_minimum_size().x - 190.0, 30)
-	_back_btn.position = Vector2(w - _back_btn.size.x - 30.0, 24)
-	_scroll.position = Vector2(40, 170)
-	_scroll.size = Vector2(w - 80.0, h - 236.0)
-	_toast.position = Vector2(40, h - 60)
-	var cols := 4 if w >= 1500.0 else (3 if w >= 1050.0 else 2)
+	var cols := 4 if w >= 1500.0 else (3 if w >= 960.0 else (2 if w >= 640.0 else 1))
 	if _grid.columns != cols:
 		_grid.columns = cols
+		# 列数变化必须重建商品, 且延迟一帧(queue_free 释放旧卡后)再算:
+		# 网格最小宽度随新列数回落, 否则旧列布局的最小宽会把面板永久撑宽
+		_refresh.call_deferred()
+	# 窄屏收缩顶行/页签行: 装饰标题让位, 页签缩窄(最小宽不超视口)
+	var narrow := w < 640.0
+	if _header != null:
+		_header.visible = not narrow
+	_header.custom_minimum_size.x = 200.0 if not narrow else 120.0
+	var tab_w := 126.0 if narrow else 150.0
+	for tb: Button in [_tab_skin_btn, _tab_card_btn, _tab_item_btn]:
+		tb.custom_minimum_size.x = tab_w
+		tb.size.x = tab_w
 
 
 func _set_tab(tab: String) -> void:
@@ -140,8 +170,9 @@ func _special_panel(item: Dictionary) -> Control:
 	var active := _item_active(id, effect)
 	var count := Wallet.item_count(id)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(300, 232)
+	panel.custom_minimum_size = Vector2(0, 236)   # 仅锁高度, 宽度由网格列分
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
 	var sb := AppTheme.flat(
 			Color(0.13, 0.13, 0.28), AppTheme.GOLD if active
 					else Color(1, 1, 1, 0.15), 12, 2 if not active else 3)
@@ -196,8 +227,7 @@ func _special_panel(item: Dictionary) -> Control:
 	well_center.add_child(art)
 	var desc := AppTheme.make_label(14, AppTheme.DIM)
 	desc.text = str(item["desc"])
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.custom_minimum_size = Vector2(300, 0)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 窄卡自动折行
 	v.add_child(desc)
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 10)
@@ -253,8 +283,9 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 
 	# 卡片外框: 留足内边距, 装备中金框高亮
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(300, 232)
+	panel.custom_minimum_size = Vector2(0, 236)   # 仅锁高度, 宽度由网格列分
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
 	var sb := AppTheme.flat(
 			Color(0.13, 0.13, 0.28), AppTheme.GOLD if equipped
 					else Color(1, 1, 1, 0.15), 12, 2 if not equipped else 3)
