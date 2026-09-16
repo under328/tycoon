@@ -238,7 +238,7 @@ func _special_panel(item: Dictionary) -> Control:
 	var price_row: HBoxContainer = Icons.CurrencyText.new(16)
 	price_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	price_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if count > 0:
+	if count > 0 and effect != "clearr":   # 即时生效道具不显示持有数
 		price_row.amount("coin", "持有 %d" % count, AppTheme.WHITE)
 	if str(item.get("currency", "gold")) == "gold":
 		price_row.amount("coin", str(int(item["price"])), AppTheme.WHITE)

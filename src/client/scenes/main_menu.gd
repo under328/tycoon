@@ -69,6 +69,9 @@ func _ready() -> void:
 	# 余额即时同步: 对局结算(后台托管打完也会结算)发放金币/钻石时首页立即刷新
 	Wallet.balance_changed.connect(_refresh_balance)
 	Audio.play_bgm("lobby")
+	# 先同步收敛一次布局, 再录入场动画的起点/终点:
+	# 否则入场 tween 会把菜单项带去过期的构建默认坐标(响应式位置被覆盖)
+	_relayout()
 	_play_entrance()
 	# 布局二次收敛: 首帧绘制后 CurrencyText/称号等晚成型控件尺寸才稳定
 	_relayout.call_deferred()
