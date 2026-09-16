@@ -224,6 +224,9 @@ func _special_panel(item: Dictionary) -> Control:
 		"rticket":
 			art.text("选牌重抽 ", AppTheme.WHITE)
 			art.amount("coin", "+1", AppTheme.GOLD)
+		"clearr":
+			art.text("战绩记录 ", AppTheme.WHITE)
+			art.amount("gem", "一键清零", AppTheme.GOLD)
 	well_center.add_child(art)
 	var desc := AppTheme.make_label(14, AppTheme.DIM)
 	desc.text = str(item["desc"])
@@ -242,18 +245,33 @@ func _special_panel(item: Dictionary) -> Control:
 	else:
 		price_row.amount("gem", str(int(item["price"])), AppTheme.WHITE)
 	foot.add_child(price_row)
-	var buy := AppTheme.make_button("购 买", Vector2(112, 40), 15)
+	var txt := "购 买"
+	if effect == "clearr":
+		txt = "清 空"
+	var buy := AppTheme.make_button(txt, Vector2(112, 40), 15)
 	if effect == "dday":
 		buy.disabled = Wallet.double_diamond_active()
 	elif effect == "tday":
 		buy.disabled = Wallet.diamond_triple_active()
 	else:
-		buy.disabled = Wallet.gold < int(item["price"]) 				and Wallet.diamonds < int(item["price"])
+		# 按道具计价币种判定可负担
+		buy.disabled = Wallet.diamonds < int(item["price"]) 				if str(item.get("currency", "gold")) == "diamonds" 				else Wallet.gold < int(item["price"])
+	var armed := [false]   # 清空战绩二次确认(数组供闭包按引用读写)
 	buy.pressed.connect(func() -> void:
+		if effect == "clearr" and not armed[0]:
+			armed[0] = true
+			buy.text = "确认清空?"
+			var tw := buy.create_tween()
+			tw.tween_interval(3.0)
+			tw.tween_callback(func() -> void:
+				armed[0] = false
+				if is_instance_valid(buy):
+					buy.text = "清 空")
+			return
 		if Wallet.buy_item(id):
 			Audio.play("win")
 			_refresh()
-			_toast_msg("购买成功, 已生效!")
+			_toast_msg("战绩已清空!" if effect == "clearr" else "购买成功, 已生效!")
 		else:
 			_toast_msg("余额不足, 先去赚一赚吧"))
 	foot.add_child(buy)

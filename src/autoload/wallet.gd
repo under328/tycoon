@@ -62,23 +62,29 @@ const ACHIEVEMENTS := [
 ## 特殊道具: effect 决定生效方式
 ##   dday=当日对局钻石×2  tday=×3(覆盖双倍)  revive=格斗死亡自动复活
 ##   fdice=肉鸽命运二选一可重抽候选  rticket=格斗选牌额外重抽
+##   clearr=购买即清空全部战绩(不可逆, 面板二次确认)
 ##   stack=true 的道具按库存计数、随用随消耗
+## 定价锚点: 钻石收入约 2-6/场(身份奖励+格斗楼层), 金币约 15-50/场;
+##   钻石消耗品 25-40 ≈ 数场积攒, 金币日增益卡 100-260 ≈ 数场内可得
 const SPECIALS := [
-	{"id": "item_double_diamond", "name": "双倍钻石卡", "price": 120,
+	{"id": "item_double_diamond", "name": "双倍钻石卡", "price": 100,
 		"currency": "gold", "effect": "dday", "stack": false,
 		"desc": "激活后至当日结束, 对局获得的钻石 ×2"},
-	{"id": "item_triple_diamond", "name": "三倍钻石卡", "price": 300,
+	{"id": "item_triple_diamond", "name": "三倍钻石卡", "price": 260,
 		"currency": "gold", "effect": "tday", "stack": false,
 		"desc": "激活后至当日结束, 对局获得的钻石 ×3 (覆盖双倍卡)"},
-	{"id": "item_revive_coin", "name": "复活币", "price": 150,
+	{"id": "item_revive_coin", "name": "复活币", "price": 120,
 		"currency": "gold", "effect": "revive", "stack": true,
 		"desc": "格斗试炼倒下时自动消耗 1 枚, 以 60% 生命原地复活"},
-	{"id": "item_fate_dice", "name": "命运骰", "price": 120,
+	{"id": "item_fate_dice", "name": "命运骰", "price": 40,
 		"currency": "diamonds", "effect": "fdice", "stack": true,
 		"desc": "肉鸽命运二选一界面可掷骰重抽候选(每次消耗 1 枚)"},
-	{"id": "item_reroll_ticket", "name": "重抽券", "price": 80,
+	{"id": "item_reroll_ticket", "name": "重抽券", "price": 25,
 		"currency": "diamonds", "effect": "rticket", "stack": true,
 		"desc": "格斗选牌界面额外重抽次数 +1 (每次消耗 1 张)"},
+	{"id": "item_clear_record", "name": "清空战绩", "price": 50,
+		"currency": "diamonds", "effect": "clearr", "stack": false,
+		"desc": "立即清空全部对局记录、胜负统计与各模式战绩(不可逆)"},
 ]
 
 var gold := 500       # 默认 500 金币
@@ -681,12 +687,34 @@ func buy_item(item_id: String) -> bool:
 				diamond_mult_day = _today()
 				diamond_mult = 3
 				double_diamond_day = _today()  # 三倍覆盖双倍(同日只留一条记录)
+			"clearr":
+				clear_records()
 		purchases += 1
 		check_achievements()
 		_mark_dirty()
 		balance_changed.emit()
 		return true
 	return false
+
+
+## 清空战绩: 对局记录/胜负统计/称号/各模式战绩与每日最佳清零。
+## 不影响 货币/成就/每日任务/命运卡图鉴/消耗品库存(清空战绩道具生效入口)。
+func clear_records() -> void:
+	local_matches = 0
+	local_wins = 0
+	history = []
+	fight_best = 0
+	fight_runs = 0
+	fight_bosses = 0
+	fight_clears = 0
+	rogue_runs = 0
+	rogue_wins = 0
+	pvp_wins = 0
+	daily_day = ""
+	daily_best_round = 0
+	daily_best_hp = 0
+	daily_days = 0
+	_mark_dirty()
 
 
 ## 复活币: 有库存则消耗并复活

@@ -22,6 +22,7 @@ func run(t) -> void:
 	_buy_flow(t)
 	_server_pool(t)
 	_special_items(t)
+	_clear_record_item(t)
 	_rank_title(t)
 	_signin(t)
 	_achievements(t)
@@ -122,15 +123,15 @@ func _special_items(t) -> void:
 	for it in WalletGd.SPECIALS:
 		if str(it["id"]) == "item_double_diamond":
 			dd = it
-	t.expect(not dd.is_empty() and int(dd["price"]) == 120
-			and str(dd["currency"]) == "gold", "双倍钻石卡 120 金币")
+	t.expect(not dd.is_empty() and int(dd["price"]) == 100
+			and str(dd["currency"]) == "gold", "双倍钻石卡 100 金币")
 	var w = WalletGd.new()
 	w.save_path = "user://test_special_wallet.cfg"
-	w.gold = 100
+	w.gold = 90
 	t.expect(not w.buy_special("item_double_diamond"), "金币不足购买被拒")
-	w.gold = 130
+	w.gold = 110
 	t.expect(w.buy_special("item_double_diamond"), "购买成功")
-	t.expect_eq(int(w.gold), 10, "扣款 120 金币")
+	t.expect_eq(int(w.gold), 10, "扣款 100 金币")
 	t.expect(w.double_diamond_active(), "当日双倍生效")
 	# 结算: 富豪 +1 钻 → 双倍 +2, 标记 doubled
 	var r: Dictionary = w.grant_match_reward(10, 2, 1)
@@ -303,6 +304,50 @@ func _rank_title(t) -> void:
 	t.expect_eq(w.rank_title(), "富豪", "15 胜 = 富豪")
 	w.local_wins = 30
 	t.expect_eq(w.rank_title(), "大富豪", "30 胜 = 大富豪")
+	w.queue_free()
+
+
+## 清空战绩道具: 购买扣钻 + 立即清空全部战绩(货币/成就/库存不受影响)
+func _clear_record_item(t) -> void:
+	var cr: Dictionary = {}
+	for it in WalletGd.SPECIALS:
+		if str(it["id"]) == "item_clear_record":
+			cr = it
+	t.expect(not cr.is_empty() and int(cr["price"]) == 50
+			and str(cr["currency"]) == "diamonds", "清空战绩 50 钻石上架")
+	var w = WalletGd.new()
+	w.save_path = "user://test_clear_record.cfg"
+	# 造一份"有战绩"的档案
+	w.local_matches = 86
+	w.local_wins = 24
+	w.history = [{"day": "2026-09-17", "mode": "普通"}]
+	w.fight_best = 4
+	w.fight_runs = 12
+	w.fight_bosses = 3
+	w.fight_clears = 2
+	w.rogue_runs = 5
+	w.rogue_wins = 1
+	w.pvp_wins = 2
+	w.daily_days = 6
+	w.diamonds = 30
+	t.expect(not w.buy_item("item_clear_record"), "钻石不足购买被拒")
+	t.expect_eq(int(w.local_matches), 86, "未购买不清战绩")
+	w.diamonds = 80
+	t.expect(w.buy_item("item_clear_record"), "购买清空战绩成功")
+	t.expect_eq(int(w.diamonds), 30, "扣款 50 钻石")
+	t.expect_eq(int(w.local_matches), 0, "胜负场次清零")
+	t.expect_eq(int(w.local_wins), 0, "胜场清零(称号回落新人)")
+	t.expect(w.history.is_empty(), "对局记录清空")
+	t.expect_eq(int(w.fight_best), 0, "格斗纪录清零")
+	t.expect_eq(int(w.fight_runs), 0, "格斗局数清零")
+	t.expect_eq(int(w.fight_bosses), 0, "Boss 击破清零")
+	t.expect_eq(int(w.fight_clears), 0, "格斗通关清零")
+	t.expect_eq(int(w.rogue_runs), 0, "肉鸽局数清零")
+	t.expect_eq(int(w.rogue_wins), 0, "肉鸽胜场清零")
+	t.expect_eq(int(w.pvp_wins), 0, "联机格斗胜场清零")
+	t.expect_eq(int(w.daily_days), 0, "每日挑战参与天数清零")
+	t.expect_eq(int(w.gold), 500, "金币不受影响")
+	t.expect_eq(int(w.purchases), 1, "消费计数保留")
 	w.queue_free()
 
 
