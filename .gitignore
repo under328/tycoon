@@ -13,3 +13,4 @@ Thumbs.db
 builds/
 
 *.tmp
+__pycache__/
