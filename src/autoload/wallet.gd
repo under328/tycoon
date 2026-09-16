@@ -12,24 +12,24 @@ const SAVE_PATH := "user://wallet.cfg"
 const AUTOSAVE_SEC := 10.0
 
 ## 本地对局奖励(按最终名次 1..4): [金币, 钻石]
-const GOLD_PER_POINT := 2        # 1 积分 = 2 金币(再乘输赢倍率)
+const GOLD_PER_POINT := 1        # 1 积分 = 1 金币(再乘输赢倍率)
 
-const FIRST_WIN_DIAMONDS := 3
+const FIRST_WIN_DIAMONDS := 2
 const CODEX_TARGET := 11   # 命运卡图鉴全收集目标   # 每日首胜奖励钻石数
 const HISTORY_MAX := 20         # 对局记录保留条数
 
 ## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
 const SIGN_REWARDS := [
-	{"gold": 100}, {"gold": 150}, {"diamonds": 1}, {"gold": 200},
-	{"gold": 250}, {"diamonds": 2}, {"diamonds": 5},
+	{"gold": 60}, {"gold": 90}, {"diamonds": 1}, {"gold": 120},
+	{"gold": 150}, {"diamonds": 2}, {"diamonds": 3},
 ]
 
 ## 每日任务(按日重置): target 达成后可领奖励
 const MISSIONS := [
-	{"id": "m_win", "name": "赢得一场胜利", "target": 1, "reward_diamonds": 3},
-	{"id": "m_play", "name": "完成 2 场对局", "target": 2, "reward_gold": 150},
-	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 2},
-	{"id": "m_fight", "name": "格斗试炼通过 1 层", "target": 1, "reward_diamonds": 2},
+	{"id": "m_win", "name": "赢得一场胜利", "target": 1, "reward_diamonds": 2},
+	{"id": "m_play", "name": "完成 2 场对局", "target": 2, "reward_gold": 100},
+	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 1},
+	{"id": "m_fight", "name": "格斗试炼通过 1 层", "target": 1, "reward_diamonds": 1},
 ]
 
 ## 成就目录: cond 在 check_achievements 里按 id 求值(基于持久化统计)
@@ -67,22 +67,22 @@ const ACHIEVEMENTS := [
 ## 定价锚点: 钻石收入约 2-6/场(身份奖励+格斗楼层), 金币约 15-50/场;
 ##   钻石消耗品 25-40 ≈ 数场积攒, 金币日增益卡 100-260 ≈ 数场内可得
 const SPECIALS := [
-	{"id": "item_double_diamond", "name": "双倍钻石卡", "price": 100,
+	{"id": "item_double_diamond", "name": "双倍钻石卡", "price": 150,
 		"currency": "gold", "effect": "dday", "stack": false,
 		"desc": "激活后至当日结束, 对局获得的钻石 ×2"},
-	{"id": "item_triple_diamond", "name": "三倍钻石卡", "price": 260,
+	{"id": "item_triple_diamond", "name": "三倍钻石卡", "price": 350,
 		"currency": "gold", "effect": "tday", "stack": false,
 		"desc": "激活后至当日结束, 对局获得的钻石 ×3 (覆盖双倍卡)"},
-	{"id": "item_revive_coin", "name": "复活币", "price": 120,
+	{"id": "item_revive_coin", "name": "复活币", "price": 160,
 		"currency": "gold", "effect": "revive", "stack": true,
 		"desc": "格斗试炼倒下时自动消耗 1 枚, 以 60% 生命原地复活"},
-	{"id": "item_fate_dice", "name": "命运骰", "price": 40,
+	{"id": "item_fate_dice", "name": "命运骰", "price": 60,
 		"currency": "diamonds", "effect": "fdice", "stack": true,
 		"desc": "肉鸽命运二选一界面可掷骰重抽候选(每次消耗 1 枚)"},
-	{"id": "item_reroll_ticket", "name": "重抽券", "price": 25,
+	{"id": "item_reroll_ticket", "name": "重抽券", "price": 35,
 		"currency": "diamonds", "effect": "rticket", "stack": true,
 		"desc": "格斗选牌界面额外重抽次数 +1 (每次消耗 1 张)"},
-	{"id": "item_clear_record", "name": "清空战绩", "price": 50,
+	{"id": "item_clear_record", "name": "清空战绩", "price": 80,
 		"currency": "diamonds", "effect": "clearr", "stack": false,
 		"desc": "立即清空全部对局记录、胜负统计与各模式战绩(不可逆)"},
 ]
@@ -323,14 +323,14 @@ func save_wallet() -> void:
 ## 本地对局结算发放(名次 1..4)。返回 {gold, diamonds, doubled, bonus}。
 ## 场次结算: 金币 = 总积分 × 2 × 输赢倍率(可为负, 钱包下限 0);
 ## 钻石按最终身份: 大富豪 +2, 富豪 +1, 其余 +0。rank 1=大富豪…4=大贫民。
-## 双倍钻石卡生效中(当日)钻石翻倍; 当日首胜额外 +3 钻(每日首胜奖励)。
+## 双倍钻石卡生效中(当日)钻石翻倍; 当日首胜额外 +2 钻(每日首胜奖励)。
 func grant_match_reward(points: int, rank: int, stakes: int = 1,
 		mode: String = "normal") -> Dictionary:
 	var gold_delta := points * GOLD_PER_POINT * clampi(stakes, 1, 3)
 	var dia_delta := 0
 	match clampi(rank - 1, 0, 3):
 		0:
-			dia_delta = 2
+			dia_delta = 1
 		1:
 			dia_delta = 1
 	gold = maxi(gold + gold_delta, 0)
@@ -397,7 +397,7 @@ func buy_special(item_id: String) -> bool:
 
 ## ── 格斗试炼 ──
 
-## 通关/终局发放: 层数越高钻石越多(2 + 层数×2); 记录历史最高层
+## 通关/终局发放: 层数越高钻石越多(1 + 层数); 记录历史最高层
 func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 	fight_runs += 1
 	if floor_num >= 5:
@@ -408,7 +408,7 @@ func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 		mult = 3
 	elif double_diamond_active():
 		mult = 2
-	var d := (2 + floor_num * 2) * mult
+	var d := (1 + floor_num) * mult
 	diamonds += d
 	diamonds_earned += d
 	var best := maxi(fight_best, floor_num)
@@ -422,10 +422,10 @@ func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 
 
 ## 联机格斗对战结算(客户端本地入账, 与联机大富豪同策略):
-## 胜 +40 金币 +2 钻石, 败 +10 金币; 计入场次/胜负(称号进度)与每日任务。
+## 胜 +25 金币 +1 钻石, 败 +6 金币; 计入场次/胜负(称号进度)与每日任务。
 func grant_pvp_result(win: bool) -> Dictionary:
-	var g := 40 if win else 10
-	var d := 2 if win else 0
+	var g := 25 if win else 6
+	var d := 1 if win else 0
 	gold = maxi(gold + g, 0)
 	diamonds += d
 	diamonds_earned += d

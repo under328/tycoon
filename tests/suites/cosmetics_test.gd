@@ -41,7 +41,7 @@ func _registry(t) -> void:
 		t.expect(skin_ids.has(id), "新皮肤 %s 已上架" % id)
 		for s in SkinsLib.SKINS:
 			if str(s["id"]) == id:
-				t.expect_eq(int(s["price"]), 100, "%s 定价 100 钻" % id)
+				t.expect_eq(int(s["price"]), 160, "%s 定价 160 钻" % id)
 	var card_ids: Array = []
 	for c in SkinsLib.CARDS:
 		card_ids.append(str(c["id"]))
@@ -53,7 +53,7 @@ func _registry(t) -> void:
 		t.expect(card_ids.has(id), "新卡面 %s 已上架" % id)
 		var pal: Dictionary = SkinsLib.palette(id)
 		t.expect_eq(str(pal["id"]), id, "卡面 %s 可查得调色板" % id)
-		t.expect_eq(int(pal["price"]), 100, "%s 定价 100 钻" % id)
+		t.expect_eq(int(pal["price"]), 160, "%s 定价 160 钻" % id)
 
 
 func _pixel_avatars(t) -> void:
@@ -95,11 +95,11 @@ func _buy_flow(t) -> void:
 	var w = WalletGd.new()
 	w.save_path = "user://test_cosmetics_wallet.cfg"
 	w.diamonds = 0
-	t.expect(not w.buy("skin", "skin_dball", 100), "钻石不足购买被拒")
+	t.expect(not w.buy("skin", "skin_dball", 160), "钻石不足购买被拒")
 	t.expect(not w.is_owned("skin", "skin_dball"), "未购得皮肤")
-	w.diamonds = 100
-	t.expect(w.buy("skin", "skin_dball", 100), "足额购买皮肤成功")
-	t.expect_eq(int(w.diamonds), 0, "扣款 100 钻")
+	w.diamonds = 160
+	t.expect(w.buy("skin", "skin_dball", 160), "足额购买皮肤成功")
+	t.expect_eq(int(w.diamonds), 0, "扣款 160 钻")
 	t.expect(w.is_owned("skin", "skin_dball"), "皮肤已拥有")
 	w.equip("skin", "skin_dball")
 	t.expect(w.is_equipped("skin", "skin_dball"), "皮肤可装备")
@@ -123,25 +123,25 @@ func _special_items(t) -> void:
 	for it in WalletGd.SPECIALS:
 		if str(it["id"]) == "item_double_diamond":
 			dd = it
-	t.expect(not dd.is_empty() and int(dd["price"]) == 100
-			and str(dd["currency"]) == "gold", "双倍钻石卡 100 金币")
+	t.expect(not dd.is_empty() and int(dd["price"]) == 150
+			and str(dd["currency"]) == "gold", "双倍钻石卡 150 金币")
 	var w = WalletGd.new()
 	w.save_path = "user://test_special_wallet.cfg"
-	w.gold = 90
+	w.gold = 140
 	t.expect(not w.buy_special("item_double_diamond"), "金币不足购买被拒")
-	w.gold = 110
+	w.gold = 160
 	t.expect(w.buy_special("item_double_diamond"), "购买成功")
-	t.expect_eq(int(w.gold), 10, "扣款 100 金币")
+	t.expect_eq(int(w.gold), 10, "扣款 150 金币")
 	t.expect(w.double_diamond_active(), "当日双倍生效")
 	# 结算: 富豪 +1 钻 → 双倍 +2, 标记 doubled
 	var r: Dictionary = w.grant_match_reward(10, 2, 1)
 	t.expect_eq(int(r["diamonds"]), 2, "双倍卡: +1 钻变 +2")
 	t.expect(bool(r["doubled"]), "结算标记 doubled")
-	# 当日首胜: 大富豪 +2 钻翻倍 +4, 首胜再 +3
+	# 当日首胜: 大富豪 +1 钻翻倍 +2, 首胜再 +2
 	var r2: Dictionary = w.grant_match_reward(20, 1, 1)
-	t.expect_eq(int(r2["diamonds"]), 4, "大富豪 +2 → 双倍 +4")
-	t.expect_eq(int(r2["bonus"]), 3, "每日首胜 +3")
-	t.expect_eq(int(r2["bonus"]) if r2.has("bonus") else -1, 3, "bonus 标记返回")
+	t.expect_eq(int(r2["diamonds"]), 2, "大富豪 +1 → 双倍 +2(首胜另计)")
+	t.expect_eq(int(r2["bonus"]), 2, "每日首胜 +2")
+	t.expect_eq(int(r2["bonus"]) if r2.has("bonus") else -1, 2, "bonus 标记返回")
 	# 同日第二胜: 首胜奖励不再发
 	var r3: Dictionary = w.grant_match_reward(20, 1, 1)
 	t.expect_eq(int(r3["bonus"]), 0, "同日再胜无首胜奖励")
@@ -150,9 +150,9 @@ func _special_items(t) -> void:
 	w.first_win_day = "2000-01-01"
 	t.expect(not w.double_diamond_active(), "次日双倍失效")
 	var r4: Dictionary = w.grant_match_reward(20, 1, 1)
-	t.expect_eq(int(r4["diamonds"]), 2, "无卡: 大富豪 +2 不翻倍")
+	t.expect_eq(int(r4["diamonds"]), 1, "无卡: 大富豪 +1 不翻倍")
 	t.expect(not bool(r4["doubled"]), "无卡不标记 doubled")
-	t.expect_eq(int(r4["bonus"]), 3, "新的一日首胜名额重置")
+	t.expect_eq(int(r4["bonus"]), 2, "新的一日首胜名额重置")
 	w.queue_free()
 
 
@@ -164,7 +164,7 @@ func _signin(t) -> void:
 	var r: Dictionary = w.claim_signin()
 	t.expect(not r.is_empty(), "签到成功")
 	t.expect_eq(int(r["day_index"]), 0, "首日 = 第 1 格")
-	t.expect_eq(int(w.gold), 500 + 100, "第 1 天奖励 100 金币")
+	t.expect_eq(int(w.gold), 500 + 60, "第 1 天奖励 60 金币")
 	t.expect(not w.can_sign_today(), "当日不可重复签到")
 	t.expect(w.claim_signin().is_empty(), "重复领取返回空")
 	# 连续: 昨日签到过 → streak +1, 循环取模
@@ -280,7 +280,7 @@ func _missions(t) -> void:
 	w.grant_match_reward(10, 3, 1)  # 第 2 场 → 达标
 	t.expect_eq(int(w.mission_state("m_play")["progress"]), 2, "进度封顶 2/2")
 	var r: Dictionary = w.claim_mission("m_play")
-	t.expect_eq(int(r["gold"]), 150, "领取 150 金币")
+	t.expect_eq(int(r["gold"]), 100, "领取 100 金币")
 	t.expect(w.mission_state("m_play")["claimed"], "领取状态记录")
 	t.expect(w.claim_mission("m_play").is_empty(), "重复领取被拒")
 	w.note_mission("m_quad")
@@ -313,8 +313,8 @@ func _clear_record_item(t) -> void:
 	for it in WalletGd.SPECIALS:
 		if str(it["id"]) == "item_clear_record":
 			cr = it
-	t.expect(not cr.is_empty() and int(cr["price"]) == 50
-			and str(cr["currency"]) == "diamonds", "清空战绩 50 钻石上架")
+	t.expect(not cr.is_empty() and int(cr["price"]) == 80
+			and str(cr["currency"]) == "diamonds", "清空战绩 80 钻石上架")
 	var w = WalletGd.new()
 	w.save_path = "user://test_clear_record.cfg"
 	# 造一份"有战绩"的档案
@@ -334,7 +334,7 @@ func _clear_record_item(t) -> void:
 	t.expect_eq(int(w.local_matches), 86, "未购买不清战绩")
 	w.diamonds = 80
 	t.expect(w.buy_item("item_clear_record"), "购买清空战绩成功")
-	t.expect_eq(int(w.diamonds), 30, "扣款 50 钻石")
+	t.expect_eq(int(w.diamonds), 0, "扣款 80 钻石")
 	t.expect_eq(int(w.local_matches), 0, "胜负场次清零")
 	t.expect_eq(int(w.local_wins), 0, "胜场清零(称号回落新人)")
 	t.expect(w.history.is_empty(), "对局记录清空")
@@ -356,7 +356,7 @@ func _consumables(t) -> void:
 	var w = WalletGd.new()
 	w.save_path = "user://test_consumables.cfg"
 	w.gold = 100
-	t.expect(not w.buy_item("item_revive_coin"), "金币不足购买被拒")
+	t.expect(not w.buy_item("item_revive_coin"), "金币不足购买被拒(160 金)")
 	w.gold = 500
 	t.expect(w.buy_item("item_revive_coin"), "购买复活币成功")
 	t.expect_eq(w.item_count("item_revive_coin"), 1, "复活币库存 +1")
@@ -370,7 +370,7 @@ func _consumables(t) -> void:
 	w.diamond_mult = 3
 	w.diamonds = 0
 	var r: Dictionary = w.grant_fight_reward(2, 0)
-	t.expect_eq(int(r["diamonds"]), 18, "三倍: (2+2×2)×3 = 18 钻 got=%d" % int(r["diamonds"]))
+	t.expect_eq(int(r["diamonds"]), 9, "三倍: (1+2)×3 = 9 钻 got=%d" % int(r["diamonds"]))
 	# 命运骰消耗
 	w.inventory["item_fate_dice"] = 2
 	t.expect(w.consume_item("item_fate_dice"), "命运骰消耗")
@@ -389,5 +389,5 @@ func _fight_mission(t) -> void:
 	var st: Dictionary = w.mission_state("m_fight")
 	t.expect_eq(int(st["progress"]), 1, "格斗层任务进度 1/1")
 	var r: Dictionary = w.claim_mission("m_fight")
-	t.expect_eq(int(r["diamonds"]), 2, "领取 +2 钻")
+	t.expect_eq(int(r["diamonds"]), 1, "领取 +1 钻")
 	w.queue_free()
