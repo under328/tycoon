@@ -54,16 +54,23 @@ func _ready() -> void:
 	_panel.add_theme_stylebox_override("panel", sb)
 	center.add_child(_panel)
 
+	# PanelContainer 会把每个子控件拉伸铺满整个面板 → 标题行与滚动区
+	# 必须包进同一个 VBox, 否则 ✕ 关闭按钮被拉成整列盖住右侧内容
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 10)
+	_panel.add_child(page)
+
 	# 标题 + 关闭
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 10)
-	_panel.add_child(head)
+	page.add_child(head)
 	var title := AppTheme.make_label(24, AppTheme.GOLD)
 	title.text = tr("设  置")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	head.add_child(title)
 	var close_btn := AppTheme.make_button("✕", Vector2(40, 40), 20)
+	close_btn.size_flags_vertical = Control.SIZE_SHRINK_END
 	close_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_all()
@@ -74,7 +81,8 @@ func _ready() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.custom_minimum_size = Vector2(440, 0)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_panel.add_child(_scroll)
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(_scroll)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)

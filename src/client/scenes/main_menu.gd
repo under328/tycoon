@@ -17,6 +17,9 @@ const Wafu = preload("res://src/client/ui/wafu_paint.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 const Icons = preload("res://src/client/ui/icons.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
+const SlashLine = preload("res://src/client/ui/slash_line.gd")
+const SealStamp = preload("res://src/client/ui/seal_stamp.gd")
+const AvatarScript = preload("res://src/client/ui/avatar.gd")
 
 
 var _settings: Control
@@ -24,6 +27,14 @@ var _tutorial_item: Control
 var _shop: Control
 var _balance: Control          # CurrencyText 金额行
 var _title_group: Control   # 标题/斩切线/副标/朱印 组容器(内部坐标固定, 整体锚定)
+var _title_inner: Control   # 标题内层(呼吸浮动动画目标, 外层锚定不受影响)
+var _slash_line: Control    # 刀斩切线(锥形笔触)
+var _seal: Control          # 朱印
+var _title_chars: Array = []   # 大/富/豪 分字标签(入场动画用)
+var _profile: PanelContainer   # 左上角玩家头像卡
+var _prof_avatar: Control
+var _prof_name: Label
+var _prof_rank: Label
 var _badge: PanelContainer
 var _rank_lbl: Label
 var _mode_dlg: Control = null   # 模式选择弹窗
@@ -50,6 +61,7 @@ func _ready() -> void:
 	_build_title()
 	_build_menu()
 	_build_fan()
+	_build_profile()
 	_build_settings()
 	_settings.name = "Page"
 	resized.connect(_sync_pages)
@@ -57,6 +69,9 @@ func _ready() -> void:
 	# 余额即时同步: 对局结算(后台托管打完也会结算)发放金币/钻石时首页立即刷新
 	Wallet.balance_changed.connect(_refresh_balance)
 	Audio.play_bgm("lobby")
+	_play_entrance()
+	# 布局二次收敛: 首帧绘制后 CurrencyText/称号等晚成型控件尺寸才稳定
+	_relayout.call_deferred()
 
 
 ## 多设备自适应(1280x720 设计基准): 标题组锚右半区并随高度下移,
@@ -70,7 +85,14 @@ func _relayout() -> void:
 	var margin := maxf(28.0, w * 0.025)   # 屏越宽边距越大(手机不再贴边)
 	var tx := clampf(w * 0.45, 500.0, w - 540.0)
 	if _title_group != null:
-		_title_group.position = Vector2(tx, clampf(h * 0.17, 28.0, 170.0))
+		# 组原点反向补偿标题组 PAD(14,16): 画面位置与设计基准一致
+		_title_group.position = Vector2(tx, clampf(h * 0.17, 28.0, 170.0)) \
+				- Vector2(14, 16)
+		# 窄屏(逻辑宽 < 标题设计宽 560)整体等比缩小标题组: 朱印/切线不越右缘
+		var ts := minf(1.0, (w - tx) / 560.0)
+		_title_group.scale = Vector2(ts, ts)
+	if _profile != null:
+		_profile.position = Vector2(margin * 0.55, margin * 0.55)
 	if _badge != null:
 		_badge.position = Vector2(w - _badge.size.x - margin, 30)
 	if _ver_lbl != null:
@@ -78,7 +100,11 @@ func _relayout() -> void:
 	if _hint_lbl != null:
 		_hint_lbl.position = Vector2((w - _hint_lbl.size.x) / 2.0, h - 36)
 	if _fan != null:
-		_fan.position = Vector2(w - 356.0, clampf(h * 0.60, 300.0, h - 300.0))  # 内收 16: 旋转卡角不越缘
+		# 矮屏(逻辑高 < 640): 卡扇下移到底缘上方并缩小, 让位给标题区
+		var fs := clampf(h / 720.0, 0.78, 1.0)
+		var fy := h * 0.60 if h >= 640.0 else h - 150.0
+		_fan.scale = Vector2(fs, fs)
+		_fan.position = Vector2(w - 356.0, fy)
 	# 菜单项: 按可用高度自适应间距(手机紧凑视口也能放下全部六项)
 	var y0 := clampf(h * 0.23, 110.0, 188.0)
 	var spacing := clampf((h - y0 - 120.0) / 5.0, 52.0, 76.0)
@@ -87,53 +113,186 @@ func _relayout() -> void:
 		it.position = Vector2(clampf(90.0 + i * 28.0, 40.0, w - 490.0), y0 + i * spacing)
 
 
+## 标题「大富豪」v2: 三字分字排布(错落节奏, 中字放大) + 描边晕影,
+## 下方刀斩切线(锥形笔触), 右上「富」字朱印; 入场动画见 _play_entrance。
 func _build_title() -> void:
 	# 巨型行书标题组: 内部坐标固定, _relayout 整体锚定到右半区(设计基准 x=576)
 	_title_group = Control.new()
 	_title_group.position = Vector2(576, 28)
-	_title_group.custom_minimum_size = Vector2(520, 240)
+	_title_group.custom_minimum_size = Vector2(520, 280)
 	_title_group.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_title_group)
+	# 内层: 呼吸浮动只动这里, 外层锚定不被覆盖
+	_title_inner = Control.new()
+	_title_inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_title_group.add_child(_title_inner)
 
-	var title := AppTheme.make_label(170, Color("f2c14e"))
-	title.add_theme_font_override("font", AppTheme.title_font())
-	title.text = "大富豪"
-	title.position = Vector2(4, 0)
-	title.rotation = -0.06
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
-	title.add_theme_constant_override("shadow_offset_x", 5)
-	title.add_theme_constant_override("shadow_offset_y", 5)
-	_title_group.add_child(title)
+	# 分字: 大 / 富 / 豪 — 逐字独立旋转与高低错落(行书 rhythm), 中字放大提气
+	# (行书字形视觉高度 ≈ 1.14×字号, 切线锚在字形底缘之下)
+	# 子元素统一加 PAD: 切线左伸/中字上提的负偏移折进组原点(自适应断言要求
+	# 局部坐标 ≥ -6), _relayout 中组位置反向补偿, 画面不变
+	const PAD := Vector2(14, 16)
+	var layout := [
+		["大", Vector2(0, 10) + PAD, 150, -0.10],
+		["富", Vector2(154, -12) + PAD, 166, -0.045],
+		["豪", Vector2(326, 12) + PAD, 150, 0.0],
+	]
+	for spec: Array in layout:
+		var ch := AppTheme.make_label(int(spec[2]), Color("f2c14e"))
+		ch.add_theme_font_override("font", AppTheme.title_font())
+		ch.text = str(spec[0])
+		ch.position = spec[1]
+		ch.rotation = float(spec[3])
+		# 描边 + 晕影: 暖褐描边沉底, 黑晕右下, 字面亮金
+		ch.add_theme_color_override("font_outline_color", Color(0.19, 0.09, 0.04, 0.92))
+		ch.add_theme_constant_override("outline_size", int(spec[2]) * 0.055)
+		ch.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.45))
+		ch.add_theme_constant_override("shadow_offset_x", 5)
+		ch.add_theme_constant_override("shadow_offset_y", 6)
+		_title_inner.add_child(ch)
+		_title_chars.append(ch)
 
-	# 红色斩切线
-	var bar := ColorRect.new()
-	bar.color = Color(AppTheme.RED, 0.85)
-	bar.position = Vector2(-6, 150)
-	bar.size = Vector2(420, 10)
-	bar.rotation = -0.06
-	_title_group.add_child(bar)
+	# 刀斩切线(替代旧纯色矩形): 锥形笔触 + 金发丝线
+	# (斜率压平 + 锚在字形底缘下: 右端上挑也不擦到「豪」的收笔)
+	_slash_line = SlashLine.new()
+	_slash_line.slope = -0.04
+	_slash_line.position = Vector2(-14, 202) + PAD
+	_slash_line.size = Vector2(470, 16)
+	_title_inner.add_child(_slash_line)
 
-	# 英文副标
+	# 英文副标: 贴切线下方, 同斜率
 	var sub := AppTheme.make_label(22, AppTheme.DIM)
 	sub.add_theme_font_override("font", AppTheme.display_font())
 	sub.text = "T  Y  C  O  O  N"
-	sub.position = Vector2(76, 188)
-	sub.rotation = -0.06
-	_title_group.add_child(sub)
+	sub.position = Vector2(72, 236) + PAD
+	sub.rotation = -0.035
+	_title_inner.add_child(sub)
 
-	# 朱印
-	var seal := ColorRect.new()
-	seal.color = Color(AppTheme.RED, 0.9)
-	seal.custom_minimum_size = Vector2(56, 56)
-	seal.size = Vector2(56, 56)
-	seal.position = Vector2(454, 44)
-	seal.rotation = 0.10
-	_title_group.add_child(seal)
-	var seal_char := AppTheme.make_label(38, AppTheme.WHITE)
-	seal_char.add_theme_font_override("font", AppTheme.title_font())
-	seal_char.text = "富"
-	seal_char.position = Vector2(10, 2)
-	seal.add_child(seal_char)
+	# 「富」字朱印: 落款位 — 切线末端右下(暗色山景上, 避开红日底色)
+	_seal = SealStamp.new()
+	_seal.position = Vector2(478, 196) + PAD
+	_seal.size = Vector2(64, 64)
+	_seal.rotation = 0.08
+	_title_inner.add_child(_seal)
+
+
+## 左上角玩家头像卡: 皮肤头像 + 昵称 + 称号·战绩, 点击打开成就·战绩页。
+## 换装(商城)后 equipped_changed 即时刷新头像。
+func _build_profile() -> void:
+	_profile = PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.92), Color(AppTheme.GOLD, 0.6), 10, 2)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 14
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	sb.shadow_color = Color(0, 0, 0, 0.45)
+	sb.shadow_size = 6
+	_profile.add_theme_stylebox_override("panel", sb)
+	_profile.mouse_filter = Control.MOUSE_FILTER_STOP
+	_profile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_profile.tooltip_text = "查看成就与战绩"
+	_profile.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			Audio.play("click")
+			var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
+			_mount_page(pp)
+			pp.closed.connect(func() -> void:
+				pp.queue_free()
+				_refresh_profile()))
+	add_child(_profile)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	_profile.add_child(row)
+	_prof_avatar = AvatarScript.new()
+	_prof_avatar.custom_minimum_size = Vector2(48, 48)
+	_prof_avatar.size = Vector2(48, 48)
+	_prof_avatar.skin_id = Wallet.equipped_skin
+	row.add_child(_prof_avatar)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 1)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(col)
+	_prof_name = AppTheme.make_label(16, AppTheme.WHITE)
+	_prof_name.text = str(GameSettings.nickname)
+	col.add_child(_prof_name)
+	_prof_rank = AppTheme.make_label(12, AppTheme.GOLD)
+	_prof_rank.text = "%s · %d胜/%d场" % [Wallet.rank_title(),
+			Wallet.local_wins, Wallet.local_matches]
+	col.add_child(_prof_rank)
+	Wallet.equipped_changed.connect(func() -> void:
+		_prof_avatar.skin_id = Wallet.equipped_skin)
+
+
+func _refresh_profile() -> void:
+	if _prof_name == null:
+		return
+	_prof_name.text = str(GameSettings.nickname)
+	_prof_rank.text = "%s · %d胜/%d场" % [Wallet.rank_title(),
+			Wallet.local_wins, Wallet.local_matches]
+
+
+## 入场编排: 三字依次落定(错落旋转回正) → 切线自左描绘 → 朱印钤落
+## → 副标浮现 → 菜单项左移滑入。全部短促(≤1.6s), 不阻塞点击。
+func _play_entrance() -> void:
+	# 标题三字
+	for i in _title_chars.size():
+		var ch: Label = _title_chars[i]
+		var target := ch.rotation
+		ch.modulate.a = 0.0
+		ch.rotation = target - 0.22
+		ch.position.y += 34
+		var tw := create_tween()
+		tw.tween_interval(0.10 + i * 0.12)
+		tw.set_parallel(true)
+		tw.tween_property(ch, "modulate:a", 1.0, 0.34).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(ch, "rotation", target, 0.44) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(ch, "position:y", ch.position.y - 34.0, 0.44) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# 切线描绘
+	_slash_line.draw_t = 0.0
+	var tw2 := create_tween()
+	tw2.tween_interval(0.42)
+	tw2.tween_property(_slash_line, "draw_t", 1.0, 0.38) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# 朱印钤落
+	_seal.pivot_offset = _seal.size / 2.0
+	_seal.modulate.a = 0.0
+	_seal.scale = Vector2(1.7, 1.7)
+	(_seal as SealStamp).stamp_t = 0.0
+	var tw3 := create_tween()
+	tw3.tween_interval(0.55)
+	tw3.set_parallel(true)
+	tw3.tween_property(_seal, "modulate:a", 1.0, 0.16)
+	tw3.tween_property(_seal, "stamp_t", 1.0, 0.30)
+	tw3.tween_property(_seal, "scale", Vector2.ONE, 0.34) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# 副标浮现
+	for c in _title_inner.get_children():
+		if c is Label and str((c as Label).text) == "T  Y  C  O  O  N":
+			c.modulate.a = 0.0
+			var tw4 := create_tween()
+			tw4.tween_interval(0.75)
+			tw4.tween_property(c, "modulate:a", 1.0, 0.4)
+	# 菜单项左移滑入(错峰)
+	for i in _menu_items.size():
+		var it: Control = _menu_items[i]
+		var home := it.position
+		it.modulate.a = 0.0
+		it.position = home + Vector2(-46, 0)
+		var tw5 := create_tween()
+		tw5.tween_interval(0.18 + i * 0.055)
+		tw5.set_parallel(true)
+		tw5.tween_property(it, "modulate:a", 1.0, 0.3)
+		tw5.tween_property(it, "position", home, 0.36) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# 标题组呼吸浮动(循环, 只动内层)
+	var bob := create_tween().set_loops()
+	bob.tween_property(_title_inner, "position:y", 4.0, 1.9) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	bob.tween_property(_title_inner, "position:y", 0.0, 1.9) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 	# 资产面板(锚右上): 双层金框 · 无倾斜 · 三行(货币/称号/操作按钮)
 	_badge = PanelContainer.new()
@@ -246,6 +405,8 @@ func _build_menu() -> void:
 func _build_fan() -> void:
 	_fan = Control.new()
 	_fan.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 缩放锚在视觉中心偏右: _relayout 缩放卡扇时右缘位置不动
+	_fan.pivot_offset = Vector2(150, 60)
 	add_child(_fan)
 	for info: Array in [[-1, -16.0], [53, 0.0], [44, 16.0]]:  # 牌背(底) → 大王 → ♠A(顶)
 		var cv: Control = CardViewScript.new(int(info[0]))
@@ -501,10 +662,14 @@ func _close_mode_select() -> void:
 func _refresh_balance() -> void:
 	if _balance != null:
 		_balance.set_amounts(Wallet.gold, Wallet.diamonds, AppTheme.WHITE)
+	if _badge != null and size.x > 100.0:
+		# 金额文本晚成型会撑宽徽章: 刷新时按新尺寸重锚右上
+		_badge.position = Vector2(size.x - _badge.size.x - maxf(28.0, size.x * 0.025), 30)
 	if _rank_lbl != null:
 		_rank_lbl.text = "称号 %s · %d胜/%d场" % [Wallet.rank_title(),
 				Wallet.local_wins, Wallet.local_matches]
 		_rank_lbl.reset_size()
+	_refresh_profile()
 
 
 ## 全屏页统一挂载: 显式铺满父级(锚点对代码 new 的 Control 不自动求值),

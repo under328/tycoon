@@ -145,7 +145,8 @@ func _check_scene(i: int, w: float, h: float) -> void:
 	var s := cur
 	match i:
 		0:  # 主菜单
-			expect(absf(s._title_group.position.x
+			# 标题组原点含 PAD(14,16) 补偿(切线左伸/中字上提的负偏移折进组内)
+			expect(absf(s._title_group.position.x + 14.0
 					- clampf(w * 0.45, 500.0, w - 540.0)) <= 1.0,
 					"menu 标题组未锚右半区 x=%s (w=%d)" % [s._title_group.position, w])
 			expect(s._badge.position.x + s._badge.size.x <= w - 20.0,
