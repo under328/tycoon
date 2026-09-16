@@ -1,4 +1,4 @@
-## E2E: 本地游戏 → 模式选择弹窗(普通/肉鸽/? 帮助) 信号链路。
+## E2E: 本地游戏 → 模式选择弹窗(2×2 模式方块 / ? 帮助) 信号链路。
 ## 运行: godot --headless --path . --script tests/e2e_mode_select.gd
 extends SceneTree
 
@@ -6,6 +6,8 @@ var f := 0
 var menu = null
 var got := []
 var help_opened := false
+var rogue_q: Button = null
+var rogue_card: Button = null
 
 
 func _process(_d: float) -> bool:
@@ -21,20 +23,21 @@ func _process(_d: float) -> bool:
 		if dlg == null:
 			_fail("模式选择弹窗未出现")
 			return false
-		# 弹窗里应有 ? 帮助钮 + 两个模式钮(共 3 个 Button)
+		# 2×2 方块: 卡 = 空文本 Button(内含名称 Label), 每卡右上角圆包 ? 钮
+		# 总按钮数: 2(难度) + 4(卡) + 4(?) = 10
 		var btns: Array = dlg.find_children("*", "Button", true, false)
-		if btns.size() < 8:
+		if btns.size() < 10:
+			_fail("弹窗按钮数量异常 %d" % btns.size())
 			return false
-		# 找肉鸽行: 行内含『肉鸽模式』按钮 + 它的 ? 帮助钮
-		var rogue_q: Button = null
 		for b in btns:
-			if str((b as Button).text) == "肉鸽模式":
-				var mrow: Control = (b as Button).get_parent()
-				for c in mrow.find_children("*", "BaseButton", true, false):
-					if str((c as BaseButton).text) == "?":
-						rogue_q = c
-		if rogue_q == null:
-			_fail("肉鸽行未找到 ? 帮助钮")
+			if str((b as Button).text) == "?":
+				var card := (b as Button).get_parent()
+				for c in card.get_children():
+					if c is Label and str((c as Label).text) == "肉鸽模式":
+						rogue_q = b
+						rogue_card = card
+		if rogue_q == null or rogue_card == null:
+			_fail("肉鸽方块未找到 ? 帮助钮")
 			return false
 		rogue_q.pressed.emit()
 	if f == 12:
@@ -45,16 +48,16 @@ func _process(_d: float) -> bool:
 			_fail("点击 ? 未打开 rogue_help")
 			return false
 		help_opened = true
-		# 关闭帮助 → 点肉鸽模式
+		# 关闭帮助 → 点肉鸽模式方块
 		for c in menu.get_children():
 			var sc: Script = (c as Control).get_script()
 			if sc != null and str(sc.resource_path).ends_with("rogue_help.gd"):
 				c._close()
 	if f == 15:
-		var btns: Array = menu._mode_dlg.find_children("*", "Button", true, false)
-		for b in btns:
-			if str((b as Button).text) == "肉鸽模式":
-				(b as Button).pressed.emit()
+		if not is_instance_valid(rogue_card):
+			_fail("肉鸽方块已失效")
+			return false
+		rogue_card.pressed.emit()
 	if f == 18:
 		if got != ["rogue"]:
 			_fail("肉鸽模式信号链路失败 got=%s" % str(got))

@@ -466,25 +466,15 @@ func _show_mode_select() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
 	panel.add_child(box)
-	# 标题行 + 右上 ?
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 10)
-	box.add_child(head)
+	# 标题(右上 ? 已移除: 各模式方块右上角有独立的圆包 ? 帮助钮)
 	var title := AppTheme.make_label(28, AppTheme.GOLD)
 	title.text = "选择游戏模式"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	head.add_child(title)
-	var help := AppTheme.make_button("?", Vector2(40, 40), 20)
-	help.pressed.connect(func() -> void:
-		Audio.play("click")
-		var rh: Control = (load("res://src/client/ui/rogue_help.gd") as GDScript).new()
-		_mount_page(rh)
-		rh.closed.connect(func() -> void: rh.queue_free()))
-	head.add_child(help)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
 	# AI 难度行(本地两种模式共用)
 	var diff_row := HBoxContainer.new()
 	diff_row.add_theme_constant_override("separation", 10)
+	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(diff_row)
 	var diff_lbl := AppTheme.make_label(16, AppTheme.WHITE)
 	diff_lbl.text = "AI 难度"
@@ -505,48 +495,82 @@ func _show_mode_select() -> void:
 					other.set_pressed_no_signal(false))
 		diff_btns.append(b)
 		diff_row.add_child(b)
-	# 模式行: 按钮 + 右上 ?(各自图文说明)
+	# 四模式 2×2 方块: 图标 + 名称 + 描述 + 方块内右上角圆包 ? 帮助钮
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	box.add_child(grid)
 	var modes := [
 		["普通模式", "经典大富豪: 换牌 / 革命 / 8切, 回合制排名结算",
-			"local_game", "normal", "normal_help.gd"],
+			"local_game", "normal", "normal_help.gd", "normal"],
 		["肉鸽模式", "每局『命运二选一』定规则: 10 种命运卡随机登场",
-			"local_game", "rogue", "rogue_help.gd"],
+			"local_game", "rogue", "rogue_help.gd", "rogue"],
 		["格斗试炼", "化身头像人物, 五回合二选一编成 5 张装备, 决战 BOSS",
-			"fight_mode", "fight", "fight_help.gd"],
+			"fight_mode", "fight", "fight_help.gd", "fight"],
 		["每日挑战", "全设备同一天同一布局, 冲击今日最佳成绩",
-			"fight_daily", "daily", "fight_help.gd"],
+			"fight_daily", "daily", "fight_help.gd", "daily"],
 	]
 	for m: Array in modes:
-		var mrow := HBoxContainer.new()
-		mrow.add_theme_constant_override("separation", 10)
-		box.add_child(mrow)
-		var mbtn := AppTheme.make_button(str(m[0]), Vector2(340, 60), 21)
-		var mmode := str(m[3])
-		var msig := str(m[2])
-		mbtn.pressed.connect(func() -> void:
-			Audio.play("click")
-			_close_mode_select()
-			if msig == "fight_mode":
-				fight_mode.emit()
-			elif msig == "fight_daily":
-				fight_daily.emit()
-			else:
-				local_game.emit(mmode))
-		mrow.add_child(mbtn)
-		var q := AppTheme.make_button("?", Vector2(40, 40), 20)
-		q.tooltip_text = "查看 %s 玩法说明" % str(m[0])
-		var help_script := str(m[4])
-		q.pressed.connect(func() -> void:
-			Audio.play("click")
-			_open_mode_help(help_script))
-		mrow.add_child(q)
-		var dsc := AppTheme.make_label(13, AppTheme.DIM)
-		dsc.text = str(m[1])
-		dsc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		dsc.custom_minimum_size = Vector2(380, 0)
-		box.add_child(dsc)
+		grid.add_child(_build_mode_card(m))
 	_mode_dlg = dlg
 	add_child(dlg)
+
+
+## 模式方块(2×2 网格格子): 点击进模式; 右上角圆包 ? 打开图文说明
+func _build_mode_card(m: Array) -> Button:
+	var card := AppTheme.make_button("", Vector2(336, 116), 16)
+	card.name = "mode_%s" % str(m[3])   # 空文本按钮需显式命名(引擎拒绝空名)
+	# 模式图标(方块前方)
+	var icon := Icons.ModeIconView.new(str(m[5]))
+	icon.position = Vector2(18, 30)
+	icon.size = Vector2(56, 56)
+	card.add_child(icon)
+	# 名称 + 描述
+	var name_lb := AppTheme.make_label(20, AppTheme.GOLD)
+	name_lb.text = str(m[0])
+	name_lb.position = Vector2(88, 16)
+	card.add_child(name_lb)
+	var desc := AppTheme.make_label(13, AppTheme.DIM)
+	desc.text = str(m[1])
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.size = Vector2(234, 58)
+	desc.position = Vector2(88, 50)
+	card.add_child(desc)
+	# 圆包 ? 帮助钮(方块内右上角, 小巧不抢视觉)
+	var help := AppTheme.make_button("?", Vector2(28, 28), 15)
+	var circle := StyleBoxFlat.new()
+	circle.bg_color = Color(0.16, 0.15, 0.32)
+	circle.set_corner_radius_all(14)
+	circle.set_border_width_all(1)
+	circle.border_color = Color(AppTheme.GOLD, 0.7)
+	help.add_theme_stylebox_override("normal", circle)
+	var circle_h: StyleBoxFlat = circle.duplicate()
+	circle_h.bg_color = Color(0.26, 0.24, 0.48)
+	circle_h.set_border_width_all(2)
+	help.add_theme_stylebox_override("hover", circle_h)
+	help.add_theme_stylebox_override("pressed", circle_h)
+	help.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	help.position = Vector2(336 - 38, 8)
+	help.tooltip_text = "查看 %s 玩法说明" % str(m[0])
+	var help_script := str(m[4])
+	help.pressed.connect(func() -> void:
+		Audio.play("click")
+		_open_mode_help(help_script))
+	card.add_child(help)
+	# 点击方块主体 → 进入模式(子级 ? 钮自吸收点击, 不误触)
+	var mmode := str(m[3])
+	var msig := str(m[2])
+	card.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_mode_select()
+		if msig == "fight_mode":
+			fight_mode.emit()
+		elif msig == "fight_daily":
+			fight_daily.emit()
+		else:
+			local_game.emit(mmode))
+	return card
 
 
 ## 打开模式说明页(图文), 关闭后回到模式选择弹窗

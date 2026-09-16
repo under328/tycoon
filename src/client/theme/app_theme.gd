@@ -170,7 +170,8 @@ static func make_label(size: int, color: Color) -> Label:
 static func make_button(text: String, min_size := Vector2(96, 44), font_size := 18) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.name = text
+	if text != "":
+		b.name = text   # 引擎拒绝空节点名(无字按钮由调用方命名)
 	var ms := min_size
 	if Responsive.is_touch() and ms.y < 44.0:
 		ms.y = 44.0  # 触屏设备热区下限(手机/平板手指可按)

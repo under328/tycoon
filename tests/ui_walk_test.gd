@@ -116,7 +116,13 @@ func _open_page() -> void:
 			page_root = main.menu._mode_dlg
 		6:
 			main.menu._show_mode_select()
-			_press_text(main.menu._mode_dlg, "?")
+			# 2×2 卡片: 每卡右上角各有圆包 ? → 定向按「肉鸽模式」卡的帮助钮
+			for b in main.menu._mode_dlg.find_children("*", "Button", true, false):
+				if str((b as Button).text) == "?":
+					var card := (b as Button).get_parent()
+					for c in card.get_children():
+						if c is Label and str((c as Label).text) == "肉鸽模式":
+							b.pressed.emit()
 			page_root = _find_by_script(main.menu, "rogue_help.gd")
 		7:
 			main._start_fight()

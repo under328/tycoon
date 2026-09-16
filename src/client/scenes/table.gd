@@ -1170,9 +1170,6 @@ func _build_ui() -> void:
 		_update_emoji_vis())
 	add_child(_emoji_toggle)
 	_update_emoji_vis()
-
-	add_child(_emoji_toggle)
-	_update_emoji_vis()
 	# 开局问候: 本地模式随机一位 AI 打招呼(氛围)
 	if mode == "local":
 		var greet := func() -> void:

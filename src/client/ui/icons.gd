@@ -106,6 +106,88 @@ static func menu_icon(cv: CanvasItem, kind: String, center: Vector2, s: float,
 					center + Vector2(0.82, 0) * s, col, ws * 1.3, true)
 
 
+## 模式图标: kind = normal(对牌)/rogue(命运卡)/fight(交叉剑)/daily(日), s≈半径
+static func mode_icon(cv: CanvasItem, kind: String, center: Vector2, s: float,
+		col := Color("e0a83c")) -> void:
+	var ws := maxf(1.6, s * 0.15)
+	var ink := Color(0.10, 0.10, 0.22, 0.95)
+	match kind:
+		"normal":  # 两张错落的对牌(前面一张带菱形花色)
+			var back := PackedVector2Array()
+			var front := PackedVector2Array()
+			for p: Vector2 in [Vector2(-0.3, -0.46), Vector2(0.34, -0.46),
+					Vector2(0.34, 0.46), Vector2(-0.3, 0.46)]:
+				back.append(center + p.rotated(-0.24) * s)
+			for p: Vector2 in [Vector2(-0.3, -0.46), Vector2(0.34, -0.46),
+					Vector2(0.34, 0.46), Vector2(-0.3, 0.46)]:
+				front.append(center + (p + Vector2(0.12, 0.02)).rotated(0.18) * s)
+			back.append(back[0])
+			front.append(front[0])
+			cv.draw_polyline(back, Color(col, 0.55), ws, true)
+			cv.draw_colored_polygon(front, ink)
+			cv.draw_polyline(front, col, ws, true)
+			var dm := center + Vector2(0.12, 0.02).rotated(0.18) * s
+			cv.draw_colored_polygon(PackedVector2Array([
+				dm + Vector2(0, -0.2) * s, dm + Vector2(0.15, 0) * s,
+				dm + Vector2(0, 0.2) * s, dm + Vector2(-0.15, 0) * s,
+			]), Color("e0503c"))
+		"rogue":  # 命运卡: 竖卡面 + 四芒星辉
+			var pts := PackedVector2Array([
+				center + Vector2(-0.42, -0.62) * s, center + Vector2(0.42, -0.62) * s,
+				center + Vector2(0.42, 0.62) * s, center + Vector2(-0.42, 0.62) * s,
+			])
+			pts.append(pts[0])
+			cv.draw_polyline(pts, col, ws, true)
+			cv.draw_polyline(PackedVector2Array([
+				center + Vector2(-0.30, -0.48) * s, center + Vector2(0.30, -0.48) * s,
+			]), Color(col, 0.45), ws * 0.8, true)
+			var c2 := center + Vector2(0, 0.06) * s
+			cv.draw_colored_polygon(PackedVector2Array([
+				c2 + Vector2(0, -0.4) * s, c2 + Vector2(0.1, -0.1) * s,
+				c2 + Vector2(0.34, 0) * s, c2 + Vector2(0.1, 0.1) * s,
+				c2 + Vector2(0, 0.4) * s, c2 + Vector2(-0.1, 0.1) * s,
+				c2 + Vector2(-0.34, 0) * s, c2 + Vector2(-0.1, -0.1) * s,
+			]), col)
+			cv.draw_circle(center + Vector2(0, 0.06) * s, s * 0.09, ink)
+		"fight":  # 交叉双剑: 剑身交叉 + 护手 + 剑柄圆
+			for dir: Vector2 in [Vector2(-1, 1), Vector2(1, 1)]:
+				var tip := center + Vector2(-dir.x * 0.62, -dir.y * 0.62) * s
+				var hilt := center + Vector2(dir.x * 0.46, dir.y * 0.46) * s
+				cv.draw_line(hilt, tip, col, ws * 1.5, true)
+				cv.draw_circle(hilt + dir * 0.1 * s, ws * 1.1, col)
+				var guard_a := hilt + Vector2(-dir.y, -dir.x) * 0.22 * s
+				var guard_b := hilt + Vector2(dir.y, dir.x) * 0.22 * s
+				cv.draw_line(guard_a, guard_b, col, ws * 1.2, true)
+				cv.draw_circle(tip, ws * 0.7, Color("e0503c"))
+		"daily":  # 太阳: 圆盘 + 八芒(每日挑战)
+			cv.draw_circle(center, 0.3 * s, col)
+			cv.draw_circle(center, 0.18 * s, ink)
+			for i in 8:
+				var a := TAU * i / 8.0
+				cv.draw_line(
+					center + Vector2.from_angle(a) * 0.46 * s,
+					center + Vector2.from_angle(a) * 0.72 * s,
+					col, ws * 1.25, true)
+
+
+## 模式图标控件(kind 同 mode_icon, 尺寸跟随控件)
+class ModeIconView extends Control:
+	var kind := "normal":
+		set(v):
+			kind = v
+			queue_redraw()
+
+	func _init(p_kind := "normal") -> void:
+		kind = p_kind
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var r: float = minf(size.x, size.y) * 0.5
+		if r <= 1.0:
+			return
+		GameIcons.mode_icon(self, kind, size / 2.0, r)
+
+
 ## 货币图标控件(kind: "coin"/"gem", 尺寸跟随控件)
 class CurrencyIcon extends Control:
 	var kind := "coin":
