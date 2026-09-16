@@ -24,6 +24,7 @@ var vibration := true           # 触感偏好: 震动反馈(移动端)
 var ai_level := "normal"        # 本地 AI 难度: easy/normal
 var language := ""              # 界面语言(空=首次启动, 按 OS 语言检测)
 var card_counter := true        # 记牌器 HUD 开关
+var voice_on := true            # 语音播报开关(欢乐斗地主式出牌/战斗播报)
 
 
 func _ready() -> void:
@@ -49,6 +50,7 @@ func load_settings() -> void:
 		if language == "":
 			language = detect_language()   # 首启: 跟随系统语言
 		card_counter = bool(cf.get_value("game", "card_counter", card_counter))
+		voice_on = bool(cf.get_value("audio", "voice_on", voice_on))
 		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
 		vsync_enabled = bool(cf.get_value("display", "vsync", vsync_enabled))
 		vibration = bool(cf.get_value("haptics", "vibration", true))
@@ -74,6 +76,7 @@ func save_settings() -> void:
 	cf.set_value("player", "nickname", nickname)
 	cf.set_value("audio", "bgm", bgm_volume)
 	cf.set_value("audio", "sfx", sfx_volume)
+	cf.set_value("audio", "voice_on", voice_on)
 	cf.set_value("player", "client_id", client_id)
 	cf.set_value("player", "tutorial_seen", tutorial_seen)
 	cf.set_value("net", "host", host)

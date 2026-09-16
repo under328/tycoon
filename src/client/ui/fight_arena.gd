@@ -117,6 +117,20 @@ func _apply(v: Dictionary, events: Array) -> void:
 	var fighter: bool = not bool(v.get("spectator", true))
 	spec_lbl.visible = not fighter
 	spec_lbl.text = "👁 观战中 — 本房间仅 1/2 号位可出战"
+	# 阶段切换语音: 编成 / 对决 / 得分失分 / 终局
+	if phase != prev_phase:
+		match phase:
+			"draft":
+				Audio.say("f_draft")
+			"battle":
+				Audio.say("f_vs", 1.0, true)
+			"round_end":
+				Audio.say("f_round_win" if int(v.get("round_winner", -1)) \
+						== int(v.get("my_seat", -1)) else "f_round_lose", 1.0, true)
+			"over":
+				if fighter:
+					Audio.say("victory" if int(v.get("winner", -1)) \
+							== int(v.get("my_seat", -1)) else "defeat", 1.0, true)
 	if phase == "draft" and prev_phase != "draft":
 		_rewarded = false
 		_pending_cand = -1
@@ -346,6 +360,10 @@ func _on_slot_clicked(idx: int) -> void:
 	Audio.play("click")
 	var cand := _pending_cand
 	_pending_cand = -1
+	if cand >= 200:
+		Audio.say("f_rare")
+	elif cand >= 100:
+		Audio.say("f_relic")
 	if net != null:
 		net.send_fight_pick(cand, idx)
 	_rebuild_bottom()
@@ -468,6 +486,16 @@ func _timer_shown() -> int:
 
 func _send_act(action: String) -> void:
 	Audio.play("click")
+	# 己方动作即时播报(欢乐斗地主式); 服务器回执事件照常驱动飘字
+	match action:
+		"attack":
+			Audio.say("f_attack")
+		"skill":
+			Audio.say("f_skill")
+		"defend":
+			Audio.say("f_defend")
+		"ult":
+			Audio.say("f_ult", 1.0, true)
 	if net != null:
 		net.send_fight_act(action)
 
@@ -492,6 +520,7 @@ func _play_next() -> void:
 	var v := int(ev.get("v", 0))
 	match kind:
 		"crit":
+			Audio.say("f_crit")
 			_floater("暴击 -%d" % v, x, y, Color("ffd166"))
 			_sfx("play_card")
 		"dmg":

@@ -107,6 +107,17 @@ func _ready() -> void:
 	box.add_child(_section("音量"))
 	_bgm_slider = _slider(box, "音乐", _on_bgm_changed)
 	_sfx_slider = _slider(box, "音效", _on_sfx_changed)
+	var voice := CheckButton.new()
+	voice.text = tr("语音播报(出牌/战斗解说)")
+	voice.button_pressed = bool(gs_voice_on())
+	voice.toggled.connect(func(on: bool) -> void:
+		var g := get_node_or_null("/root/GameSettings")
+		if g != null:
+			g.voice_on = on
+			g.save_settings()
+			if on:
+				Audio.say("victory", 1.0, true))  # 开启即试听
+	box.add_child(voice)
 
 	# ── 语言(16 种, 即时切换) ──
 	box.add_child(_section("语言"))
@@ -338,6 +349,11 @@ func _is_fullscreen() -> bool:
 func gs_vibration() -> bool:
 	var g := get_node_or_null("/root/GameSettings")
 	return bool(g.vibration) if g != null else true
+
+
+func gs_voice_on() -> bool:
+	var g := get_node_or_null("/root/GameSettings")
+	return bool(g.voice_on) if g != null else true
 
 
 func _close() -> void:

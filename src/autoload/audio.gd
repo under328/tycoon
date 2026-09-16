@@ -15,6 +15,15 @@ var _sfx_players: Array = []
 var _sfx_next := 0
 var library := {}
 
+# ── 语音播报(欢乐斗地主式): MP3 语音库 + 单播放器小队列 ──
+const VOICE_DIR := "res://assets/voice/"
+const VOICE_DEDUPE_MS := 1300   # 同一播报词的去重窗口(连续过牌/重复命中)
+const VOICE_Q_MAX := 2          # 队列上限(旧播报让位新播报)
+var _voice_player: AudioStreamPlayer
+var _voice_q: Array = []        # [{key, pitch}]
+var _voice_last_ms := {}        # key -> 上次播报时间(去重)
+var _voice_missing := {}        # 加载失败的 key(测试环境/缺资产时静默跳过)
+
 
 func _ready() -> void:
 	_setup_buses()
@@ -82,6 +91,11 @@ func _setup_buses() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_sfx_players.append(p)
+	_voice_player = AudioStreamPlayer.new()
+	_voice_player.bus = "SFX"
+	_voice_player.volume_db = 1.5   # 语音略高于音效: 播报是主要信息通道
+	add_child(_voice_player)
+	_voice_player.finished.connect(_on_voice_finished)
 
 
 func _build_library() -> void:
@@ -138,6 +152,60 @@ func play(sfx_name: String) -> void:
 	_sfx_next = (_sfx_next + 1) % _sfx_players.size()
 	p.stream = library[sfx_name]
 	p.play()
+
+
+## 语音播报(欢乐斗地主式): key 为 assets/voice/<key>.mp3。
+## pitch 做座位差异化变调(1.0 原声); interrupt=true 清队列立即播(革命/胜负
+## 等关键时刻)。同 key 去重窗口内只播一次; 队列上限 2 旧让新; 走 SFX 总线
+## 受音效音量控制, 且受 GameSettings.voice_on 开关。
+func say(key: String, pitch := 1.0, interrupt := false) -> void:
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null and not bool(gs.voice_on):
+		return
+	if _voice_player == null:
+		return
+	var now := Time.get_ticks_msec()
+	if int(_voice_last_ms.get(key, -100000)) + VOICE_DEDUPE_MS > now:
+		return
+	_voice_last_ms[key] = now
+	if interrupt:
+		_voice_q.clear()
+		_voice_player.stop()
+	while _voice_q.size() >= VOICE_Q_MAX:
+		_voice_q.pop_front()
+	_voice_q.append({"key": key, "pitch": pitch})
+	_pump_voice()
+
+
+func _pump_voice() -> void:
+	if _voice_player.playing or (_voice_q as Array).is_empty():
+		return
+	var item: Dictionary = _voice_q.pop_front()
+	var stream := _voice_stream(str(item["key"]))
+	if stream == null:
+		_pump_voice()   # 缺资产(测试环境): 跳过继续
+		return
+	_voice_player.stream = stream
+	_voice_player.pitch_scale = float(item.get("pitch", 1.0))
+	_voice_player.play()
+
+
+func _voice_stream(key: String) -> AudioStream:
+	var cache_key := "voice_" + key
+	if _voice_missing.has(key) or library.has(cache_key):
+		return library.get(cache_key)
+	var path := VOICE_DIR + key + ".mp3"
+	if not ResourceLoader.exists(path):
+		_voice_missing[key] = true
+		return null
+	var stream: AudioStream = load(path)
+	if stream == null:
+		_voice_missing[key] = true
+	return stream
+
+
+func _on_voice_finished() -> void:
+	get_tree().create_timer(0.08).timeout.connect(_pump_voice)
 
 
 ## 切换 BGM 轨道（"lobby"/"table"/"table_rev"）；同轨不重启。

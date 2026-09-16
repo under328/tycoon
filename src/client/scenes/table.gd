@@ -71,6 +71,8 @@ var _last_round_ids: Array = []
 var _end_shown := false
 var _field_count := -1
 var _had_field := false         # 出牌区是否有过牌(区分清桌音效与首次刷新)
+var _voice_fin := -1            # 语音: 已出完人数快照(识别新出完者播称号)
+var _voice_last1 := {}          # 语音: 各座位手牌数快照(进入"剩一张"时播报)
 var _trick_texts: Array = []    # 本轮已出各手文本(清桌时整体转上轮)
 var _last_trick: Array = []     # 上一轮完整出牌回顾(清桌后常显)
 var trick_lbl: Label = null     # 上轮回顾标签(出牌区空时显示)
@@ -212,6 +214,8 @@ func _new_match() -> void:
 	_field_count = -1
 	_had_field = false
 	_last_hand = []
+	_voice_fin = -1
+	_voice_last1 = {}
 	# 本地: 我用已装备皮肤, AI 随机皮肤
 	var ids: Array = []
 	for s in SkinsLib.SKINS:
@@ -363,6 +367,8 @@ func _local_apply(action: Dictionary) -> Dictionary:
 	var r := GameStateGd.apply(state, action)
 	if bool(r["ok"]) and int(action.get("seat", -1)) == 0 			and str(action["t"]) == "play" 			and (action["cards"] as Array).size() == 4:
 		Wallet.note_mission("m_quad")  # 我方四条=炸弹(本规则集 4 张组合仅四条)
+	if bool(r["ok"]) and str(action["t"]) == "pass":
+		Audio.say("pass", _seat_pitch(int(action.get("seat", 0))))  # AI 过牌播报
 	return r
 
 
@@ -371,6 +377,7 @@ func _human_apply(action: Dictionary) -> void:
 		return
 	if str(action["t"]) == "pass":
 		_sfx("pass")
+		Audio.say("pass")
 	var r := GameStateGd.apply(state, action)
 	if not bool(r["ok"]):
 		_flash_error(GameStateGd.error_msg(str(r["error"])))
@@ -437,6 +444,7 @@ func _on_hint_pressed() -> void:
 func _on_pass_pressed() -> void:
 	_sfx("click")
 	if mode == "online":
+		Audio.say("pass")
 		net.pass_turn()
 		return
 	_human_apply({"t": "pass", "seat": 0})
@@ -446,6 +454,7 @@ func _on_pass_pressed() -> void:
 ## 此时 advancing=true 会拦掉 _human_apply; 联机走网络不受限。
 func _auto_pass() -> void:
 	_sfx("pass")
+	Audio.say("pass")
 	if mode == "online":
 		net.pass_turn()
 		return
@@ -588,6 +597,7 @@ func _show_rogue_flow() -> void:
 func _show_rogue_choice() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		_rogue_dlg.queue_free()
+	Audio.say("rogue_choice")   # 命运二选一登场
 	var dlg := Control.new()
 	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
 	dlg.theme = AppTheme.build_theme()
@@ -677,6 +687,9 @@ func _show_rogue_reveal() -> void:
 		if str(m["id"]) == mod_id:
 			meta = m
 			break
+	if not meta.is_empty():
+		# 按稀有度播报: 传说/史诗/普通
+		Audio.say("rogue_%s" % str(meta.get("rar", "common")), 1.0, true)
 	var dlg := Control.new()
 	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
 	dlg.theme = AppTheme.build_theme()
@@ -1468,6 +1481,7 @@ func _refresh_view(view: Dictionary) -> void:
 
 	_refresh_field(view)
 	_refresh_hand(view)
+	_say_match_events(view)   # 出完称号 / 剩一张 提醒
 
 	# 革命检测（两种模式统一; 换局重置不播反革命）
 	var rev: bool = bool(view["revolution"])
@@ -1731,6 +1745,54 @@ func _show_trick_recap() -> void:
 		trick_lbl.text = "上轮  " + "  |  ".join(PackedStringArray(lines))
 
 
+# ── 语音播报(欢乐斗地主式): 出牌牌型 / 过牌 / 出完称号 / 剩一张 ──
+const SEAT_PITCH := [1.0, 0.9, 1.07, 0.95]   # 座位音色差异化(AI 听起来像不同人)
+
+func _seat_pitch(seat: int) -> float:
+	return float(SEAT_PITCH[seat % SEAT_PITCH.size()])
+
+
+## 出牌播报: 8切/革命 优先(打断型) → 王/黑桃3 → 单张点数 / 对X / 三个X
+func _say_combo(combo: Dictionary, seat: int) -> void:
+	var pitch := _seat_pitch(seat)
+	if int(combo["type"]) == Combo.Type.QUAD:
+		Audio.say("revolution", pitch, true)
+		return
+	for c in combo["cards"]:
+		if CardsGd.value(int(c)) == 8:
+			Audio.say("eight_cut", pitch, true)
+			return
+	match int(combo["type"]):
+		Combo.Type.SINGLE:
+			var key := float(combo["key"])
+			if key > 16.0:
+				Audio.say("v_s3", pitch)      # 黑桃3(最强单张)
+			elif key == 16.0:
+				Audio.say("v_wang", pitch)
+			else:
+				Audio.say("v_%d" % int(key), pitch)
+		Combo.Type.PAIR:
+			Audio.say("p_%d" % int(combo["key"]), pitch)
+		Combo.Type.TRIPLE:
+			Audio.say("t_%d" % int(combo["key"]), pitch)
+
+
+## 出完与紧张点播报: 第1~3个出完报称号(第4个由结算面板播胜负);
+## 任一座位手牌首次只剩 1 张时提醒
+func _say_match_events(view: Dictionary) -> void:
+	var fin: Array = view.get("finished", [])
+	if _voice_fin >= 0 and fin.size() > _voice_fin and not fin.is_empty():
+		Audio.say(["v_dafuhao", "v_r2", "v_r3"][mini(fin.size() - 1, 2)],
+				_seat_pitch(int(fin[fin.size() - 1])), true)
+	_voice_fin = fin.size()
+	var counts: Array = view.get("counts", [])
+	for s in mini(counts.size(), 4):
+		var n := int(counts[s])
+		if n == 1 and int(_voice_last1.get(s, 99)) > 1:
+			Audio.say("v_last_one", _seat_pitch(s))
+		_voice_last1[s] = n
+
+
 ## 桌面区：实体卡牌 + 出牌动画。
 func _refresh_field(view: Dictionary) -> void:
 	var field: Array = view["field"]
@@ -1783,6 +1845,7 @@ func _refresh_field(view: Dictionary) -> void:
 		holder.add_child(hz)
 		field_box.add_child(holder)
 		_had_field = true
+		_say_combo(entry["combo"], int(entry["seat"]))   # 语音播报牌型
 		# 最新一手高亮: 淡入 + 弹性缩放; 上一手降为做旧
 		var prev_idx := field_box.get_child_count() - 2
 		if prev_idx >= 0:

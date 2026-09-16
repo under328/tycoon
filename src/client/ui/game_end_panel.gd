@@ -21,6 +21,7 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 
 	var my_rank := int(view["identities"][int(view["my_seat"])])
 	Audio.play("win" if my_rank <= 1 else "lose")
+	Audio.say("victory" if my_rank <= 1 else "defeat", 1.0, true)   # 终局播报
 
 	# 暗幕
 	var dark := ColorRect.new()

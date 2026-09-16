@@ -21,6 +21,7 @@ var phase := "run"           # run(试炼中) / over(已结束)
 var _run_diamonds := 0
 var _busy := false
 var _pending_cand := -1      # 槽满替换: 待放入的候选
+var _voice_phase := ""       # 语音: 已播报的引擎阶段(切换时播报)
 var _banner: Label = null
 var _slot_ui: Array = []     # {wrap, sb, card} 装备槽
 var _sp_row: HBoxContainer = null
@@ -284,6 +285,7 @@ func _update_hits() -> void:
 
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
+	_say_phase()
 	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
 		else "") + tr("第 %d 层 · 第 %d/%d 回合 · %s") % [fm.floor_num,
 		fm.round_num, FightModeGd.ROUNDS,
@@ -332,6 +334,20 @@ func _fill_enemy_view() -> void:
 
 func _px(f: float) -> float:
 	return size.x * f
+
+
+## 阶段切换语音: 编成(第5回合=BOSS)/战斗开始/回合胜利
+func _say_phase() -> void:
+	if fm.phase == _voice_phase:
+		return
+	_voice_phase = fm.phase
+	match fm.phase:
+		"draft":
+			Audio.say("f_boss" if fm.round_num >= FightModeGd.ROUNDS else "f_draft")
+		"battle":
+			Audio.say("battle_start", 1.0, true)
+		"round_end":
+			Audio.say("f_round_win", 1.0, true)
 
 
 func _py(f: float) -> float:
@@ -519,9 +535,11 @@ func _on_candidate(cand: int) -> void:
 	if not bool(r["ok"]):
 		return
 	if cand >= 200:
+		Audio.say("f_rare")   # 稀有卡
 		_floater(tr("稀有卡! 生命上限 +8%"), _px(0.5), _py(0.30),
 				Color("ffd166"))
-	if cand >= 100:
+	elif cand >= 100:
+		Audio.say("f_relic")   # 奇物
 		var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
 		_floater("%s %s" % [str(meta["icon"]), str(meta["name"])],
 				_px(0.5), _py(0.34), Color("c89ae8"))
@@ -573,11 +591,25 @@ func _on_action(action: String) -> void:
 	_busy = true
 	act_row.visible = false
 	Audio.play("click")
-	if action == "skill":
-		_skill_cast(monster, Color("7ec8ff"))
+	match action:
+		"attack":
+			Audio.say("f_attack")
+		"skill":
+			Audio.say("f_skill")
+			_skill_cast(monster, Color("7ec8ff"))
+		"defend":
+			Audio.say("f_defend")
+		"ult":
+			Audio.say("f_ult", 1.0, true)
 	if action != "defend":
 		_player_strike()
+	var fury_before := fm.fury
 	var evs: Array = fm.step(action)
+	# 怒气首次蓄满 / 连击 5 层里程碑
+	if fury_before < 100 and fm.fury >= 100:
+		Audio.say("f_fury")
+	if fm.hits == 5:
+		Audio.say("f_combo")
 	_run_events(evs)
 
 
@@ -593,6 +625,7 @@ func _run_events(evs: Array) -> void:
 	var ty := _py(0.36) if is_enemy_target else _py(0.34)
 	match kind:
 		"crit":
+			Audio.say("f_crit")
 			_floater(tr("暴击 -%d") % int(ev["v"]), tx, ty, Color("ffd166"))
 			_sfx("crit")
 		"skill":
@@ -626,6 +659,7 @@ func _run_events(evs: Array) -> void:
 			_shake(12.0)
 			_sfx("crit")
 		"parry":
+			Audio.say("f_parry", 1.0, true)
 			_floater(tr("完美格挡! 反击 -%d") % int(ev["v"]), _px(0.68), _py(0.36), Color("7ec8ff"))
 			_sfx("crit")
 		"combo":
@@ -637,6 +671,7 @@ func _run_events(evs: Array) -> void:
 		"chilled":
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
+			Audio.say("f_kill", 1.0, true)
 			_monster_die()
 	if kind == "heavy" or kind == "spell":
 		_hit_flash(avatar)
@@ -824,6 +859,7 @@ func _floater(text: String, x: float, y: float, col: Color) -> void:
 
 ## ── 结算 ──
 func _show_endless_choice() -> void:
+	Audio.say("f_clear", 1.0, true)   # R5 通关
 	_busy = true
 	_close_overlay()
 	var overlay := CenterContainer.new()
@@ -879,6 +915,7 @@ func _finish_run() -> void:
 	if phase == "over":
 		return
 	phase = "over"
+	Audio.say("victory" if fm.run_won else "defeat", 1.0, true)   # 结算播报
 	var cleared: int = fm.cleared
 	var r: Dictionary = Wallet.grant_fight_reward(cleared,
 			1 if fm.run_won else 0)   # 通关即击破 1 个 BOSS
