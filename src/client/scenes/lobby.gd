@@ -198,6 +198,9 @@ func _relayout() -> void:
 	var extra := w - 1280.0
 	var eh := h - 720.0
 	var shift := extra * 0.45
+	# 高于 16:9 的视口(expand 拉伸逻辑高 > 720): 多余高度按 40% 基础下移,
+	# 整页不再顶在上缘; 贴底控件(dy=1.0)不受影响, 底部行仍锚在底缘
+	var pad := eh * 0.4 if eh > 0.0 else 0.0
 	for n in _layouts:
 		var lay: Array = _layouts[n].get(_view, [])
 		if lay.is_empty():
@@ -207,7 +210,9 @@ func _relayout() -> void:
 			dx = shift
 		elif str(lay[1]) == "right":
 			dx = extra
-		(n as Control).position = Vector2(lay[0]) + Vector2(dx, float(lay[2]) * eh)
+		var dy_frac := float(lay[2])
+		var dy := pad * (1.0 - dy_frac) + dy_frac * eh
+		(n as Control).position = Vector2(lay[0]) + Vector2(dx, dy)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -574,7 +579,8 @@ func _build_ui() -> void:
 	add_child(join_btn)
 
 	# 本机开房: 同进程内嵌服务器并自动建房, 朋友粘贴邀请码即可加入
-	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(264, 52), 17)
+	# (宽度与「搜索附近主机」一致, 右列按钮对齐)
+	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(300, 52), 17)
 	host_btn.position = Vector2(830, 228)  # 与搜索附近主机左对齐
 	host_btn.pressed.connect(func() -> void:
 		Audio.play("click")
