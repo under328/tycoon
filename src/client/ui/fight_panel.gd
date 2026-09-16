@@ -165,8 +165,8 @@ func _ready() -> void:
 	shield_bar.add_child(shield_fg)
 
 	monster = MonsterViewScript.new()
-	monster.custom_minimum_size = Vector2(200, 200)
-	monster.size = Vector2(200, 200)
+	monster.custom_minimum_size = Vector2(230, 230)
+	monster.size = Vector2(230, 230)
 	battle_box.add_child(monster)
 	e_name = AppTheme.make_label(18, AppTheme.WHITE)
 	e_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -257,8 +257,10 @@ func _process(delta: float) -> void:
 	# 怪物呼吸浮动 + 玩家轻微起伏(战斗阶段)
 	if fm != null and fm.phase == "battle":
 		_bob_t += delta
-		monster.position.y = _enemy_home.y + sin(_bob_t * 2.2) * 5.0
-		avatar.position.y = _player_home.y + sin(_bob_t * 1.7) * 3.0
+		monster.position.y = _enemy_home.y + sin(_bob_t * 2.2) * 6.0
+		monster.position.x = _enemy_home.x + sin(_bob_t * 0.8) * 3.0
+		avatar.position.y = _player_home.y + sin(_bob_t * 1.7) * 4.0
+		avatar.rotation = sin(_bob_t * 1.2) * 0.02
 
 
 func _label(size_num: int, color: Color) -> Label:
@@ -571,6 +573,8 @@ func _on_action(action: String) -> void:
 	_busy = true
 	act_row.visible = false
 	Audio.play("click")
+	if action == "skill":
+		_skill_cast(monster, Color("7ec8ff"))
 	if action != "defend":
 		_player_strike()
 	var evs: Array = fm.step(action)
@@ -606,6 +610,8 @@ func _run_events(evs: Array) -> void:
 					AppTheme.RED if is_enemy_target else Color("ff8866"))
 			if is_enemy_target:
 				_hit_flash(monster)
+				if fm.hits >= 4:
+					_shake(6.0)
 			else:
 				_sfx("hit")
 		"thorns":
@@ -625,6 +631,9 @@ func _run_events(evs: Array) -> void:
 		"combo":
 			_update_hits()   # 连击大字刷新
 			_sfx("tick")
+		"charging":
+			_skill_cast(monster, Color("ffb14e"))
+			_floater(tr("⚡ 蓄力中…"), _px(0.68), _py(0.24), Color("ffb14e"))
 		"chilled":
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
@@ -731,6 +740,35 @@ func _slash_flash(skin: String) -> void:
 	tw.tween_interval(0.22)
 	tw.tween_callback(slash.queue_free)
 	_hit_flash(monster)
+
+
+## 闪避演出: 快速侧移
+func _dodge_fighter(target: Control, home: Vector2) -> void:
+	var ghost := ColorRect.new()
+	ghost.color = Color(1, 1, 1, 0.15)
+	ghost.size = target.size
+	ghost.position = target.position
+	ghost.z_index = 5
+	battle_box.add_child(ghost)
+	var tw := target.create_tween()
+	tw.tween_property(target, "position:x", home.x + 60.0, 0.1)
+	tw.tween_property(target, "position:x", home.x + 30.0, 0.08)
+	tw.tween_property(target, "position:x", home.x, 0.12)
+	tw.tween_callback(func() -> void: ghost.queue_free())
+
+
+## 技能蓄力演出
+func _skill_cast(target: Control, col: Color) -> void:
+	var glow := SlashArc.new()
+	glow.color = col
+	glow.position = target.position + target.size / 2.0
+	glow.size = Vector2(target.size.x * 1.4, target.size.y * 1.4)
+	glow.z_index = 14
+	battle_box.add_child(glow)
+	var tw := glow.create_tween()
+	tw.tween_property(glow, "scale", Vector2(1.3, 1.3), 0.25)
+	tw.tween_property(glow, "modulate:a", 0.0, 0.2)
+	tw.chain().tween_callback(glow.queue_free)
 
 
 func _enemy_strike(style: String) -> void:
@@ -930,8 +968,9 @@ func _relayout() -> void:
 	slots_box.position = Vector2(36.0, 84.0)
 	slots_box.size = Vector2(minf(340.0, w * 0.3), 160.0)
 	# 战场: 玩家左下 / 怪物右上
-	_player_home = Vector2(w * 0.13, h * 0.46)
-	_enemy_home = Vector2(w * 0.62, h * 0.24)
+	var fighter_y := h * 0.42
+	_player_home = Vector2(w * 0.12, fighter_y)
+	_enemy_home = Vector2(w * 0.62, fighter_y)
 	avatar.position = _player_home
 	monster.position = _enemy_home
 	_layout_bars(w, h)
@@ -941,7 +980,7 @@ func _relayout() -> void:
 	act_row.position = Vector2(w * 0.32, h - 92.0)
 	act_row.custom_minimum_size = Vector2(w * 0.42, 60)
 	# 抽牌面板: 底部居中
-	draft_panel.position = Vector2(w / 2.0 - 320.0, h - 236.0)
+	draft_panel.position = Vector2(w / 2.0 - 330.0, h * 0.38)
 	draft_panel.custom_minimum_size = Vector2(640, 0)
 	draft_panel.size = Vector2(640, 220)
 

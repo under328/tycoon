@@ -43,24 +43,24 @@ const SPECIALS := [
 		"desc": "每回合开始回复 5% 生命"},
 ]
 ## 候选抽到特殊牌的概率(普通牌用尽时回落普通)
-const SPECIAL_RATE := 0.25
+const SPECIAL_RATE := 0.12
 
 ## ── 回合计划: 5 回合固定日程(数值 ±12% 随机) ──
 const ROUND_PLAN := [
-	{"kind": "mob", "hp": 40, "atk": 10},
-	{"kind": "mob", "hp": 80, "atk": 16},
-	{"kind": "elite", "hp": 150, "atk": 22},
-	{"kind": "mob", "hp": 230, "atk": 30},
-	{"kind": "boss", "hp": 430, "atk": 40},
+	{"kind": "mob", "hp": 55, "atk": 11},
+	{"kind": "mob", "hp": 95, "atk": 16},
+	{"kind": "elite", "hp": 165, "atk": 21},
+	{"kind": "mob", "hp": 250, "atk": 28},
+	{"kind": "boss", "hp": 480, "atk": 38},
 ]
 const ROUNDS := 5
 ## 无尽层日程(6 回合起): [怪/精英/怪/精英/BOSS] 循环, 每轮 ×1.35
 const ENDLESS_PLAN := [
-	{"kind": "mob", "hp": 60, "atk": 12},
-	{"kind": "elite", "hp": 130, "atk": 18},
-	{"kind": "mob", "hp": 115, "atk": 16},
-	{"kind": "elite", "hp": 205, "atk": 22},
-	{"kind": "boss", "hp": 380, "atk": 34},
+	{"kind": "mob", "hp": 80, "atk": 14},
+	{"kind": "elite", "hp": 170, "atk": 20},
+	{"kind": "mob", "hp": 150, "atk": 18},
+	{"kind": "elite", "hp": 250, "atk": 25},
+	{"kind": "boss", "hp": 450, "atk": 36},
 ]
 
 ## 怪物主题组(引擎只存组号与名字, 形象由 UI 按组号+类别绘制;
@@ -304,7 +304,7 @@ func _start_battle() -> void:
 		# 无尽层: 5 回合循环 [怪/精英/怪/精英/BOSS], 每轮 ×1.35
 		var idx := (round_num - 1) % ROUNDS
 		var cycle := int((round_num - 1) / ROUNDS)
-		var scale := pow(1.35, cycle)
+		var scale := pow(1.45, cycle)
 		var base: Dictionary = ENDLESS_PLAN[idx]
 		plan = {"kind": str(base["kind"]),
 			"hp": int(int(base["hp"]) * scale),
@@ -382,7 +382,7 @@ func step(action: String) -> Array:
 			var dmg := int(float(stats["atk"]) * rng.randf_range(0.9, 1.1))
 			if crit:
 				dmg = int(dmg * float(stats["crit_dmg"]))
-			dmg = int(dmg * (1.0 + 0.06 * mini(maxi(hits - 1, 0), 10)))   # 连击伤害加成
+			dmg = int(dmg * (1.0 + 0.04 * mini(maxi(hits - 1, 0), 10)))   # 连击伤害加成
 			dmg = maxi(dmg - 2, 1)
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			fury = mini(fury + 12, 100)
@@ -643,7 +643,7 @@ static func derive_stats(cards: Array, combo: Dictionary) -> Dictionary:
 	var atk := 15 + spade * 6
 	var def := 5 + dia * 3
 	var mres := 3 + dia * 2
-	var skill := club * 10
+	var skill := club * 6
 	var max_hp := 100 + heart * 12
 	match tier:
 		"straight_flush":
