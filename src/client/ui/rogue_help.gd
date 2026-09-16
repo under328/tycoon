@@ -13,7 +13,8 @@ const PAGES := [
 	["肉鸽模式 · 玩法",
 		"规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n"
 		+ "区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。\n"
-		+ "命运卡来自固定图鉴(共 10 种, 见后几页), 抽到哪张全凭运气——随机性与可玩性由此而来。", 0],
+		+ "命运卡来自固定图鉴(共 [color=#ffd166]11 种[/color], 见后几页), 抽到哪张全凭运气——随机性与可玩性由此而来。
+每张命运卡还有 [color=#b070e0]稀有度[/color]: 普通(白) < 史诗(紫) < 传说(金), 越稀有越强!", 0],
 	["命运卡图鉴 · 发牌与规则", "发牌类与规则类命运卡:", 1],
 	["命运卡图鉴 · 触发与结算", "触发类与结算类命运卡:", 2],
 	["命运卡图鉴 · 我的进度", "本机记录每张命运卡的出现与选用次数:", 3],
@@ -252,11 +253,11 @@ func _build_fig(kind: int) -> void:
 			_line(Vector2(460, 187), Vector2(600, 187))
 			_line(Vector2(320, 104), Vector2(320, 187))   # 左列下行
 			_line(Vector2(740, 187), Vector2(740, 104))   # 右列回环
-			_text("每局必定抽一张; 6 种命运卡见后两页", Vector2(240, 250),
+			_text("每局必定抽一张; 11 种命运卡见后几页", Vector2(240, 250),
 					AppTheme.GOLD, 16)
 		1:
 			# 发牌类×3(上排) + 规则类×3(下排)
-			var ids1 := ["joker_x2", "short_hands", "joker_ban",
+			var ids1 := ["joker_x2", "short_hands", "joker_ban", "blitz",
 					"revolution_start", "chaos_exchange", "no_exchange"]
 			for i in ids1.size():
 				var m1: Dictionary = _mod(str(ids1[i]))
@@ -281,8 +282,16 @@ func _build_fig(kind: int) -> void:
 				var col := i % 2
 				var row := i / 2
 				var lb := _label(15, AppTheme.WHITE if seen > 0 else AppTheme.DIM)
-				lb.text = "%s %s — 出现 %d · 选用 %d" % [str(m3.get("glyph", "?")),
-						str(m3.get("name", "")), seen, taken]
+				var rar_tag: String = str({"legend": "★", "epic": "◆", "common": ""}.get(
+						str(m3.get("rar", "common")), ""))
+				var rar_col: Color = {"legend": Color("ffd166"),
+						"epic": Color("b070e0"), "common": AppTheme.WHITE}.get(
+						str(m3.get("rar", "common")), AppTheme.WHITE)
+				lb.text = "%s%s %s — 出现 %d · 选用 %d" % [rar_tag,
+						str(m3.get("glyph", "?")), str(m3.get("name", "")),
+						seen, taken]
+				lb.add_theme_color_override("font_color",
+						rar_col if seen > 0 else AppTheme.DIM)
 				lb.position = Vector2(60 + col * 480, 20 + row * 52)
 				_fig.add_child(lb)
 			var done := 0

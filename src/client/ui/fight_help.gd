@@ -1,4 +1,5 @@
-## 格斗试炼说明: 翻页式图文(花色与属性 / 牌型协同 / 回合流程 / 战斗操作)。
+## 格斗试炼说明: 翻页式图文(花色与属性 / 牌型协同 / 回合流程 / 战斗操作 /
+## 连击与奥义 / 稀有卡与无尽)。
 ## 与 rogue_help/lobby_help 同一工艺: 图示区用面板/连线拼出说明卡。
 extends Control
 
@@ -12,7 +13,9 @@ const PAGES := [
 	["花色与属性", "你的扑克就是你的装备, 数值越大属性越强:", 0],
 	["牌型协同", "组合自动触发套装加成(越大越强), 不满 5 张也可判型:", 1],
 	["回合流程", "共 5 回合: 每回合先『二选一』抽 1 张牌, 再战斗:", 2],
-	["战斗与奇物", "回合制三选操作; 特殊牌不占槽, 抽到立即生效:", 3],
+	["战斗操作", "回合制三选操作; 怪物意图公示, 见招拆招:", 3],
+	["连击与奥义", "连击加成 + 怒气大招 + 完美格挡, 三重爽点:", 4],
+	["稀有卡与无尽", "金框稀有卡 + 通关后无尽挑战:", 5],
 ]
 
 var page := 0
@@ -29,10 +32,13 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	size = get_parent_area_size()  # 代码 new 挂 Control 父下锚点不自动求值
 
-	var bg := ColorRect.new()
-	bg.color = AppTheme.BG
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	# 不透明全屏页: 从模式选择弹窗打开, 不应透出主菜单背景
+	var dim := ColorRect.new()
+	dim.color = AppTheme.BG
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+
 
 	_title = _label(32, AppTheme.GOLD)
 	_title.position = Vector2(0, 46)
@@ -165,16 +171,16 @@ func _combo_row(pos: Vector2, tier: String) -> void:
 	_text("%s — %s" % [meta["name"], meta["desc"]], pos, AppTheme.WHITE, 15)
 
 
-func _text(text: String, pos: Vector2, color: Color, fsize: int) -> void:
+func _text(text: String, pos: Vector2, color := AppTheme.DIM, fsize := 15) -> void:
 	var lb := _label(fsize, color)
 	lb.text = text
 	lb.position = pos
 	_fig.add_child(lb)
 
 
-func _label(size_num: int, color: Color) -> Label:
+func _label(size: int, color: Color) -> Label:
 	var lb := Label.new()
-	lb.add_theme_font_size_override("font_size", size_num)
+	lb.add_theme_font_size_override("font_size", size)
 	lb.add_theme_color_override("font_color", color)
 	return lb
 
@@ -215,13 +221,38 @@ func _build_fig(kind: int) -> void:
 						AppTheme.GOLD, 17)
 				_text(str(steps[i][1]), Vector2(400, 16 + i * 52),
 						AppTheme.WHITE, 15)
-		3:  # 战斗操作与奇物
+		3:  # 战斗操作
 			var rows := [
 				["⚔ 攻击", "物理伤害, 可暴击(♠ 越多越频繁/越痛)"],
 				["✨ 技能", "♣ 法术伤害, 冷却 2 回合; ♣ 张数定流派: 火球/冰霜/圣光"],
 				["🛡 防御", "本回合减伤 60% 并回血 — 盯紧怪物意图再决定!"],
-				["8 种奇物", "紫色特殊牌: 不占装备槽, 抽到立即生效并补抽普通牌"],
-				["奖励", "胜层越多钻石越多; 复活币可原地复活一次"],
+				["意图公示", "怪物头顶公示下一手: ⚔攻击 / 💥重击 / 🔥法术 / ⚡蓄力"],
+				["⚡ 蓄力", "精英/BOSS 蓄力时不攻击且承伤+50% — 全力输出的机会!"],
+			]
+			for i in rows.size():
+				_text("%s" % rows[i][0], Vector2(160, 16 + i * 52),
+						AppTheme.GOLD, 17)
+				_text(str(rows[i][1]), Vector2(400, 16 + i * 52),
+						AppTheme.WHITE, 15)
+		4:  # 连击与奥义
+			var rows := [
+				["连击", "连续进攻(攻击/技能)不断被击中 → 每层 +6% 伤害(封顶 60%)"],
+				["连击清零", "防御打断连击; 被击中不清零(但蓄力回合被击中清零)"],
+				["⚡ 怒气", "攻/受/击破积攒; 满 100 释放奥义: 2.5 倍攻击 + 回血 20%"],
+				["完美格挡", "预读重击时防御 → 零伤害 + 全额反击 + 怒气 25!"],
+				["里程碑", "连击 5 层下击必暴 / 8 层怒气 +30"],
+			]
+			for i in rows.size():
+				_text("%s" % rows[i][0], Vector2(160, 16 + i * 52),
+						AppTheme.GOLD, 17)
+				_text(str(rows[i][1]), Vector2(400, 16 + i * 52),
+						AppTheme.WHITE, 15)
+		5:  # 稀有卡与无尽
+			var rows := [
+				["金框稀有卡", "候选 12% 出现, 装备后生命上限永久 +8% + 奖励怒气"],
+				["无尽模式", "R5 通关后可继续挑战, 怪物每轮 ×1.35 变强"],
+				["奖励", "层数越高钻石越多; 复活币可原地复活一次"],
+				["评级", "每回合按受伤量评 S/A/B; S 级奖励额外怒气"],
 			]
 			for i in rows.size():
 				_text("%s" % rows[i][0], Vector2(160, 16 + i * 52),
