@@ -509,7 +509,7 @@ func _on_candidate(cand: int) -> void:
 		return
 	Audio.play("click")
 	# 槽满 + 普通牌(引擎要求槽位) → 进入替换模式
-	if cand < 100 and fm.slots.size() >= 5:
+	if not FightModeGd.is_sp(cand) and fm.slots.size() >= 5:   # 普通/稀有均走替换
 		_pending_cand = cand
 		_render()
 		return
@@ -672,7 +672,9 @@ func _show_round_banner() -> void:
 		_banner.queue_free()
 	_banner = _label(30, AppTheme.GOLD)
 	if fm.phase == "round_end":
-		_banner.text = "第 %d 回合 胜利!" % fm.round_num
+		_banner.text = tr("第 %d 回合 胜利!") % fm.round_num
+		if fm.last_rank != "":
+			_banner.text += tr("  评级 %s") % fm.last_rank
 	else:
 		_banner.text = ""
 	_banner.position = Vector2(_px(0.5) - 120.0, _py(0.30))
@@ -684,7 +686,10 @@ func _show_round_banner() -> void:
 		if _banner != null and is_instance_valid(_banner):
 			_banner.queue_free()
 		_banner = null
-		fm.advance_round()
+		if fm.run_won and fm.round_num == fm.ROUNDS:
+			_show_endless_choice()   # R5 通关: 无尽选择
+		else:
+			fm.advance_round()
 		_busy = false
 		_render())
 
@@ -780,11 +785,63 @@ func _floater(text: String, x: float, y: float, col: Color) -> void:
 
 
 ## ── 结算 ──
+func _show_endless_choice() -> void:
+	_busy = true
+	_close_overlay()
+	var overlay := CenterContainer.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 44
+	sb.content_margin_right = 44
+	sb.content_margin_top = 28
+	sb.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", sb)
+	overlay.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var t := AppTheme.make_label(28, AppTheme.GOLD)
+	t.text = tr("试炼通关!")
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var b := AppTheme.make_label(15, AppTheme.WHITE)
+	b.text = tr("深入无尽挑战, 怪物每轮更强, 奖励随层数增长")
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(b)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	box.add_child(row)
+	var go := AppTheme.make_button(tr("继续无尽挑战"), Vector2(200, 50), 17)
+	go.pressed.connect(func() -> void:
+		Audio.play("win")
+		_close_overlay()
+		fm.advance_round()
+		_busy = false
+		_render())
+	row.add_child(go)
+	var take := AppTheme.make_button(tr("领奖结算"), Vector2(170, 50), 17)
+	take.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_overlay()
+		_finish_run())
+	row.add_child(take)
+	add_child(overlay)
+	overlay.position = Vector2.ZERO
+	overlay.size = size
+
+
 func _finish_run() -> void:
 	if phase == "over":
 		return
 	phase = "over"
-	var cleared := fm.round_num - 1 if not fm.run_won else fm.round_num
+	var cleared: int = fm.cleared
 	var r: Dictionary = Wallet.grant_fight_reward(cleared,
 			1 if fm.run_won else 0)   # 通关即击破 1 个 BOSS
 	_run_diamonds += int(r["diamonds"])

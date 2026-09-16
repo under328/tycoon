@@ -19,6 +19,8 @@ const ROGUE_MODS := [
 		"desc": "本局牌堆多 2 张王(共 4 张), 压制与反转更疯狂"},
 	{"id": "revolution_start", "name": "天生革命", "glyph": "革", "cat": "规则", "rar": "epic",
 		"desc": "本局从开局起就处于革命状态, 大小颠倒"},
+	{"id": "blitz", "name": "疾风迅雷", "glyph": "雷", "cat": "发牌", "rar": "epic",
+		"desc": "本局每人只发 8 张牌, 风驰电掣"},
 	{"id": "short_hands", "name": "缩地成寸", "glyph": "缩", "cat": "发牌", "rar": "common",
 		"desc": "本局每人只发 10 张牌, 节奏更快"},
 	{"id": "chaos_exchange", "name": "混沌换牌", "glyph": "混", "cat": "规则", "rar": "epic",
@@ -484,7 +486,7 @@ static func _deal_round(st: Dictionary, round_idx: int) -> void:
 		deck.append(54)  # 扩展王: is_joker 以 id>=52 判定, 无需特判
 		deck.append(55)
 	CardsGd.shuffle(deck, rng)
-	var hand_n := HAND_SIZE - (3 if mod == "short_hands" else 0)
+	var hand_n := HAND_SIZE - (3 if mod == "short_hands" else 0) - (5 if mod == "blitz" else 0)
 	var hands := [[], [], [], []]
 	for seat in SEATS:
 		var hand: Array = hands[seat]

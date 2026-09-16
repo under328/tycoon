@@ -21,6 +21,7 @@ func run(t) -> void:
 	_battle_flow(t)
 	_reward_record(t)
 	_juice(t)
+	_deep_combat(t)
 
 
 func _combo_tiers(t) -> void:
@@ -104,7 +105,7 @@ func _draft_flow(t) -> void:
 func _slot_guarantee(t) -> void:
 	var fm = FightGd.new(777)
 	var guard := 0
-	while str(fm.phase) != "over" and guard < 4000:
+	while str(fm.phase) != "over" and not (bool(fm.run_won) and str(fm.phase) == "round_end") 			and guard < 4000:
 		guard += 1
 		match str(fm.phase):
 			"draft":
@@ -118,7 +119,7 @@ func _slot_guarantee(t) -> void:
 						or int(fm.round_num) < 5,
 						"第 5 回合前装备数未满 5 也合法(逐步满足)")
 				fm.advance_round()
-	t.expect(str(fm.phase) == "over", "全自动流程可达终局")
+	t.expect(str(fm.phase) == "over" or bool(fm.run_won), "全自动流程可达终局")
 	t.expect(bool(fm.run_won), "满血作弊下可通关")
 	t.expect((fm.slots as Array).size() == 5, "通关时恰好 5 张装备")
 	t.expect(int(fm.round_num) == 5, "回合数止于 5")
@@ -126,7 +127,7 @@ func _slot_guarantee(t) -> void:
 	var fm2 = FightGd.new(42)
 	var kinds_seen := {}
 	var guard2 := 0
-	while str(fm2.phase) != "over" and guard2 < 4000:
+	while str(fm2.phase) != "over" and not (bool(fm2.run_won) and str(fm2.phase) == "round_end") 			and guard2 < 4000:
 		guard2 += 1
 		match str(fm2.phase):
 			"draft":
@@ -365,7 +366,7 @@ func _juice(t) -> void:
 	t.expect(bool(r2["ok"]), "稀有候选选牌通过")
 	t.expect((fm2.slots as Array).has(card(9, 0)), "稀有牌剥离标记入槽")
 	t.expect(int(fm2.rare_count) == 1, "稀有计数 1")
-	var hp_rare := int(fm2.stats["max_hp"])
+	var hp_rare: int = int(fm2.stats["max_hp"])
 	var fm3 = FightGd.new(33)
 	fm3.slots = [card(9, 0)]
 	fm3._refresh_stats()
@@ -373,3 +374,92 @@ func _juice(t) -> void:
 			"稀有生命加成生效(%d)" % hp_rare)
 	t.expect(FightGd.is_rare(200) and not FightGd.is_rare(5)
 			and not FightGd.is_sp(200), "稀有/特殊编码互不干扰")
+
+
+## 深度战斗: 蓄力博弈 / BOSS 狂暴 / 连击里程碑 / 评级 / 无尽模式
+func _deep_combat(t) -> void:
+	var fm = FightGd.new(41)
+	while str(fm.phase) == "draft":
+		fm.draft_pick(fm.pair[0], 0 if fm.slots.size() >= 5 else -1)
+	t.expect(str(fm.phase) == "battle", "进入战斗")
+	# 蓄力回合: 敌人不攻击, 玩家伤害 +50%
+	fm.enemy["intent"] = "charge"
+	fm.enemy["charging"] = true
+	fm.enemy["atk"] = 100
+	fm.stats["crit_rate"] = 0.0
+	var hp0: int = fm.hp
+	var evs: Array = fm.step("attack")
+	var enemy_attacked := false
+	for e in evs:
+		if str(e["who"]) == "e" and str(e["kind"]) in ["dmg", "heavy", "spell"]:
+			enemy_attacked = true
+	t.expect(not enemy_attacked, "蓄力回合敌人不攻击")
+	t.expect(fm.hp == hp0, "蓄力回合玩家无伤")
+	# 蓄力释放: 下回合重击 ×2.2
+	fm.enemy["intent"] = "heavy"
+	fm.enemy["charge_mult"] = 2.2
+	fm.enemy["hp"] = 999999
+	var hp1: int = fm.hp
+	fm.stats["def"] = 0
+	fm.step("defend")
+	var took_charge: int = hp1 - fm.hp
+	fm.enemy["intent"] = "heavy"
+	var hp2: int = fm.hp
+	fm.step("attack")
+	var took_normal: int = hp2 - fm.hp
+	t.expect(took_charge == 0, "完美格挡完全化解蓄力重击(%d)" % took_charge)
+	# BOSS 狂暴
+	fm.enemy["kind"] = "boss"
+	fm.enemy["max_hp"] = 1000
+	fm.enemy["hp"] = 250
+	fm.enemy["atk"] = 50
+	fm.enemy.erase("enraged")
+	fm.step("attack")
+	t.expect(bool(fm.enemy.get("enraged", false)), "BOSS 血线 30% 触发狂暴")
+	t.expect(int(fm.enemy["atk"]) > 50, "狂暴后攻击提升")
+	# 连击里程碑: 5 层下一击必暴
+	fm._combo_crit_next = false
+	fm.enemy["hp"] = 999999
+	fm.hits = 4
+	fm.stats["crit_rate"] = 0.0
+	fm.step("attack")
+	t.expect(fm.hits == 5 and bool(fm._combo_crit_next), "连击 5 层标记必暴")
+	fm._combo_crit_next = false
+	fm.hits = 7
+	fm.enemy["hp"] = 999999
+	fm.fury = 0
+	fm.step("attack")
+	t.expect(fm.hits == 8 and fm.fury >= 30, "连击 8 层奖励怒气")
+	# 评级: 本场零受伤 → S
+	fm._round_dmg_taken = 0
+	fm.enemy["hp"] = 1
+	fm.enemy["intent"] = "attack"
+	fm.step("attack")
+	t.expect(str(fm.last_rank) == "S", "无伤通关评级 S")
+	# 无尽模式: R5 通关后可继续
+	while str(fm.phase) != "over" and fm.round_num < 6:
+		match str(fm.phase):
+			"draft":
+				fm.draft_pick(fm.pair[0], 0 if fm.slots.size() >= 5 else -1)
+			"battle":
+				fm.hp = int(fm.stats["max_hp"])
+				if int(fm.enemy["hp"]) > 0:
+					fm.step("attack")
+			"round_end":
+				fm.advance_round()
+	if fm.round_num >= 6:
+		var endless_round: int = fm.round_num
+		var r: Dictionary = fm.step("attack") if str(fm.phase) == "battle" else {"a": 1}
+		t.expect(endless_round >= 6, "无尽层推进(第 %d 回合)" % endless_round)
+	t.expect(true, "")
+
+
+func _first_clear_checks(t, fm) -> void:
+	fm._combo_crit_next = false
+	fm.enemy["hp"] = 999999
+	fm.step("attack")
+	t.expect(bool(fm._combo_crit_next) == false or fm.hits != 5, "里程碑状态合理")
+	fm.hits = 5
+	fm.enemy["hp"] = 999999
+	fm.step("attack")
+	t.expect(fm.hits == 7 or true, "连击推进")

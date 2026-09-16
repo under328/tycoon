@@ -246,6 +246,45 @@ T_TPL = {
         "en": "VICTORY", "zh_TW": "勝利", "ja": "勝利", "ko": "승리"},
     "敗北": {
         "en": "DEFEAT", "zh_TW": "敗北", "ja": "敗北", "ko": "패배"},
+    "⚡ 蓄力中 — 全力输出(承伤 +50%)!": {
+        "en": "⚡ Charging — burst it down (+50% dmg taken)!",
+        "zh_TW": "⚡ 蓄力中 — 全力輸出(承傷 +50%)!",
+        "ja": "⚡チャージ中 — 全力攻撃(被ダメ +50%)!",
+        "ko": "⚡ 차지 중 — 집중 공격(피해 +50%)!"},
+    "⚡ 敌人蓄力中…": {
+        "en": "⚡ Enemy charging…", "zh_TW": "⚡ 敵人蓄力中…",
+        "ja": "⚡敵チャージ中…", "ko": "⚡적 차지 중…"},
+    "BOSS 狂暴!": {
+        "en": "BOSS ENRAGED!", "zh_TW": "BOSS 狂暴!",
+        "ja": "BOSS 狂暴化!", "ko": "BOSS 광폭화!"},
+    "狂暴! 攻击大幅提升!": {
+        "en": "Enraged! ATK greatly up!", "zh_TW": "狂暴! 攻擊大幅提升!",
+        "ja": "狂暴! 攻撃大幅アップ!", "ko": "광폭! 공격 대폭 상승!"},
+    "连击里程碑!": {
+        "en": "Combo milestone!", "zh_TW": "連擊里程碑!",
+        "ja": "コンボマイルストーン!", "ko": "콤보 마일스톤!"},
+    "BOSS 击破! 可继续无尽挑战!": {
+        "en": "BOSS down! Endless challenge unlocked!",
+        "zh_TW": "BOSS 擊破! 可繼續無盡挑戰!",
+        "ja": "BOSS 撃破! エンドレス挑戦へ!", "ko": "BOSS 격파! 엔드레스 도전 가능!"},
+    "深入无尽挑战, 怪物每轮更强, 奖励随层数增长": {
+        "en": "Deeper endless — stronger monsters, richer rewards",
+        "zh_TW": "深入無盡挑戰, 怪物每輪更強, 獎勵隨層數增長",
+        "ja": "エンドレスへ — 強くなる敵, 増える報酬",
+        "ko": "엔드레스 도전 — 더 강한 몬스터, 더 큰 보상"},
+    "继续无尽挑战": {
+        "en": "Endless Challenge", "zh_TW": "繼續無盡挑戰",
+        "ja": "エンドレスへ", "ko": "엔드레스 도전"},
+    "领奖结算": {
+        "en": "Claim & Finish", "zh_TW": "領獎結算",
+        "ja": "報酬を受け取る", "ko": "보상 받기"},
+    "  评级 %s": {
+        "en": "  Rank %s", "zh_TW": "  評級 %s",
+        "ja": "  ランク %s", "ko": "  등급 %s"},
+    "稀有卡! 生命上限永久 +8%": {
+        "en": "Rare card! Max HP permanently +8%",
+        "zh_TW": "稀有卡! 生命上限永久 +8%",
+        "ja": "レア! 最大 HP 永久 +8%", "ko": "레어! 최대 HP 영구 +8%"},
     "切换后全界面即时生效": {
         "en": "Applies to the whole UI instantly", "zh_TW": "切換後全介面即時生效",
         "ja": "切り替え後すぐに全 UI に反映", "ko": "전환 후 전체 UI에 즉시 적용"},

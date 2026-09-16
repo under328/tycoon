@@ -14,7 +14,8 @@ const AUTOSAVE_SEC := 10.0
 ## 本地对局奖励(按最终名次 1..4): [金币, 钻石]
 const GOLD_PER_POINT := 2        # 1 积分 = 2 金币(再乘输赢倍率)
 
-const FIRST_WIN_DIAMONDS := 3   # 每日首胜奖励钻石数
+const FIRST_WIN_DIAMONDS := 3
+const CODEX_TARGET := 11   # 命运卡图鉴全收集目标   # 每日首胜奖励钻石数
 const HISTORY_MAX := 20         # 对局记录保留条数
 
 ## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
@@ -626,7 +627,7 @@ func _ach_met(id: String, s: Dictionary) -> bool:
 		"daily_3": return int(s.get("daily_days", 0)) >= 3
 		"rogue_win_1": return int(s.get("rogue_wins", 0)) >= 1
 		"rogue_win_10": return int(s.get("rogue_wins", 0)) >= 10
-		"codex_all": return int(s.get("codex_seen", 0)) >= 10
+		"codex_all": return int(s.get("codex_seen", 0)) >= CODEX_TARGET
 		"pvp_win_1": return int(s.get("pvp_wins", 0)) >= 1
 	return false
 

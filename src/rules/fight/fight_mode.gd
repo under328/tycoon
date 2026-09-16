@@ -54,6 +54,15 @@ const ROUND_PLAN := [
 	{"kind": "boss", "hp": 430, "atk": 40},
 ]
 const ROUNDS := 5
+## 无尽层日程(6 回合起): [怪/精英/怪/精英/BOSS] 循环, 每轮 ×1.35
+const ENDLESS_PLAN := [
+	{"kind": "mob", "hp": 60, "atk": 12},
+	{"kind": "elite", "hp": 130, "atk": 18},
+	{"kind": "mob", "hp": 115, "atk": 16},
+	{"kind": "elite", "hp": 205, "atk": 22},
+	{"kind": "boss", "hp": 380, "atk": 34},
+]
+
 ## 怪物主题组(引擎只存组号与名字, 形象由 UI 按组号+类别绘制;
 ## 同组两只小怪为同族换色变体)
 const GROUPS := [
@@ -81,7 +90,11 @@ var locked := -1           # 锁环保留的候选(下回合重新出现)
 var comp := false          # 当前候选组是否为补抽(普通限定)
 
 var hp := 0
-var hits := 0              # 连击数(连续进攻不被打断; 被击中清零)
+var hits := 0              # 连击数(连续进攻; 防御清零)
+var cleared := 0          # 已通关回合数(奖励/最佳依据)
+var last_rank := ""        # 上回合评级 S/A/B
+var _combo_crit_next := false   # 连击 5 层里程碑: 下一击必暴
+var _round_dmg_taken := 0       # 本场战斗受到的伤害(评级用)
 var fury := 0              # 怒气 0-100(满则可释放奥义大招)
 var rare_count := 0        # 已装备稀有卡数(每张 +8% 生命上限)
 var stats := {}            # 派生属性(含特殊牌修正)
@@ -282,7 +295,20 @@ func _start_battle() -> void:
 	_battle_round = 0
 	_first_used = false
 	hits = 0
-	var plan: Dictionary = ROUND_PLAN[clampi(round_num - 1, 0, ROUNDS - 1)]
+	_round_dmg_taken = 0
+	last_rank = ""
+	var plan: Dictionary
+	if round_num <= ROUNDS:
+		plan = ROUND_PLAN[clampi(round_num - 1, 0, ROUNDS - 1)]
+	else:
+		# 无尽层: 5 回合循环 [怪/精英/怪/精英/BOSS], 每轮 ×1.35
+		var idx := (round_num - 1) % ROUNDS
+		var cycle := int((round_num - 1) / ROUNDS)
+		var scale := pow(1.35, cycle)
+		var base: Dictionary = ENDLESS_PLAN[idx]
+		plan = {"kind": str(base["kind"]),
+			"hp": int(int(base["hp"]) * scale),
+			"atk": int(int(base["atk"]) * scale)}
 	var kind := str(plan["kind"])
 	var v := rng.randf_range(0.88, 1.12)
 	var e_hp := int(int(plan["hp"]) * v)
@@ -347,6 +373,9 @@ func step(action: String) -> Array:
 		"attack":
 			hits = mini(hits + 1, 11)
 			var crit: bool = rng.randf() < float(stats["crit_rate"])
+			if _combo_crit_next:
+				crit = true   # 连击 5 层里程碑: 本击必暴
+				_combo_crit_next = false
 			if bool(stats.get("first", false)) and not _first_used:
 				crit = true
 				_first_used = true
@@ -358,6 +387,12 @@ func step(action: String) -> Array:
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			fury = mini(fury + 12, 100)
 			evs.append({"who": "p", "kind": "crit" if crit else "dmg", "v": dmg})
+			if hits == 5:
+				_combo_crit_next = true   # 里程碑: 下一击必暴
+				evs.append({"who": "p", "kind": "milestone", "v": 5})
+			if hits == 8:
+				fury = mini(fury + 30, 100)
+				evs.append({"who": "p", "kind": "milestone", "v": 8})
 			if hits >= 2:
 				evs.append({"who": "p", "kind": "combo", "v": hits})
 			_vamp_heal(evs, dmg)
@@ -404,11 +439,23 @@ func step(action: String) -> Array:
 		enemy["hp"] = int(enemy["hp"]) - dmg2
 		evs.append({"who": "p", "kind": "dmg", "v": dmg2})
 		_vamp_heal(evs, dmg2)
+	# BOSS 狂暴: 血量跌破 30% 一次性触发, 攻击 +40%
+	if str(enemy.get("kind", "")) == "boss" and not bool(enemy.get("enraged", false)) \
+			and int(enemy["hp"]) > 0 \
+			and int(enemy["hp"]) <= int(int(enemy["max_hp"]) * 0.3):
+		enemy["enraged"] = true
+		enemy["atk"] = int(int(enemy["atk"]) * 1.4)
+		evs.append({"who": "e", "kind": "enrage", "v": 0})
+		_log(tr("狂暴! 攻击大幅提升!"))
 	# 怪物亡 → 回合胜利
 	if int(enemy["hp"]) <= 0:
 		enemy["hp"] = 0
 		evs.append({"who": "e", "kind": "die", "v": 0})
 		_win_round()
+		return evs
+	# 蓄力回合: 敌人不攻击且承伤 +50%, 下回合释放强化重击
+	if str(enemy.get("intent", "attack")) == "charge":
+		evs.append({"who": "e", "kind": "charging", "v": 0})
 		return evs
 	# 怪物按意图行动
 	var intent := str(enemy.get("intent", "attack"))
@@ -438,6 +485,7 @@ func step(action: String) -> Array:
 		edmg = maxi(int(edmg * 0.8), 1)
 		enemy["chilled"] = false
 	edmg = maxi(edmg, 1)
+	_round_dmg_taken += edmg
 	_damage_player(edmg)
 	fury = mini(fury + 8, 100)
 	evs.append({"who": "e", "kind": "spell" if spell else ("heavy" if heavy else "dmg"),
@@ -477,13 +525,22 @@ func _vamp_heal(evs: Array, dmg: int) -> void:
 ## 本回合胜利: 回 25% 生命, 下一回合(或通关)
 func _win_round() -> void:
 	phase = "round_end"
+	cleared += 1
 	fury = mini(fury + 30, 100)
 	var heal := int(int(stats["max_hp"]) * 0.25)
 	hp = mini(hp + heal, int(stats["max_hp"]))
+	# 评级: 本场未受伤 = S, 受伤 ≤25% = A, 其余 B(评级奖励怒气)
+	if _round_dmg_taken == 0:
+		last_rank = "S"
+		fury = mini(fury + 20, 100)
+	elif _round_dmg_taken <= int(int(stats["max_hp"]) * 0.25):
+		last_rank = "A"
+		fury = mini(fury + 10, 100)
+	else:
+		last_rank = "B"
 	if round_num >= ROUNDS:
 		run_won = true
-		phase = "over"
-		_log(tr("BOSS 击破! 试炼通关!"))
+		_log(tr("BOSS 击破! 可继续无尽挑战!"))
 	else:
 		_log(tr("%s 被击破! 回复 %d 生命") % [str(enemy["name"]), heal])
 

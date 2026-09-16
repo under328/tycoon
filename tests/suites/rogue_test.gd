@@ -24,13 +24,13 @@ func run(t) -> void:
 const Cats = preload("res://src/rules/game_state.gd")
 
 func _catalog(t) -> void:
-	t.expect_eq(GameStateGd.ROGUE_MODS.size(), 10, "命运卡共 10 种")
+	t.expect_eq(GameStateGd.ROGUE_MODS.size(), 11, "命运卡共 11 种")
 	var ids := {}
 	for m in GameStateGd.ROGUE_MODS:
 		for k in ["id", "name", "desc", "glyph", "cat"]:
 			t.expect((m as Dictionary).has(k), "命运卡 %s 缺字段 %s" % [m.get("id"), k])
 		ids[str(m["id"])] = true
-	t.expect(ids.size() == 10, "命运卡 id 无重复")
+	t.expect(ids.size() == 11, "命运卡 id 无重复")
 	for cat in ["发牌", "规则", "触发", "结算"]:
 		t.expect(GameStateGd.ROGUE_MODS.any(func(m: Dictionary) -> bool:
 			return str(m["cat"]) == cat), "分类『%s』至少一张" % cat)
