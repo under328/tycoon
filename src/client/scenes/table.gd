@@ -79,7 +79,8 @@ var trick_lbl: Label = null     # 上轮回顾标签(出牌区空时显示)
 var counter_lbl: Label = null   # 记牌器 HUD(按点数显示未被出的牌数)
 var counter_toggle: Button = null
 var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
-var _counter_totals := {}       # 点数值 -> 总张数(王受命运卡影响)
+var _counter_totals := {}       # 点数值 -> 总张数(王受带王与命运卡影响)
+var _counter_round := -1        # 记牌器归属局号(跨局重置; 本地/联机统一驱动)
 var emoji_popup: PanelContainer = null  # 表情/快捷回复向上弹出面板
 var emoji_grid: GridContainer = null
 var phrase_grid: GridContainer = null
@@ -221,6 +222,7 @@ func _new_match() -> void:
 	_last_hand = []
 	_voice_fin = -1
 	_voice_last1 = {}
+	_counter_round = -1
 	# 本地: 我用已装备皮肤, AI 随机皮肤
 	var ids: Array = []
 	for s in SkinsLib.SKINS:
@@ -325,7 +327,6 @@ func _advance() -> void:
 			var r := GameStateGd.apply(state, {"t": "next_round"})
 			if bool(r["ok"]):
 				state = r["state"]
-				_counter_reset()
 				if rogue and str(state["phase"]) == "draft":
 					# 引擎进入 draft(还有下一局) → 弹命运二选一;
 					# 最后一局 next_round 返回 game_end → 走常规结算, 不抽牌
@@ -1036,7 +1037,7 @@ func _build_ui() -> void:
 		Audio.play("click")
 		GameSettings.card_counter = counter_toggle.button_pressed
 		GameSettings.save_settings()
-		_update_counter())
+		_update_counter(_current_view()))
 	add_child(counter_toggle)
 	# 记牌器 HUD(出牌区底部一行)
 	counter_lbl = _make_label(13, Color("9fd8e8"))
@@ -1497,6 +1498,11 @@ func _refresh_view(view: Dictionary) -> void:
 	avatar_me.skin_id = _skin_for(view, my)
 	_refresh_opp_hands(view)
 
+	# 记牌器跨局重置: 局号变化(本地/联机统一)即重建基数, 修掉跨局累计错数
+	var rnd := int(view.get("round", -1))
+	if rnd != _counter_round:
+		_counter_round = rnd
+		_counter_reset(view)
 	_refresh_field(view)
 	_refresh_hand(view)
 	_say_match_events(view)   # 出完称号 / 剩一张 提醒
@@ -1722,14 +1728,19 @@ func _round_end_text(view: Dictionary) -> String:
 	return "  ".join(parts)
 
 
-## 记牌器: 局初基数为各点数 4 张(命运卡『王者归来』王 4 张);
-## 扣除本局已打出的, 余数=所有未出牌(含各家手牌与死牌)
-func _counter_reset() -> void:
+## 记牌器: 显示「对手可能持有」的牌 —— 各点数总张数, 扣除 已打出 / 死牌 /
+## 我自己手牌。数字只反映别人手里还有什么, 自己的和永不出现的都不算。
+## 局初基数: 各点数 4 张; 王 = 带王 2 张(命运卡『王者归来』+2, 『无王之地』0)。
+func _counter_reset(view: Dictionary) -> void:
 	_counter_played.clear()
+	var rules: Dictionary = view.get("rules", {})
+	var with_joker := bool(rules.get("with_joker", true))
+	var mod := str(view.get("rogue_mod", ""))
 	for v in range(3, 16):
 		_counter_totals[v] = 4
-	_counter_totals[16] = 4 if _rogue_mod_id_safe() == "joker_x2" else 2
-	_update_counter()
+	_counter_totals[16] = (2 if with_joker and mod != "joker_ban" else 0) \
+			+ (2 if mod == "joker_x2" else 0)
+	_update_counter(view)
 
 
 func _rogue_mod_id_safe() -> String:
@@ -1738,18 +1749,34 @@ func _rogue_mod_id_safe() -> String:
 	return ""
 
 
-func _update_counter() -> void:
+func _update_counter(view: Dictionary) -> void:
 	if counter_lbl == null:
 		return
-	counter_lbl.visible = GameSettings.card_counter 			and str(state.get("phase", "")) in ["play", "exchange"]
+	var phase := str(view.get("phase", ""))
+	counter_lbl.visible = GameSettings.card_counter \
+			and (phase == "play" or phase == "exchange")
 	if not counter_lbl.visible:
 		return
+	# 我的手牌按点数统计(从计数中扣除)
+	var hand_cnt := {}
+	for c in view.get("hand", []):
+		var hv := CardsGd.value(int(c))
+		hand_cnt[hv] = int(hand_cnt.get(hv, 0)) + 1
+	# 死牌按点数(永不出现的牌不计入)
+	var dead: Array = view.get("dead_counts", [])
 	var parts: Array = []
 	for v in range(3, 16):
-		var left := int(_counter_totals.get(v, 4)) - int(_counter_played.get(v, 0))
-		parts.append("%s×%d" % [CardsGd.rank_label(v), left])
-	parts.append("王×%d" % (int(_counter_totals.get(16, 2)) - int(_counter_played.get(16, 0))))
-	counter_lbl.text = "  ".join(PackedStringArray(parts))
+		var dead_n := int(dead[v - 3]) if v - 3 < dead.size() else 0
+		var left := int(_counter_totals.get(v, 4)) - int(_counter_played.get(v, 0)) \
+				- int(hand_cnt.get(v, 0)) - dead_n
+		if left > 0:
+			parts.append("%s×%d" % [CardsGd.rank_value_label(v), left])
+	var jokers := int(_counter_totals.get(16, 0)) - int(_counter_played.get(16, 0)) \
+			- int(hand_cnt.get(16, 0))
+	if _counter_totals.get(16, 0) > 0 and jokers > 0:
+		parts.append("王×%d" % jokers)
+	counter_lbl.text = "  ".join(PackedStringArray(parts)) \
+			if not parts.is_empty() else "—"
 
 
 ## 上轮回顾: 清桌后空场阶段常显上一轮各手(信息不因清桌丢失)
@@ -1840,7 +1867,7 @@ func _refresh_field(view: Dictionary) -> void:
 		for c in entry["combo"]["cards"]:
 			var v := CardsGd.value(int(c))
 			_counter_played[v] = int(_counter_played.get(v, 0)) + 1
-		_update_counter()
+		_update_counter(view)
 		var labels: Array = []
 		for c in entry["combo"]["cards"]:
 			labels.append(CardsGd.label(int(c)))

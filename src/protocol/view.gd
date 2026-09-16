@@ -4,6 +4,7 @@ class_name View
 extends RefCounted
 
 const GameStateGd = preload("res://src/rules/game_state.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 
 
 static func build(st: Dictionary, seat: int) -> Dictionary:
@@ -13,6 +14,8 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"rounds_total": int(st["cfg"]["rounds"]),
 		"rules": st["cfg"].duplicate(),
 		"my_seat": seat,
+		# 死牌按点数聚合(只给数量不给具体牌): 记牌器剔除死牌用
+		"dead_counts": _dead_counts(st),
 		"hand": (st["hands"][seat] as Array).duplicate(),
 		"counts": [
 			(st["hands"][0] as Array).size(),
@@ -46,6 +49,18 @@ static func _rogue_rar(st: Dictionary) -> Array:
 			if str(m["id"]) == str(cid):
 				rar = str(m.get("rar", "common"))
 		out.append(rar)
+	return out
+
+
+## 死牌按点数聚合: 索引 = 点数-3 (3..15 各 4 张基准, 16=王)
+static func _dead_counts(st: Dictionary) -> Array:
+	var counts := {}
+	for c in st.get("dead", []):
+		var v := CardsGd.value(int(c))
+		counts[v] = int(counts.get(v, 0)) + 1
+	var out: Array = []
+	for v in range(3, 17):
+		out.append(int(counts.get(v, 0)))
 	return out
 
 

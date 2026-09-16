@@ -44,6 +44,25 @@ static func rank_label(card: int) -> String:
 			return str(v)
 
 
+## 点数值(3..16) → 显示名: 3..10 数字, 11=J, 12=Q, 13=K, 14=A, 15=2, 16=王
+## (rank_label 接收的是牌 id; 记牌器等按"点数"统计处须用本函数)
+static func rank_value_label(v: int) -> String:
+	match v:
+		11:
+			return "J"
+		12:
+			return "Q"
+		13:
+			return "K"
+		14:
+			return "A"
+		15:
+			return "2"
+		16:
+			return "王"
+	return str(v)
+
+
 static func label(card: int) -> String:
 	if is_joker(card):
 		return "小王" if card == 52 else "大王"

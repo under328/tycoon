@@ -19,6 +19,7 @@ func run(t) -> void:
 	_full_match_flow(t)
 	_exchange_details(t)
 	_view_privacy(t)
+	_counter_view(t)
 	_finish_no_free_lead(t)
 
 
@@ -387,6 +388,33 @@ func _exchange_details(t) -> void:
 	t.expect_eq(int(r3["state"]["turn"]), beggar, "乞丐先出")
 	t.expect_eq((r3["state"]["exchange"] as Array).size(), 4, "交换记录含 2 笔返还")
 	t.expect(not bool(r3["state"]["revolution"]), "新局革命重置")
+
+
+## 记牌器数据契约: 每点数 死牌计数 + 各家手牌张数 = 总张数(3..15 各 4,
+## 王 = 带王 2 / 无王 0)。记牌器用 视图死牌计数 剔除永不出现的牌。
+func _counter_view(t) -> void:
+	for cfg in [{}, {"with_joker": true}, {"with_joker": false}]:
+		var st := GameStateGd.new_match(cfg, 7)
+		var with_joker := bool(st["cfg"]["with_joker"])   # 读实际生效规则
+		var totals := {}
+		for v in range(3, 16):
+			totals[v] = 4
+		totals[16] = 2 if with_joker else 0
+		var v0 := ViewGd.build(st, 0)
+		var dead: Array = v0["dead_counts"]
+		var dead_sum := 0
+		for d in dead:
+			dead_sum += int(d)
+		t.expect_eq(dead_sum, (st["dead"] as Array).size(),
+				"死牌聚合计数 = 死牌总数")
+		for v in range(3, 17):
+			var in_hands := 0
+			for seat in 4:
+				for c in st["hands"][seat]:
+					if GameStateGd.CardsGd.value(int(c)) == v:
+						in_hands += 1
+			t.expect_eq(in_hands + int(dead[v - 3]), int(totals[v]),
+					"点数 %d 守恒: 手牌+死牌=总张数" % v)
 
 
 func _view_privacy(t) -> void:
