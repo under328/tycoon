@@ -286,7 +286,9 @@ func _teardown() -> void:
 		3:
 			main.menu._tutorial._close()
 		4:
-			_press_text(page_root, "返 回")
+			# 个人档案已改弹窗式: 右上 ✕ 关闭; 探索阶段可能已点掉, 面板已释放则跳过
+			if page_root != null and is_instance_valid(page_root):
+				_press_text(page_root, "✕")
 		5:
 			main.menu._close_mode_select()
 		6:

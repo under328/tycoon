@@ -238,12 +238,14 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					"rogue_help 下一页未居中右")
 			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0,
 					"rogue_help 关闭未锚右缘")
-		9:  # 个人档案(页签/返回/滚动区)
-			expect(s._scroll.size.x == w - 80.0, "profile 商品区宽度未随窗口")
-			expect(s._back_btn.position.x + s._back_btn.size.x <= w - 20.0,
-					"profile 返回按钮未锚右缘")
-			expect(s._tab_ach_btn.visible and s._tab_hist_btn.visible,
-					"profile 双页签可见")
+		9:  # 个人档案(居中弹窗式: 窄宽面板 + 滚动区 + 页签)
+			expect(s._scroll.custom_minimum_size.x == 520.0,
+					"profile 滚动区未用窄栏宽度 w=%s" % str(s._scroll.custom_minimum_size))
+			expect(s._scroll.custom_minimum_size.y <= h * 0.62 + 1.0,
+					"profile 滚动区超高 h=%s" % str(h))
+			expect(s._tab_ach_btn.visible and s._tab_hist_btn.visible
+					and s._tab_mission_btn.visible and s._tab_stats_btn.visible,
+					"profile 页签可见性异常")
 
 
 func _initialize() -> void:

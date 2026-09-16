@@ -1,5 +1,6 @@
 ## 个人档案面板: 成就 + 战绩 双页签(主菜单徽章区入口)。
 ## 成就=全目录(已解锁金框/未解锁暗格+进度来源), 战绩=最近对局记录列表。
+## 居中弹窗式(与设置弹窗同款): 窄宽面板 + 滚动区(触摸滑动/滚轮)。
 extends Control
 
 signal closed
@@ -17,7 +18,6 @@ var _tab_stats_btn: Button
 var _scroll: ScrollContainer
 var _grid: VBoxContainer
 var _toast: Label
-var _back_btn: Button
 
 
 func _ready() -> void:
@@ -26,73 +26,100 @@ func _ready() -> void:
 	size = get_parent_area_size()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var bg := ColorRect.new()
-	bg.color = AppTheme.BG
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	# 半透明遮罩(点击空白关闭)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_close())
+	add_child(dim)
 
-	var header: Control = preload("res://src/client/ui/p5_header.gd").new()
-	header.text = "个 人 档 案"
-	header.icon = "scroll"
-	header.position = Vector2(36, 22)
-	header.custom_minimum_size = Vector2(340, 54)
-	header.size = Vector2(340, 54)
-	add_child(header)
+	# 居中容器 + 弹窗面板
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 18
+	sb.content_margin_bottom = 20
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+	# PanelContainer 会把每个子控件拉伸铺满面板 → 头部/页签/滚动区包进同一 VBox
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 10)
+	panel.add_child(page)
 
-	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
-	_back_btn.position = Vector2(1150, 24)
-	_back_btn.pressed.connect(func() -> void:
+	# 标题 + 关闭
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	page.add_child(head)
+	var title := AppTheme.make_label(24, AppTheme.GOLD)
+	title.text = tr("个 人 档 案")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(title)
+	var close_btn := AppTheme.make_button("✕", Vector2(40, 40), 20)
+	close_btn.size_flags_vertical = Control.SIZE_SHRINK_END
+	close_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close())
-	add_child(_back_btn)
+	head.add_child(close_btn)
 
-	_tab_ach_btn = AppTheme.make_button("成  就", Vector2(200, 46), 18)
-	_tab_ach_btn.position = Vector2(40, 110)
+	# 页签行(成就/战绩/每日任务/统计)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+	page.add_child(tabs)
+	_tab_ach_btn = AppTheme.make_button("成  就", Vector2(120, 42), 15)
 	_tab_ach_btn.toggle_mode = true
 	_tab_ach_btn.pressed.connect(func() -> void: _set_tab("ach"))
-	add_child(_tab_ach_btn)
-	_tab_hist_btn = AppTheme.make_button("战  绩", Vector2(200, 46), 18)
-	_tab_hist_btn.position = Vector2(255, 110)
+	tabs.add_child(_tab_ach_btn)
+	_tab_hist_btn = AppTheme.make_button("战  绩", Vector2(120, 42), 15)
 	_tab_hist_btn.toggle_mode = true
 	_tab_hist_btn.pressed.connect(func() -> void: _set_tab("hist"))
-	add_child(_tab_hist_btn)
-	_tab_mission_btn = AppTheme.make_button("每日任务", Vector2(200, 46), 18)
-	_tab_mission_btn.position = Vector2(470, 110)
+	tabs.add_child(_tab_hist_btn)
+	_tab_mission_btn = AppTheme.make_button("每日任务", Vector2(120, 42), 15)
 	_tab_mission_btn.toggle_mode = true
 	_tab_mission_btn.pressed.connect(func() -> void: _set_tab("mission"))
-	add_child(_tab_mission_btn)
-	_tab_stats_btn = AppTheme.make_button("统  计", Vector2(200, 46), 18)
-	_tab_stats_btn.position = Vector2(685, 110)
+	tabs.add_child(_tab_mission_btn)
+	_tab_stats_btn = AppTheme.make_button("统  计", Vector2(120, 42), 15)
 	_tab_stats_btn.toggle_mode = true
 	_tab_stats_btn.pressed.connect(func() -> void: _set_tab("stats"))
-	add_child(_tab_stats_btn)
+	tabs.add_child(_tab_stats_btn)
 
+	# 滚动内容(触摸滑动/滚轮; 宽度固定窄栏)
 	_scroll = ScrollContainer.new()
-	_scroll.position = Vector2(40, 170)
-	_scroll.custom_minimum_size = Vector2(1200, 484)
+	_scroll.custom_minimum_size = Vector2(520, 0)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(_scroll)
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(_scroll)
 	_grid = VBoxContainer.new()
 	_grid.add_theme_constant_override("separation", 12)
+	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动, 保证滑屏顺滑
 	_scroll.add_child(_grid)
 
-	_toast = AppTheme.make_label(15, AppTheme.DIM)
-	_toast.position = Vector2(40, 660)
-	add_child(_toast)
+	# 底部提示(领取奖励回执等)
+	_toast = AppTheme.make_label(14, AppTheme.GOLD)
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	page.add_child(_toast)
 
 	_set_tab("ach")
 	Responsive.watch(self, _relayout)
 
 
 func _relayout() -> void:
-	var w := size.x
 	var h := size.y
-	if w < 100.0 or h < 100.0:
+	if h < 100.0:
 		return
-	_back_btn.position = Vector2(w - 130.0, 24)
-	_scroll.position = Vector2(40, 170)
-	_scroll.size = Vector2(w - 80.0, h - 236.0)
-	_toast.position = Vector2(40, h - 60)
+	# 滚动区高度随视口收缩(小屏弹窗不超屏, 大屏封顶)
+	_scroll.custom_minimum_size.y = minf(h * 0.62, 540.0)
 
 
 func _set_tab(tab: String) -> void:
@@ -138,6 +165,7 @@ func _build_achievements() -> void:
 func _ach_row(a: Dictionary, unlocked: bool) -> Control:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
 	var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
 			AppTheme.GOLD if unlocked else Color(1, 1, 1, 0.12), 10, 1 if not unlocked else 2)
 	sb.content_margin_left = 18
@@ -182,6 +210,7 @@ func _build_missions() -> void:
 		var done := prog >= target and not claimed
 		var panel := PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
 		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
 				AppTheme.GOLD if claimed else Color(1, 1, 1, 0.12), 10, 1)
 		sb.content_margin_left = 18
@@ -234,13 +263,14 @@ func _build_stats() -> void:
 				Wallet.fight_runs, Wallet.fight_clears, Wallet.fight_best,
 				Wallet.fight_bosses]],
 		["🥊 联机格斗对战", tr("胜场 %d") % Wallet.pvp_wins],
-		["📅 每日挑战", "%s · " + tr("累计参与 %d 天") % Wallet.daily_days],
+		["📅 每日挑战", _daily_text() + " · " + tr("累计参与 %d 天") % Wallet.daily_days],
 		["📕 命运卡图鉴", tr("已见 %d / %d 种") % [Wallet.mod_seen.size(),
 				_preload_mods().size()]],
 	]
 	for r in rows:
 		var panel := PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动
 		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28), Color(1, 1, 1, 0.12), 10, 1)
 		sb.content_margin_left = 18
 		sb.content_margin_right = 18
@@ -250,12 +280,14 @@ func _build_stats() -> void:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 12)
 		panel.add_child(h)
-		var nm := AppTheme.make_label(18, AppTheme.GOLD)
+		var nm := AppTheme.make_label(16, AppTheme.GOLD)
 		nm.text = str(r[0])
-		nm.custom_minimum_size = Vector2(220, 0)
+		nm.custom_minimum_size = Vector2(150, 0)
 		h.add_child(nm)
-		var v := AppTheme.make_label(16, AppTheme.WHITE)
+		var v := AppTheme.make_label(14, AppTheme.WHITE)
 		v.text = str(r[1])
+		v.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 窄栏下长行折行
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(v)
 		_grid.add_child(panel)
 
