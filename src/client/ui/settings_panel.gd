@@ -1,4 +1,5 @@
-## 设置面板（模态居中弹窗）: 昵称 + 音乐/音效音量 + 图像设置，自动保存。
+## 设置面板（居中弹窗）: 昵称 + 音量 + 语言 + 触感 + 图像，自动保存。
+## 弹窗居中显示, 内容可滚动(手机触摸滑动), 点击遮罩或关闭按钮关闭。
 ## 用法: add_child(SettingsPanelScript.new()); 需要时调用 open()；closed 信号通知关闭。
 extends Control
 
@@ -10,51 +11,70 @@ const Responsive = preload("res://src/client/theme/responsive.gd")
 var _nickname_edit: LineEdit
 var _bgm_slider: HSlider
 var _sfx_slider: HSlider
-var _display_ctrls: Array = []   # 图像设置控件(移动端无意义, 整组隐藏)
+var _display_ctrls: Array = []
 var _fullscreen_btn: CheckButton
 var _vsync_btn: CheckButton
 var _resolution_btn: OptionButton
 var _lang_btn: OptionButton
 var _toast: Label
-var _back_btn: Button
 var _scroll: ScrollContainer
+var _panel: PanelContainer
 
 
 func _ready() -> void:
-	# 独立全屏页(同商城/档案): 不透明背景, 不再透出主菜单;
-	# 页眉 + 返回 + 滚动内容, 手机紧凑视口下整页可滚
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	# 代码 new 出的 Control 挂 Control 父下锚点不自动求值(size 停留 0×0) → 显式铺满
 	size = get_parent_area_size()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var bg := ColorRect.new()
-	bg.color = AppTheme.BG
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	# 半透明遮罩(点击关闭)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_save_all()
+			_close())
+	add_child(dim)
 
-	var header: Control = preload("res://src/client/ui/p5_header.gd").new()
-	header.text = "设  置"
-	header.icon = "gear"
-	header.position = Vector2(36, 22)
-	header.custom_minimum_size = Vector2(240, 54)
-	header.size = Vector2(240, 54)
-	add_child(header)
+	# 居中容器
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
 
-	_back_btn = AppTheme.make_button("返 回", Vector2(100, 42), 17)
-	_back_btn.position = Vector2(1150, 24)
-	_back_btn.pressed.connect(func() -> void:
+	# 弹窗面板
+	_panel = PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 28
+	sb.content_margin_right = 28
+	sb.content_margin_top = 20
+	sb.content_margin_bottom = 20
+	_panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(_panel)
+
+	# 标题 + 关闭
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	_panel.add_child(head)
+	var title := AppTheme.make_label(24, AppTheme.GOLD)
+	title.text = tr("设  置")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(title)
+	var close_btn := AppTheme.make_button("✕", Vector2(40, 40), 20)
+	close_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_all()
 		_close())
-	add_child(_back_btn)
+	head.add_child(close_btn)
 
-	# 内容整体可滚动: 手机紧凑视口下设置项超出屏高时上下滚动
+	# 滚动内容
 	_scroll = ScrollContainer.new()
-	_scroll.position = Vector2(40, 100)
-	_scroll.custom_minimum_size = Vector2(1200, 560)
+	_scroll.custom_minimum_size = Vector2(440, 0)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(_scroll)
+	_panel.add_child(_scroll)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
@@ -99,14 +119,14 @@ func _ready() -> void:
 	_lang_btn.item_selected.connect(_on_language)
 	lang_row.add_child(_lang_btn)
 	var lang_hint := AppTheme.make_label(13, AppTheme.DIM)
-	lang_hint.text = "切换后全界面即时生效"
+	lang_hint.text = tr("切换后全界面即时生效")
 	lang_row.add_child(lang_hint)
 
-	# ── 触感(触屏专属): 震动反馈 ──
+	# ── 触感(触屏专属) ──
 	if Responsive.is_touch():
 		box.add_child(_section("触感"))
 		var vib := CheckButton.new()
-		vib.text = "震动反馈(轮到你/结算)"
+		vib.text = tr("震动反馈(轮到你/结算)")
 		vib.button_pressed = bool(gs_vibration())
 		vib.toggled.connect(func(on: bool) -> void:
 			var g := get_node_or_null("/root/GameSettings")
@@ -115,19 +135,19 @@ func _ready() -> void:
 				g.save_settings())
 		box.add_child(vib)
 
-	# ── 图像(桌面专属: 手机上全屏/垂直同步/分辨率均无意义, 整组隐藏) ──
+	# ── 图像(桌面专属) ──
 	var sec_img := _section("图像")
 	box.add_child(sec_img)
 	_display_ctrls.append(sec_img)
 	_fullscreen_btn = CheckButton.new()
-	_fullscreen_btn.text = "全屏"
+	_fullscreen_btn.text = tr("全屏")
 	_fullscreen_btn.button_pressed = _is_fullscreen()
 	_fullscreen_btn.toggled.connect(_on_fullscreen)
 	box.add_child(_fullscreen_btn)
 	_display_ctrls.append(_fullscreen_btn)
 
 	_vsync_btn = CheckButton.new()
-	_vsync_btn.text = "垂直同步"
+	_vsync_btn.text = tr("垂直同步")
 	_vsync_btn.button_pressed = DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED
 	_vsync_btn.toggled.connect(_on_vsync)
 	box.add_child(_vsync_btn)
@@ -138,7 +158,7 @@ func _ready() -> void:
 	box.add_child(res_row)
 	_display_ctrls.append(res_row)
 	var res_lbl := AppTheme.make_label(16, AppTheme.WHITE)
-	res_lbl.text = "分辨率"
+	res_lbl.text = tr("分辨率")
 	res_lbl.custom_minimum_size = Vector2(100, 0)
 	res_row.add_child(res_lbl)
 	_resolution_btn = OptionButton.new()
@@ -153,7 +173,7 @@ func _ready() -> void:
 	_resolution_btn.item_selected.connect(_on_resolution)
 	res_row.add_child(_resolution_btn)
 
-	var apply_btn := AppTheme.make_button("应用分辨率", Vector2(0, 0), 15)
+	var apply_btn := AppTheme.make_button(tr("应用分辨率"), Vector2(0, 0), 15)
 	apply_btn.custom_minimum_size = Vector2(200, 36)
 	apply_btn.pressed.connect(_on_apply_resolution)
 	box.add_child(apply_btn)
@@ -165,7 +185,7 @@ func _ready() -> void:
 	# ── 关闭 ──
 	box.add_child(HSeparator.new())
 	var cc := CenterContainer.new()
-	var close := AppTheme.make_button("保存并关闭", Vector2(200, 42), 17)
+	var close := AppTheme.make_button(tr("保存并关闭"), Vector2(200, 42), 17)
 	close.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_all()
@@ -173,7 +193,6 @@ func _ready() -> void:
 	cc.add_child(close)
 	box.add_child(cc)
 
-	# toast
 	_toast = AppTheme.make_label(14, AppTheme.DIM)
 	_toast.text = ""
 	box.add_child(_toast)
@@ -183,15 +202,12 @@ func _ready() -> void:
 	_load_settings()
 
 
-## 多设备自适应: 返回锚右上, 滚动区随窗口伸缩
+## 弹窗高度约束: 滚动区不超过视口 70%
 func _relayout() -> void:
-	var w := size.x
-	var h := size.y
-	if w < 100.0 or h < 100.0:
+	var vh := get_viewport().get_visible_rect().size.y
+	if vh < 100:
 		return
-	_back_btn.position = Vector2(w - 130.0, 24)
-	_scroll.position = Vector2(40, 100)
-	_scroll.size = Vector2(w - 80.0, h - 140.0)
+	_scroll.custom_minimum_size.y = minf(vh * 0.65, 560.0)
 
 
 ## 打开面板: 重新读取当前设置并置顶显示
@@ -203,7 +219,7 @@ func open() -> void:
 
 func _section(text: String) -> Label:
 	var lb := AppTheme.make_label(16, AppTheme.GOLD)
-	lb.text = "── " + tr(text)   # 内文先翻译, 装饰线不参与查表
+	lb.text = "── " + tr(text)
 	return lb
 
 
@@ -258,7 +274,7 @@ func _on_vsync(toggled: bool) -> void:
 
 
 func _on_resolution(index: int) -> void:
-	pass  # 由 _on_apply_resolution 统一处理
+	pass
 
 
 func _on_apply_resolution() -> void:
@@ -317,7 +333,6 @@ func gs_vibration() -> bool:
 
 
 func _close() -> void:
-	Audio.play("click")
 	visible = false
 	closed.emit()
 
@@ -325,4 +340,5 @@ func _close() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event is InputEventKey and event.pressed \
 			and event.keycode == KEY_ESCAPE:
+		_save_all()
 		_close()
