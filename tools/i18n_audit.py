@@ -64,15 +64,17 @@ def extract_strings(text):
     return out
 
 
-code_strings = collections.Counter()
+all_strings = set()
+cjk_strings = collections.Counter()
 for f in FILES:
     try:
         s = io.open(f, encoding="utf-8").read()
     except OSError:
         continue
     for t in extract_strings(s):
+        all_strings.add(t)          # 含 % 的模板串也纳入(词典按整串匹配)
         if cjk.search(t):
-            code_strings[t] += 1   # 含 % 的模板串也纳入(词典按整串匹配)
+            cjk_strings[t] += 1
 
 db_src = io.open(DB_PATH, encoding="utf-8").read()
 db_keys = set()
@@ -80,11 +82,14 @@ for m in re.finditer(r'^\t\t"((?:[^' + BS + DQ + BS + BS + '])*)":', db_src, re.
     key = m.group(1).replace(BS + BS, BS).replace(BS + "n", NL).replace(BS + DQ, DQ)
     db_keys.add(key)
 
-missing = sorted(s for s in code_strings if s not in db_keys)
-stale = sorted(k for k in db_keys if k not in code_strings)
+# $ composed whitelist
+KNOWN_COMPOSED = {"COMBO x%d", "🔥 火球", "❄ 冰霜", "✟ 圣光"}
+db_live = set(k for k in db_keys if k not in KNOWN_COMPOSED)
+missing = sorted(s for s in cjk_strings if s not in db_keys)
+stale = sorted(k for k in db_live if k not in all_strings)
 
 print("i18n 审计 —— 代码中文静态串 %d 个, 词典键 %d 个" %
-      (len(code_strings), len(db_keys)))
+      (len(cjk_strings), len(db_keys)))
 print("")
 print("[未覆盖] %d 个(界面将保持中文):" % len(missing))
 for s in missing:
@@ -94,7 +99,7 @@ print("[失配] %d 个(词典键在代码中已不存在, 可清理):" % len(sta
 for k in stale:
     print("  -", k.replace(NL, " / "))
 print("")
-print("覆盖率: %d/%d = %d%%" % (len(code_strings) - len(missing),
-      len(code_strings),
-      100 * (len(code_strings) - len(missing)) // max(len(code_strings), 1)))
+print("覆盖率: %d/%d = %d%%" % (len(cjk_strings) - len(missing),
+      len(cjk_strings),
+      100 * (len(cjk_strings) - len(missing)) // max(len(cjk_strings), 1)))
 sys.exit(0)

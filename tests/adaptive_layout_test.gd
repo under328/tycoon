@@ -21,6 +21,7 @@ const SCENE_PATHS := [
 	"res://src/client/ui/game_end_panel.gd",
 	"res://src/client/ui/rogue_help.gd",
 	"res://src/client/ui/profile_panel.gd",
+	"res://src/client/ui/fight_panel.gd",
 ]
 
 const PROFILES := [

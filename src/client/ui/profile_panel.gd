@@ -137,7 +137,7 @@ func _build_achievements() -> void:
 
 func _ach_row(a: Dictionary, unlocked: bool) -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1180, 0)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sb := AppTheme.flat(Color(0.13, 0.13, 0.28),
 			AppTheme.GOLD if unlocked else Color(1, 1, 1, 0.12), 10, 1 if not unlocked else 2)
 	sb.content_margin_left = 18
@@ -240,7 +240,7 @@ func _build_stats() -> void:
 	]
 	for r in rows:
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(1180, 0)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var sb := AppTheme.flat(Color(0.13, 0.13, 0.28), Color(1, 1, 1, 0.12), 10, 1)
 		sb.content_margin_left = 18
 		sb.content_margin_right = 18
