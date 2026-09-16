@@ -285,9 +285,9 @@ func _update_hits() -> void:
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
 	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
-		else "") + tr("第 %d/%d 回合 · %s") % [fm.round_num, FightModeGd.ROUNDS,
-			str(FightModeGd.GROUPS[fm.group]["name"])]
-	_refresh_slots()
+		else "") + tr("第 %d 层 · 第 %d/%d 回合 · %s") % [fm.floor_num,
+		fm.round_num, FightModeGd.ROUNDS,
+		str(FightModeGd.GROUPS[fm.group]["name"])]
 	_refresh_bars()
 	_update_hits()
 	var is_battle: bool = fm.phase == "battle"

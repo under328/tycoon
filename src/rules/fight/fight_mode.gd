@@ -76,7 +76,8 @@ const GROUPS := [
 
 # ---------------------------------------------------------------- 运行状态
 var phase := "draft"       # draft | battle | round_end | over
-var round_num := 1         # 1..5
+var round_num := 1         # 层内回合 1..5
+var floor_num := 1         # 层数(每层 5 回合)
 var run_won := false       # over: 是否击败 Boss
 var group := 0             # 怪物主题组 0..2
 
@@ -123,7 +124,7 @@ func _init(seed_v: int = -1) -> void:
 	hp = 100
 	_refresh_stats()
 	_open_round()
-	_log(tr("第 1 回合 — %s 地下城") % str(GROUPS[group]["name"]))
+	_log(tr("第 1 层 — %s 地下城") % str(GROUPS[group]["name"]))
 
 
 func _shuffle(a: Array) -> void:
@@ -303,7 +304,7 @@ func _start_battle() -> void:
 	else:
 		# 无尽层: 5 回合循环 [怪/精英/怪/精英/BOSS], 每轮 ×1.35
 		var idx := (round_num - 1) % ROUNDS
-		var cycle := int((round_num - 1) / ROUNDS)
+		var cycle := floor_num - 1
 		var scale := pow(1.45, cycle)
 		var base: Dictionary = ENDLESS_PLAN[idx]
 		plan = {"kind": str(base["kind"]),
@@ -540,15 +541,48 @@ func _win_round() -> void:
 		last_rank = "B"
 	if round_num >= ROUNDS:
 		run_won = true
-		_log(tr("BOSS 击破! 可继续无尽挑战!"))
+		_log(tr("BOSS 击破! 可继续下一层!"))
 	else:
 		_log(tr("%s 被击破! 回复 %d 生命") % [str(enemy["name"]), heal])
 
 
 ## round_end 展示完毕后由 UI 调用 → 下一回合
+## 进入下一层: 全状态重置
+func start_next_floor() -> void:
+	floor_num += 1
+	round_num = 1
+	cleared = 0
+	run_won = false
+	slots.clear()
+	specials.clear()
+	specials_left = [0, 1, 2, 3, 4, 5, 6, 7]
+	deck.clear()
+	for i in 52:
+		deck.append(i)
+	_shuffle(deck)
+	hits = 0
+	fury = 0
+	rare_count = 0
+	combo = {}
+	shield = 0
+	last_rank = ""
+	_skill_cd = 0
+	_battle_round = 0
+	_first_used = false
+	_refresh_stats()
+	hp = int(stats["max_hp"])
+	group = (group + 1 + rng.randi() % (GROUPS.size() - 1)) % GROUPS.size()
+	enemy = {}
+	log_lines.clear()
+	_open_round()
+	_log(tr("第 %d 层开始 — %s 地下城") % [floor_num, str(GROUPS[group]["name"])])
+
+
 func advance_round() -> void:
 	if phase != "round_end":
 		return
+	if round_num >= ROUNDS:
+		return   # R5 通关: 引擎停在 round_end 等 UI 调 start_next_floor
 	round_num += 1
 	_open_round()
 	_log(tr("第 %d 回合开始") % round_num)

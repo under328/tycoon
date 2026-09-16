@@ -436,8 +436,8 @@ func _deep_combat(t) -> void:
 	fm.enemy["intent"] = "attack"
 	fm.step("attack")
 	t.expect(str(fm.last_rank) == "S", "无伤通关评级 S")
-	# 无尽模式: R5 通关后可继续
-	while str(fm.phase) != "over" and fm.round_num < 6:
+	# 无尽模式: R5 通关后调 start_next_floor 进入下一层
+	while not fm.run_won and fm.round_num < 6:
 		match str(fm.phase):
 			"draft":
 				fm.draft_pick(fm.pair[0], 0 if fm.slots.size() >= 5 else -1)
@@ -447,6 +447,12 @@ func _deep_combat(t) -> void:
 					fm.step("attack")
 			"round_end":
 				fm.advance_round()
+	if fm.run_won and str(fm.phase) == "round_end":
+		fm.start_next_floor()
+		t.expect(fm.floor_num == 2, "进入第 2 层")
+		t.expect((fm.slots as Array).is_empty(), "装备槽全重置")
+		t.expect((fm.specials as Array).is_empty(), "奇物全重置")
+		t.expect(fm.fury == 0, "怒气重置")
 	if fm.round_num >= 6:
 		var endless_round: int = fm.round_num
 		var r: Dictionary = fm.step("attack") if str(fm.phase) == "battle" else {"a": 1}
