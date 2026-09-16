@@ -126,6 +126,11 @@ func _ready() -> void:
 	if mode == "online":
 		_bind_net()
 		_refresh()
+		# 开局首条 draft 视图可能早于本表建立: 补弹命运二选一
+		var lv: Dictionary = net.latest_view
+		if not lv.is_empty() and str(lv.get("phase", "")) == "draft" \
+				and (_rogue_dlg == null or not is_instance_valid(_rogue_dlg)):
+			_show_rogue_choice()
 	else:
 		_new_match()
 	Audio.play_bgm("rogue" if rogue else "table")
@@ -596,8 +601,9 @@ func _show_rogue_flow() -> void:
 ## 二选一: 两张命运卡并排, 点击选定并应用
 func _show_rogue_choice() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
-		_rogue_dlg.queue_free()
+		return   # 已在选卡(联机每次视图广播都会触发, 勿重建)
 	Audio.say("rogue_choice")   # 命运二选一登场
+	var v := _current_view()
 	var dlg := Control.new()
 	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
 	dlg.theme = AppTheme.build_theme()
@@ -612,14 +618,14 @@ func _show_rogue_choice() -> void:
 	box.add_theme_constant_override("separation", 18)
 	center.add_child(box)
 	var cap := AppTheme.make_label(26, AppTheme.GOLD)
-	cap.text = "命运二选一 · 第 %d 层" % (int(state["round"]) + 1)
+	cap.text = "命运二选一 · 第 %d 层" % (int(v.get("round", 0)) + 1)
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(cap)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 24)
 	box.add_child(row)
-	var choices: Array = state.get("rogue_choices", [])
+	var choices: Array = v.get("rogue_choices", [])
 	for c in choices:
 		Wallet.note_rogue_mod(str(c), false)   # 图鉴: 出现计数
 	for i in choices.size():
@@ -647,13 +653,14 @@ func _show_rogue_choice() -> void:
 						{"t": "rogue_pick", "idx": idx})
 				if bool(r["ok"]):
 					state = r["state"]
-			_show_rogue_reveal())
+			_show_rogue_reveal(idx))
 		row.add_child(pick)
 	var dice_row := HBoxContainer.new()
 	dice_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	dice_row.add_theme_constant_override("separation", 10)
 	box.add_child(dice_row)
-	if Wallet.item_count("item_fate_dice") > 0:
+	# 命运骰重抽仅本地局(联机重抽需服务器裁决, 暂不开放)
+	if mode != "online" and Wallet.item_count("item_fate_dice") > 0:
 		var dice := AppTheme.make_button(
 				"🎲 掷命运骰重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
 				Vector2(320, 44), 15)
@@ -676,11 +683,19 @@ func _show_rogue_choice() -> void:
 
 
 ## 选定后的确认揭示(暗幕淡入 + 卡面弹出 + 开始对局)
-func _show_rogue_reveal() -> void:
+## picked_idx: 玩家所选索引 —— 联机下服务器视图未回, 由此回显所选(非预设默认)
+func _show_rogue_reveal(picked_idx := -1) -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		_rogue_dlg.queue_free()
-	var mod_id := str(state["cfg"].get("rogue_mod", ""))
-	if mod_id != "" and str(state["phase"]) != "draft":
+	var v := _current_view()
+	var mod_id := ""
+	if picked_idx >= 0:
+		var choices: Array = v.get("rogue_choices", [])
+		if picked_idx < choices.size():
+			mod_id = str(choices[picked_idx])
+	if mod_id == "":
+		mod_id = str(v.get("rogue_mod", ""))
+	if mod_id != "" and (picked_idx >= 0 or str(v.get("phase", "")) != "draft"):
 		Wallet.note_rogue_mod(mod_id, true)   # 图鉴: 选用计数
 	var meta := {}
 	for m in GameStateGd.ROGUE_MODS:
@@ -760,8 +775,10 @@ func _close_rogue_reveal() -> void:
 func _update_rogue_lbl() -> void:
 	if rogue_lbl == null:
 		return
-	var mod_id := str(state["cfg"].get("rogue_mod", ""))
-	var show := mod_id != "" and _rogue_dlg == null 			and str(state["phase"]) in ["play", "exchange"]
+	var v := _current_view()
+	var mod_id := str(v.get("rogue_mod", ""))
+	var show := mod_id != "" and _rogue_dlg == null \
+			and str(v.get("phase", "")) in ["play", "exchange"]
 	rogue_lbl.visible = show
 	if show:
 		var meta := {}
@@ -781,6 +798,10 @@ func _update_rogue_lbl() -> void:
 func _bind_net() -> void:
 	net.view_changed.connect(func(view: Dictionary) -> void:
 		_at_game_end = str(view["phase"]) == "game_end"
+		# 联机肉鸽: 服务器进入 draft → 弹命运二选一(选卡走网络回执)
+		if str(view["phase"]) == "draft" \
+				and (_rogue_dlg == null or not is_instance_valid(_rogue_dlg)):
+			_show_rogue_choice()
 		# 回合变化 → 重置倒计时
 		var new_turn := int(view["turn"])
 		if new_turn != _last_turn_seat:

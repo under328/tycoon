@@ -80,9 +80,14 @@ func _poll() -> void:
 				print("[e2e-ui] 牌桌已进入, phase=", str(main.net.latest_view.get("phase")))
 		"对局中":
 			# 途中各打一次表情/聊天(在线专属 UI 路径)
-			if not emoji_sent and main.table != null and main.table._emoji_btns.size() > 0:
+			# 表情: 表情栏改为折叠弹出式 → 展开后按 emoji_grid 里的第一颗
+			if not emoji_sent and main.table != null \
+					and main.table.emoji_grid != null \
+					and main.table.emoji_grid.get_child_count() > 0:
 				emoji_sent = true
-				main.table._emoji_btns[0].pressed.emit()
+				main.table._emoji_open = true
+				main.table.emoji_popup.visible = true
+				(main.table.emoji_grid.get_child(0) as Button).pressed.emit()
 			if not chat_sent and main.table != null:
 				chat_sent = true
 				main.table.chat_edit.text = "hello"
