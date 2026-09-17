@@ -366,6 +366,15 @@ func _fight_reward_split(t) -> void:
 	t.expect_eq(int(rf["diamonds"]), 3, "格斗试炼减半: 6/2 = 3 钻")
 	var r0: Dictionary = w.grant_fight_reward(0, 0, false)
 	t.expect_eq(int(r0["diamonds"]), 1, "最低保底 1 钻")
+	# 失败惩罚: 0 钻 + 扣金币
+	var gold0 := int(w.gold)
+	var rl: Dictionary = w.grant_fight_reward(3, 0, false, false)
+	t.expect_eq(int(rl["diamonds"]), 0, "失败不发放钻石")
+	t.expect_eq(int(w.gold), maxi(gold0 - 15, 0), "失败扣 15 金币")
+	var rp: Dictionary = w.grant_pvp_result(false)
+	t.expect_eq(int(rp["gold"]), -10, "联机格斗失败 -10 金币")
+	t.expect_eq(int(rp["diamonds"]), 0, "联机失败无钻石")
+	t.expect_eq(int(w.gold), maxi(gold0 - 25, 0), "累计扣 25 金币(下限 0)")
 	w.queue_free()
 
 

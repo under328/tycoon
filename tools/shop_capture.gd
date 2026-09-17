@@ -40,6 +40,7 @@ func _process(_delta: float) -> bool:
 	if frames == 20 and shop == null:
 		shop = (load("res://src/client/ui/shop.gd") as GDScript).new()
 		holder.add_child(shop)
+		shop._set_tab("item")
 	if frames == 170 and shop != null:
 		var img := root.get_viewport().get_texture().get_image()
 		img = img.get_region(Rect2(Vector2.ZERO, Vector2(PROFILES[step][1])))

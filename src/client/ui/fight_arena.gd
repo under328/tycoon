@@ -580,8 +580,11 @@ func _show_result() -> void:
 		var win: bool = winner == my_seat
 		title = "胜 利 !" if win else "败 北…"
 		var r: Dictionary = Wallet.grant_pvp_result(win)
-		body += "\n" + tr("奖励: %+d 金币 %+d 钻石 已入账") % [int(r["gold"]),
-				int(r["diamonds"])]
+		if win:
+			body += "\n" + tr("奖励: %+d 金币 %+d 钻石 已入账") % [int(r["gold"]),
+					int(r["diamonds"])]
+		else:
+			body += "\n" + tr("失败惩罚: %d 金币 · 未获得钻石") % int(r["gold"])
 		Audio.play("win" if win else "fall")
 	_show_overlay(title, body)
 

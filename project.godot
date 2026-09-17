@@ -25,9 +25,6 @@ Wallet="*res://src/autoload/wallet.gd"
 Audio="*res://src/autoload/audio.gd"
 I18n="*res://src/autoload/i18n.gd"
 
-[internationalization]
-locale/fallback="en"
-
 [display]
 
 window/size/viewport_width=1280

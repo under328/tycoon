@@ -927,18 +927,24 @@ func _finish_run() -> void:
 	Audio.say("victory" if fm.run_won else "defeat", 1.0, true)   # 结算播报
 	var cleared: int = fm.cleared
 	var r: Dictionary = Wallet.grant_fight_reward(cleared,
-			1 if fm.run_won else 0, daily)   # 通关即击破 1 个 BOSS; 每日全额/试炼减半
+			1 if fm.run_won else 0, daily, fm.run_won)   # 通关击破 BOSS; 失败扣金
 	_run_diamonds += int(r["diamonds"])
+	var run_gold := int(r["gold"])
 	Wallet.note_mission("m_fight")
 	Wallet.push_history({
 		"day": Time.get_date_string_from_system(),
 		"mode": "格斗", "floor": cleared, "rank": 0, "points": 0,
-		"gold": 0, "diamonds": _run_diamonds,
+		"gold": run_gold, "diamonds": _run_diamonds,
 	})
 	var title := (tr("每日挑战通关!") if fm.run_won else tr("每日挑战结束")) \
 			if daily else (tr("试炼通关!") if fm.run_won else tr("试炼结束"))
-	var body := tr("通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账") % [
-		cleared, int(r["best"]), _run_diamonds]
+	var body: String
+	if fm.run_won:
+		body = tr("通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账") % [
+			cleared, int(r["best"]), _run_diamonds]
+	else:
+		body = tr("通过 %d/5 回合 · 历史最佳第 %d 层\n失败惩罚: %d 金币 · 未获得钻石") % [
+			cleared, int(r["best"]), run_gold]
 	if daily:
 		var hp_pct := int(100.0 * clampi(fm.hp, 0, int(fm.stats["max_hp"]))
 				/ float(maxi(int(fm.stats["max_hp"]), 1)))
