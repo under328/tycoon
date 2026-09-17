@@ -96,6 +96,7 @@ var cleared := 0          # 已通关回合数(奖励/最佳依据)
 var last_rank := ""        # 上回合评级 S/A/B
 var _combo_crit_next := false   # 连击 5 层里程碑: 下一击必暴
 var _round_dmg_taken := 0       # 本场战斗受到的伤害(评级用)
+var hard := false               # 每日挑战: 怪物 HP/攻击 +25%, 玩家伤害 -20%
 var fury := 0              # 怒气 0-100(满则可释放奥义大招)
 var rare_count := 0        # 已装备稀有卡数(每张 +8% 生命上限)
 var stats := {}            # 派生属性(含特殊牌修正)
@@ -285,6 +286,9 @@ func _refresh_stats() -> void:
 	else:
 		hp = new_max
 	hp = mini(hp, new_max)
+	if hard:   # 每日挑战: 玩家伤害 -20% (普攻/技能/奥义/反击/顺子全走 atk/skill)
+		stats["atk"] = maxi(int(int(stats["atk"]) * 0.8), 1)
+		stats["skill"] = maxi(int(int(stats["skill"]) * 0.8), 1)
 
 
 # ---------------------------------------------------------------- 战斗阶段
@@ -312,8 +316,9 @@ func _start_battle() -> void:
 			"atk": int(int(base["atk"]) * scale)}
 	var kind := str(plan["kind"])
 	var v := rng.randf_range(0.88, 1.12)
-	var e_hp := int(int(plan["hp"]) * v)
-	var e_atk := int(int(plan["atk"]) * rng.randf_range(0.88, 1.12))
+	var hard_mult := 1.25 if hard else 1.0
+	var e_hp := int(int(plan["hp"]) * hard_mult * v)
+	var e_atk := int(int(plan["atk"]) * hard_mult * rng.randf_range(0.88, 1.12))
 	var g: Dictionary = GROUPS[group]
 	var name_txt: String = ""
 	var variant := 0

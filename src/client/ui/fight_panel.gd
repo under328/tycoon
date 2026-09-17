@@ -72,6 +72,7 @@ func _ready() -> void:
 	size = get_parent_area_size()
 	fm = FightModeGd.new(Wallet.daily_seed()) if daily \
 			else FightModeGd.new()
+	fm.hard = daily   # 每日挑战: 怪物 HP/攻击 +25%, 玩家伤害 -20%
 
 	var bg := ColorRect.new()
 	bg.color = Color("191934")
@@ -373,6 +374,12 @@ func _refresh_slots() -> void:
 			cv.size = Vector2(52, 74)
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			wrap.add_child(cv)
+			# 悬停提示: 当前装备牌 + 全套牌型协同效果
+			wrap.tooltip_text = "%s
+牌型协同: %s · %s" % [CardsGd.label(card),
+					tr(str(fm.combo["name"])), tr(str(fm.combo["desc"]))]
+		else:
+			wrap.tooltip_text = "空槽位 — 抽牌阶段点选装备"
 		var sb: StyleBoxFlat = e["sb"]
 		if _replace_mode():
 			sb.border_color = AppTheme.GOLD
@@ -896,7 +903,7 @@ func _show_endless_choice() -> void:
 	go.pressed.connect(func() -> void:
 		Audio.play("win")
 		_close_overlay()
-		fm.advance_round()
+		fm.start_next_floor()   # R5 通关后 advance_round 会提前返回, 必须开新层
 		_busy = false
 		_render())
 	row.add_child(go)
@@ -1017,7 +1024,7 @@ func _relayout() -> void:
 	act_row.position = Vector2(w * 0.32, h - 92.0)
 	act_row.custom_minimum_size = Vector2(w * 0.42, 60)
 	# 抽牌面板: 底部居中
-	draft_panel.position = Vector2(w / 2.0 - 330.0, h * 0.38)
+	draft_panel.position = Vector2(w / 2.0 - 330.0, maxf(h * 0.30, 90.0))
 	draft_panel.custom_minimum_size = Vector2(640, 0)
 	draft_panel.size = Vector2(640, 220)
 
