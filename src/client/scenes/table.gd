@@ -883,6 +883,17 @@ func _bot_reply() -> void:
 			_bot_say(full))
 
 
+## 本地 AI 随机回一个表情(40% 概率, 延迟 0.8-1.6s)
+func _bot_emoji_reply() -> void:
+	if randf() > 0.4:
+		return
+	var seat := 1 + randi() % 3
+	var id := randi() % EMOJIS.size()
+	get_tree().create_timer(randf_range(0.8, 1.6)).timeout.connect(func() -> void:
+		if is_inside_tree():
+			_show_emoji(seat, id))
+
+
 func _bot_say(full: String) -> void:
 	var seat := 1 + randi() % 3
 	_append_chat(seat, full)
@@ -1142,7 +1153,12 @@ func _build_ui() -> void:
 			_emoji_cd = 1.0
 			_sfx("pop")
 			if mode == "online" and net != null:
-				net.send_emoji(id))
+				net.send_emoji(id)
+			else:
+				_show_emoji(0, id)   # 本地: 自己的气泡 + AI 随机回一个
+				_bot_emoji_reply()
+			_emoji_open = false   # 发送后弹框自动关闭
+			_update_emoji_vis())
 		emoji_grid.add_child(eb)
 	# 快捷回复页(2 列, 发完整语句; 本地=气泡+AI回应, 联机=聊天广播)
 	phrase_grid = GridContainer.new()
@@ -1160,7 +1176,9 @@ func _build_ui() -> void:
 				_flash_error("说太快了")
 				return
 			_chat_cd = 1.0
-			_send_phrase(full))
+			_send_phrase(full)
+			_emoji_open = false   # 发送后弹框自动关闭
+			_update_emoji_vis())
 		phrase_grid.add_child(pb)
 	_emoji_toggle = AppTheme.make_button("😀",
 			Vector2(48, 48) if Responsive.is_touch() else Vector2(44, 40), 20)
