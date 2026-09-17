@@ -865,9 +865,7 @@ func _append_chat(seat: int, text: String) -> void:
 ## 快捷短语发送: 本地=进聊天行+随机 AI 回应; 联机=聊天广播
 func _send_phrase(full: String) -> void:
 	if mode == "online" and net != null:
-		net.send_chat(full)
-		var view: Dictionary = net.latest_view
-		_append_chat(int(view.get("my_seat", 0)), full)
+		net.send_chat(full)   # 回显由服务端 chat 事件渲染(防重复)
 	else:
 		_append_chat(0, full)
 		_bot_reply()
@@ -909,9 +907,9 @@ func _on_chat_send() -> void:
 	_chat_cd = 1.0
 	chat_edit.clear()
 	if mode == "online" and net != null:
+		# 服务端会广播给包括自己在内的所有人, 由 chat 事件统一渲染 —
+		# 本地不再 append(否则自己显示两条)
 		net.send_chat(text)
-		var view: Dictionary = net.latest_view
-		_append_chat(int(view.get("my_seat", 0)), text)
 
 
 # ---------------------------------------------------------------- UI 构建
@@ -1462,10 +1460,11 @@ func _relayout() -> void:
 	# 表情展开时聊天输入/发送右移让位(表情区 60..468)
 	var chat_ex := 480.0 if _emoji_open else 440.0
 	var send_x := 784.0 if _emoji_open else 744.0
-	chat_edit.position = Vector2(chat_ex if not compact else 240.0,
-			(8.0 if compact else (h - 58)))
-	chat_btn.position = Vector2(send_x if not compact else 592.0,
-			(8.0 if compact else (h - 58)))
+	var chat_e_x := chat_ex if not compact else 240.0
+	var chat_b_x := send_x if not compact else 592.0
+	chat_edit.position = Vector2(chat_e_x, (8.0 if compact else (h - 58)))
+	chat_edit.size = Vector2(maxf(chat_b_x - 8.0 - chat_e_x, 120.0), 36.0)
+	chat_btn.position = Vector2(chat_b_x, (8.0 if compact else (h - 58)))
 	# 表达面板: 😀 钮贴底左; 面板固定锚在其上方(向上弹出)
 	_emoji_toggle.position = Vector2(16, h - 58)
 	if emoji_popup != null:
