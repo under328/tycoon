@@ -236,8 +236,8 @@ func _ready() -> void:
 			_toast.add_theme_color_override("font_color", AppTheme.GREEN))
 	bk_row.add_child(import_btn)
 
-	# ── 关闭 ──
-	box.add_child(HSeparator.new())
+	# ── 关闭(固定面板底部, 不随中间内容滚动) ──
+	page.add_child(HSeparator.new())
 	var cc := CenterContainer.new()
 	var close := AppTheme.make_button(tr("保存并关闭"), Vector2(200, 42), 17)
 	close.pressed.connect(func() -> void:
@@ -245,11 +245,12 @@ func _ready() -> void:
 		_save_all()
 		_close())
 	cc.add_child(close)
-	box.add_child(cc)
+	page.add_child(cc)
 
 	_toast = AppTheme.make_label(14, AppTheme.DIM)
 	_toast.text = ""
-	box.add_child(_toast)
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	page.add_child(_toast)
 
 	Responsive.watch(self, _relayout)
 	visible = false
