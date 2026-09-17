@@ -73,6 +73,8 @@ func _ready() -> void:
 	fm = FightModeGd.new(Wallet.daily_seed()) if daily \
 			else FightModeGd.new()
 	fm.hard = daily   # 每日挑战: 怪物 HP/攻击 +25%, 玩家伤害 -20%
+	if daily:
+		Wallet.mark_daily_played()   # 每日一次: 开局即占用当日名额
 
 	var bg := ColorRect.new()
 	bg.color = Color("191934")
@@ -925,7 +927,7 @@ func _finish_run() -> void:
 	Audio.say("victory" if fm.run_won else "defeat", 1.0, true)   # 结算播报
 	var cleared: int = fm.cleared
 	var r: Dictionary = Wallet.grant_fight_reward(cleared,
-			1 if fm.run_won else 0)   # 通关即击破 1 个 BOSS
+			1 if fm.run_won else 0, daily)   # 通关即击破 1 个 BOSS; 每日全额/试炼减半
 	_run_diamonds += int(r["diamonds"])
 	Wallet.note_mission("m_fight")
 	Wallet.push_history({

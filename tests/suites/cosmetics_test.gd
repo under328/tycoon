@@ -24,6 +24,7 @@ func run(t) -> void:
 	_special_items(t)
 	_clear_record_item(t)
 	_backup_code(t)
+	_fight_reward_split(t)
 	_rank_title(t)
 	_signin(t)
 	_achievements(t)
@@ -352,6 +353,22 @@ func _clear_record_item(t) -> void:
 	w.queue_free()
 
 
+## 格斗奖励分层: 每日挑战全额(每日一次) / 格斗试炼减半(可重复)
+func _fight_reward_split(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_reward_split.cfg"
+	t.expect(not w.daily_played_today(), "每日未参与可开局")
+	w.mark_daily_played()
+	t.expect(w.daily_played_today(), "参与登记后当日锁定")
+	var rd: Dictionary = w.grant_fight_reward(5, 0, true)
+	t.expect_eq(int(rd["diamonds"]), 6, "每日挑战全额: (1+5) = 6 钻")
+	var rf: Dictionary = w.grant_fight_reward(5, 0, false)
+	t.expect_eq(int(rf["diamonds"]), 3, "格斗试炼减半: 6/2 = 3 钻")
+	var r0: Dictionary = w.grant_fight_reward(0, 0, false)
+	t.expect_eq(int(r0["diamonds"]), 1, "最低保底 1 钻")
+	w.queue_free()
+
+
 ## 钱包备份码: 导出→篡改/破坏拒绝→导入恢复全量字段
 func _backup_code(t) -> void:
 	var w = WalletGd.new()
@@ -412,7 +429,7 @@ func _consumables(t) -> void:
 	w.diamond_mult = 3
 	w.diamonds = 0
 	var r: Dictionary = w.grant_fight_reward(2, 0)
-	t.expect_eq(int(r["diamonds"]), 9, "三倍: (1+2)×3 = 9 钻 got=%d" % int(r["diamonds"]))
+	t.expect_eq(int(r["diamonds"]), 4, "三倍: (1+2)×3=9, 试炼减半 → 4 钻 got=%d" % int(r["diamonds"]))
 	# 命运骰消耗
 	w.inventory["item_fate_dice"] = 2
 	t.expect(w.consume_item("item_fate_dice"), "命运骰消耗")

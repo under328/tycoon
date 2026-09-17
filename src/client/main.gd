@@ -264,6 +264,8 @@ func _start_fight() -> void:
 
 ## 每日挑战: 当日固定种子(全设备同布局)
 func _start_fight_daily() -> void:
+	if Wallet.daily_played_today():
+		return   # 每日一次: 已参与当日不再开局(按钮同步置灰)
 	_open_fight(true)
 
 

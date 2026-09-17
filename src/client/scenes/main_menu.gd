@@ -564,6 +564,13 @@ func _build_mode_card(m: Array) -> Button:
 	# 点击方块主体 → 进入模式(子级 ? 钮自吸收点击, 不误触)
 	var mmode := str(m[3])
 	var msig := str(m[2])
+	if msig == "fight_daily" and Wallet.daily_played_today():
+		card.disabled = true   # 每日挑战每日一次: 已参与当日置灰
+		desc.text = str(m[1]) + "
+今日已参与, 明天再来 — 格斗试炼奖励不受限"
+	if msig == "fight_daily" and not Wallet.daily_played_today():
+		desc.text = str(m[1]) + "
+每日一次, 奖励为格斗试炼的两倍"
 	card.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close_mode_select()

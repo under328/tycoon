@@ -397,8 +397,9 @@ func buy_special(item_id: String) -> bool:
 
 ## ── 格斗试炼 ──
 
-## 通关/终局发放: 层数越高钻石越多(1 + 层数); 记录历史最高层
-func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
+## 通关/终局发放: 层数越高钻石越多(1 + 层数); 记录历史最高层。
+## daily=每日挑战(每日一次, 全额); 格斗试炼可重复, 奖励为其一半。
+func grant_fight_reward(floor_num: int, bosses: int = 0, daily: bool = false) -> Dictionary:
 	fight_runs += 1
 	if floor_num >= 5:
 		fight_clears += 1
@@ -409,6 +410,8 @@ func grant_fight_reward(floor_num: int, bosses: int = 0) -> Dictionary:
 	elif double_diamond_active():
 		mult = 2
 	var d := (1 + floor_num) * mult
+	if not daily:
+		d = maxi(int(d * 0.5), 1)   # 格斗试炼: 每日挑战奖励的一半
 	diamonds += d
 	diamonds_earned += d
 	var best := maxi(fight_best, floor_num)
@@ -453,12 +456,28 @@ func daily_seed() -> int:
 	return int(str(_today()).replace("-", ""))
 
 
+## 每日挑战每日一次: 今日是否已参与(参与即登记, 当日不可再开新局)
+func daily_played_today() -> bool:
+	return daily_day == _today()
+
+
+## 登记今日参与(开局时调用): 占用当日名额并重置当日最佳
+func mark_daily_played() -> void:
+	if daily_played_today():
+		return
+	daily_day = _today()
+	daily_best_round = 0
+	daily_best_hp = 0
+	daily_days += 1
+	_mark_dirty()
+
+
 ## 每日挑战结算: 记录当日最佳(回合优先, 同回合比剩余生命%);
 ## 跨日首次参与计入天数。返回 {new_day, better, best_round, best_hp}
 func record_daily(rounds: int, hp_pct: int) -> Dictionary:
 	var today := _today()
 	var new_day: bool = daily_day != today
-	if new_day:
+	if new_day:   # 兜底: 正常流程开局已 mark_daily_played, 这里仅异常路径生效
 		daily_day = today
 		daily_best_round = 0
 		daily_best_hp = 0
@@ -761,7 +780,8 @@ func export_backup() -> String:
 ## 返回 {gold, diamonds} 或 {error: 原因}。
 func import_backup(code: String) -> Dictionary:
 	var t := code.strip_edges().replace(" ", "").replace("
-", "").replace("", "")
+", "").replace("
+", "")
 	if not t.begins_with(BACKUP_PREFIX):
 		return {"error": "不是有效的备份码"}
 	var rest := t.substr(BACKUP_PREFIX.length())
