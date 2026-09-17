@@ -201,6 +201,41 @@ func _ready() -> void:
 		for c: Control in _display_ctrls:
 			c.visible = false
 
+	# ── 备份(跨设备迁移进度) ──
+	box.add_child(_section(tr("备份")))
+	var bk_hint := AppTheme.make_label(13, AppTheme.DIM)
+	bk_hint.text = tr("导出备份码复制给新设备, 导入后恢复全部进度(金币/钻石/装扮/成就)")
+	bk_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bk_hint.custom_minimum_size = Vector2(0, 0)
+	box.add_child(bk_hint)
+	var bk_row := HBoxContainer.new()
+	bk_row.add_theme_constant_override("separation", 10)
+	box.add_child(bk_row)
+	var export_btn := AppTheme.make_button(tr("导出备份码"), Vector2(150, 42), 15)
+	export_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var code: String = Wallet.export_backup()
+		DisplayServer.clipboard_set(code)
+		_toast.text = tr("备份码已复制到剪贴板, 发给新设备粘贴导入"))
+	bk_row.add_child(export_btn)
+	var import_edit := LineEdit.new()
+	import_edit.custom_minimum_size = Vector2(220, 40)
+	import_edit.placeholder_text = tr("粘贴备份码")
+	import_edit.add_theme_font_size_override("font_size", 13)
+	bk_row.add_child(import_edit)
+	var import_btn := AppTheme.make_button(tr("导 入"), Vector2(90, 40), 14)
+	import_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		var r: Dictionary = Wallet.import_backup(import_edit.text)
+		if r.has("error"):
+			_toast.text = tr("导入失败: %s") % str(r["error"])
+			_toast.add_theme_color_override("font_color", AppTheme.RED)
+		else:
+			import_edit.text = ""
+			_toast.text = tr("导入成功: 金币 %d · 钻石 %d") % [int(r["gold"]), int(r["diamonds"])]
+			_toast.add_theme_color_override("font_color", AppTheme.GREEN))
+	bk_row.add_child(import_btn)
+
 	# ── 关闭 ──
 	box.add_child(HSeparator.new())
 	var cc := CenterContainer.new()

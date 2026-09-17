@@ -23,6 +23,7 @@ func run(t) -> void:
 	_server_pool(t)
 	_special_items(t)
 	_clear_record_item(t)
+	_backup_code(t)
 	_rank_title(t)
 	_signin(t)
 	_achievements(t)
@@ -349,6 +350,47 @@ func _clear_record_item(t) -> void:
 	t.expect_eq(int(w.gold), 500, "金币不受影响")
 	t.expect_eq(int(w.purchases), 1, "消费计数保留")
 	w.queue_free()
+
+
+## 钱包备份码: 导出→篡改/破坏拒绝→导入恢复全量字段
+func _backup_code(t) -> void:
+	var w = WalletGd.new()
+	w.save_path = "user://test_backup_code.cfg"
+	w.gold = 777
+	w.diamonds = 42
+	w.local_wins = 9
+	w.local_matches = 33
+	w.unlocked = ["first_win", "wins_10"]
+	w.inventory["item_revive_coin"] = 2
+	w.fight_best = 4
+	var code: String = w.export_backup()
+	t.expect(code.begins_with("TB1-"), "备份码前缀 TB1-")
+	t.expect(code.length() > 60, "备份码包含完整载荷")
+	# 篡改与破坏
+	w.gold = 0
+	w.diamonds = 0
+	t.expect(w.import_backup(code + "X").has("error"), "篡改尾字符被拒")
+	t.expect(w.import_backup("TB1-AAAAAAAA-10-JUNK").has("error"), "乱码被拒")
+	t.expect(w.import_backup("hello world").has("error"), "无前缀被拒")
+	# 正常导入恢复
+	var r: Dictionary = w.import_backup(code)
+	t.expect(not r.has("error"), "导入成功")
+	t.expect_eq(int(w.gold), 777, "金币恢复")
+	t.expect_eq(int(w.diamonds), 42, "钻石恢复")
+	t.expect_eq(int(w.local_wins), 9, "胜场恢复")
+	t.expect_eq(int(w.local_matches), 33, "场次恢复")
+	t.expect_eq(int(w.unlocked.size()), 2, "成就恢复")
+	t.expect_eq(int(w.fight_best), 4, "格斗纪录恢复")
+	t.expect_eq(int(w.item_count("item_revive_coin")), 2, "库存恢复")
+	# 跨实例: 另一钱包实例从存档读回(持久化闭环)
+	w.save_wallet()
+	var w2 = WalletGd.new()
+	w2.save_path = "user://test_backup_code.cfg"
+	w2.load_wallet()
+	t.expect_eq(int(w2.gold), 777, "存档落盘后新实例读回金币")
+	t.expect_eq(int(w2.diamonds), 42, "存档落盘后新实例读回钻石")
+	w.queue_free()
+	w2.queue_free()
 
 
 ## 消耗品道具: 购买入库存/消耗/三倍钻石/复活币任务

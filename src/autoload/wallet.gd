@@ -717,6 +717,115 @@ func clear_records() -> void:
 	_mark_dirty()
 
 
+## ── 钱包备份码(P1 阶段一) ──
+## 导出: 持久化字段 → JSON → zlib 压缩 → base64 + 校验和(防手改)。
+## 校验和为休闲级防篡改, 非加密签名。跨设备迁移: 导出码在另一设备导入。
+
+const BACKUP_SALT := "TB1::daifugo::v1::9f27c41b"
+const BACKUP_PREFIX := "TB1-"
+
+## 全部持久化字段的紧凑载荷(短键压缩体积)
+func _backup_payload() -> Dictionary:
+	return {
+		"v": 1,
+		"g": gold, "d": diamonds,
+		"os": owned_skins, "oc": owned_cards,
+		"es": equipped_skin, "ec": equipped_card,
+		"lm": local_matches, "lw": local_wins,
+		"ul": unlocked, "hs": history,
+		"fb": fight_best, "fr": fight_runs, "fb3": fight_bosses,
+		"fc": fight_clears, "rr": rogue_runs, "rw": rogue_wins,
+		"pw": pvp_wins,
+		"ddy": daily_day, "dbr": daily_best_round, "dbh": daily_best_hp,
+		"ddy2": daily_days,
+		"ms": mod_seen, "mt": mod_taken,
+		"pu": purchases, "rv": revives, "iv": inventory,
+		"dmd": diamond_mult_day, "dm": diamond_mult,
+		"sdy": sign_day, "sst": sign_streak, "sto": sign_total,
+		"de": diamonds_earned, "sb": special_bought,
+		"fw": first_win_day, "ddd": double_diamond_day,
+		"mdy": mission_day, "mp": mission_progress, "mc": mission_claimed,
+	}
+
+
+## 导出备份码(含校验和)。格式: TB1-校验8-解压尺寸-base64载荷
+func export_backup() -> String:
+	var json := JSON.stringify(_backup_payload())
+	var raw := json.to_utf8_buffer()
+	var sum := (json + BACKUP_SALT).sha256_text().substr(0, 8)
+	var b64 := Marshalls.raw_to_base64(raw.compress())
+	return "%s%s-%d-%s" % [BACKUP_PREFIX, sum, raw.size(), b64]
+
+
+## 导入备份码: 校验通过则覆盖恢复并落盘。
+## 返回 {gold, diamonds} 或 {error: 原因}。
+func import_backup(code: String) -> Dictionary:
+	var t := code.strip_edges().replace(" ", "").replace("
+", "").replace("", "")
+	if not t.begins_with(BACKUP_PREFIX):
+		return {"error": "不是有效的备份码"}
+	var rest := t.substr(BACKUP_PREFIX.length())
+	var parts := rest.split("-")
+	if parts.size() != 3:
+		return {"error": "备份码格式不完整"}
+	var sum_in := parts[0]
+	var size_in := int(parts[1])
+	var compressed := Marshalls.base64_to_raw(parts[2])
+	if compressed.is_empty() or size_in <= 0 or size_in > 1 << 20:
+		return {"error": "备份码内容无法读取"}
+	var raw := compressed.decompress(size_in)
+	if raw.is_empty():
+		return {"error": "备份码解压失败"}
+	var json := raw.get_string_from_utf8()
+	if (json + BACKUP_SALT).sha256_text().substr(0, 8) != sum_in:
+		return {"error": "备份码校验不符(可能被改动)"}
+	var parsed = JSON.parse_string(json)
+	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("v", 0)) != 1:
+		return {"error": "备份码版本不受支持"}
+	# 覆盖恢复(与 save_wallet 字段一一对应)
+	gold = maxi(int(parsed.get("g", 0)), 0)
+	diamonds = maxi(int(parsed.get("d", 0)), 0)
+	owned_skins = parsed.get("os", ["skin_default"])
+	owned_cards = parsed.get("oc", ["card_washi"])
+	equipped_skin = str(parsed.get("es", "skin_default"))
+	equipped_card = str(parsed.get("ec", "card_washi"))
+	local_matches = maxi(int(parsed.get("lm", 0)), 0)
+	local_wins = maxi(int(parsed.get("lw", 0)), 0)
+	unlocked = parsed.get("ul", [])
+	history = parsed.get("hs", [])
+	fight_best = maxi(int(parsed.get("fb", 0)), 0)
+	fight_runs = maxi(int(parsed.get("fr", 0)), 0)
+	fight_bosses = maxi(int(parsed.get("fb3", 0)), 0)
+	fight_clears = maxi(int(parsed.get("fc", 0)), 0)
+	rogue_runs = maxi(int(parsed.get("rr", 0)), 0)
+	rogue_wins = maxi(int(parsed.get("rw", 0)), 0)
+	pvp_wins = maxi(int(parsed.get("pw", 0)), 0)
+	daily_day = str(parsed.get("ddy", ""))
+	daily_best_round = maxi(int(parsed.get("dbr", 0)), 0)
+	daily_best_hp = clampi(int(parsed.get("dbh", 0)), 0, 100)
+	daily_days = maxi(int(parsed.get("ddy2", 0)), 0)
+	mod_seen = parsed.get("ms", {})
+	mod_taken = parsed.get("mt", {})
+	purchases = maxi(int(parsed.get("pu", 0)), 0)
+	revives = maxi(int(parsed.get("rv", 0)), 0)
+	inventory = parsed.get("iv", {})
+	diamond_mult_day = str(parsed.get("dmd", ""))
+	diamond_mult = maxi(int(parsed.get("dm", 1)), 1)
+	sign_day = str(parsed.get("sdy", ""))
+	sign_streak = maxi(int(parsed.get("sst", 0)), 0)
+	sign_total = maxi(int(parsed.get("sto", 0)), 0)
+	diamonds_earned = maxi(int(parsed.get("de", 0)), 0)
+	special_bought = maxi(int(parsed.get("sb", 0)), 0)
+	first_win_day = str(parsed.get("fw", ""))
+	double_diamond_day = str(parsed.get("ddd", ""))
+	mission_day = str(parsed.get("mdy", ""))
+	mission_progress = parsed.get("mp", {})
+	mission_claimed = parsed.get("mc", {})
+	save_wallet()
+	balance_changed.emit()
+	return {"gold": gold, "diamonds": diamonds}
+
+
 ## 复活币: 有库存则消耗并复活
 func try_consume_revive() -> bool:
 	if item_count("item_revive_coin") > 0 and consume_item("item_revive_coin"):
