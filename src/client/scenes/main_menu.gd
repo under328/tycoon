@@ -7,6 +7,7 @@ signal local_game(mode: String)
 signal online_game
 signal fight_mode
 signal fight_daily
+signal replay_game(entry: Dictionary)   # 从档案回放列表进入只读回放
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
 const SettingsPanelScript = preload("res://src/client/ui/settings_panel.gd")
@@ -199,6 +200,9 @@ func _build_profile() -> void:
 			Audio.play("click")
 			var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
 			_mount_page(pp)
+			pp.replay_selected.connect(func(entry: Dictionary) -> void:
+				pp._close()
+				replay_game.emit(entry))
 			pp.closed.connect(func() -> void:
 				pp.queue_free()
 				_refresh_profile()))
@@ -339,6 +343,9 @@ func _play_entrance() -> void:
 		Audio.play("click")
 		var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
 		_mount_page(pp)
+		pp.replay_selected.connect(func(entry: Dictionary) -> void:
+			pp._close()
+			replay_game.emit(entry))
 		pp.closed.connect(func() -> void:
 			pp.queue_free()
 			_refresh_balance()))

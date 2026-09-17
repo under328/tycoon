@@ -17,6 +17,7 @@ const GOLD_PER_POINT := 1        # 1 积分 = 1 金币(再乘输赢倍率)
 const FIRST_WIN_DIAMONDS := 2
 const CODEX_TARGET := 11   # 命运卡图鉴全收集目标   # 每日首胜奖励钻石数
 const HISTORY_MAX := 20         # 对局记录保留条数
+const REPLAY_MAX := 10          # 对局回放保留场数
 
 ## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
 const SIGN_REWARDS := [
@@ -102,6 +103,7 @@ var diamonds_earned := 0       # 累计获得钻石(成就统计)
 var special_bought := 0        # 累计购入特殊道具数(成就统计)
 var unlocked: Array = []       # 已解锁成就 id
 var history: Array = []        # 对局记录(最近 HISTORY_MAX 条)
+var replays: Array = []        # 对局回放(最近 REPLAY_MAX 场: {v,rogue,seed,actions,day,mode})
 var fight_best := 0            # 格斗试炼历史最远回合(1-5)
 var fight_runs := 0            # 累计格斗局数
 var fight_bosses := 0          # 累计击败 Boss 数
@@ -237,6 +239,8 @@ func _read_into(path: String) -> bool:
 	unlocked = ul
 	var hs: Array = cf.get_value("wallet", "history", [])
 	history = hs
+	var rps: Array = cf.get_value("wallet", "replays", [])
+	replays = rps
 	fight_best = int(cf.get_value("wallet", "fight_best", 0))
 	fight_runs = int(cf.get_value("wallet", "fight_runs", 0))
 	fight_bosses = int(cf.get_value("wallet", "fight_bosses", 0))
@@ -287,6 +291,7 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "special_bought", special_bought)
 	cf.set_value("wallet", "unlocked", unlocked)
 	cf.set_value("wallet", "history", history)
+	cf.set_value("wallet", "replays", replays)
 	cf.set_value("wallet", "fight_best", fight_best)
 	cf.set_value("wallet", "fight_runs", fight_runs)
 	cf.set_value("wallet", "fight_bosses", fight_bosses)
@@ -672,6 +677,14 @@ func push_history(entry: Dictionary) -> void:
 	history.append(entry)
 	while history.size() > HISTORY_MAX:
 		history.pop_front()
+	_mark_dirty()
+
+
+## 追加一场对局回放(只留最近 REPLAY_MAX 场, 新的在前)
+func push_replay(entry: Dictionary) -> void:
+	replays.push_front(entry)
+	while replays.size() > REPLAY_MAX:
+		replays.pop_back()
 	_mark_dirty()
 
 

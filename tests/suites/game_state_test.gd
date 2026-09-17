@@ -20,6 +20,7 @@ func run(t) -> void:
 	_exchange_details(t)
 	_view_privacy(t)
 	_counter_view(t)
+	_replay_determinism(t)
 	_finish_no_free_lead(t)
 
 
@@ -415,6 +416,33 @@ func _counter_view(t) -> void:
 						in_hands += 1
 			t.expect_eq(in_hands + int(dead[v - 3]), int(totals[v]),
 					"点数 %d 守恒: 手牌+死牌=总张数" % v)
+
+
+## 回放确定性: seed 重建开局 + 动作序列依次重放 → 终局比分/阶段完全一致
+## (对局回放系统的正确性基础)
+func _replay_determinism(t) -> void:
+	var live := GameStateGd.new_match({"rogue": false}, 424242)
+	var actions: Array = []
+	var guard := 0
+	while str(live["phase"]) != "game_end" and guard < 300:
+		guard += 1
+		var act := BotPlayerGd.decide(live, int(live["turn"]), "normal")
+		var r := GameStateGd.apply(live, act)
+		if not bool(r["ok"]):
+			break
+		actions.append(act)
+		live = r["state"]
+	t.expect(actions.size() >= 20, "采集动作序列(%d 手)" % actions.size())
+	# 重放: 同 seed 重建开局 + 依次应用 → 中间状态必须逐项一致
+	var st2 := GameStateGd.new_match({"rogue": false}, 424242)
+	for a in actions:
+		var r2 := GameStateGd.apply(st2, a)
+		st2 = r2["state"]
+	t.expect(st2["hands"] == live["hands"], "回放各家手牌一致")
+	t.expect(st2["dead"] == live["dead"], "回放死牌一致")
+	t.expect(st2["field"] == live["field"], "回放出牌区一致")
+	t.expect_eq(st2["scores"], live["scores"], "回放比分一致")
+	t.expect_eq(int(st2["round"]), int(live["round"]), "回放局数一致")
 
 
 func _view_privacy(t) -> void:

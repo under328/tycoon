@@ -54,6 +54,10 @@ var draft_panel: PanelContainer
 var _aura: Control            # 变身光环(五张集满显示, 随主花色变色)
 var _aura_spin := 0.0
 var _transform_floor := -1    # 已播变身演出的层(每层首次集满五张触发)
+var _bg: ColorRect            # 战斗背景(随怪群主题变色)
+# 每怪群背景色调: 翡翠森林/回声洞穴/熔火之心/冰封雪原/幽暗墓地
+const GROUP_TINTS := [Color("16281a"), Color("221a38"), Color("341a12"),
+		Color("122530"), Color("261a2e")]
 var draft_title: Label
 var cand_row: HBoxContainer
 var draft_ops: HBoxContainer
@@ -79,11 +83,13 @@ func _ready() -> void:
 	if daily:
 		Wallet.mark_daily_played()   # 每日一次: 开局即占用当日名额
 	Audio.play_bgm("fight")   # 格斗专属战斗曲
+	if daily:
+		Audio.say("daily_start", 1.0, true)   # 每日挑战开场播报
 
-	var bg := ColorRect.new()
-	bg.color = Color("191934")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	_bg = ColorRect.new()
+	_bg.color = Color("191934")
+	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_bg)
 
 	header = preload("res://src/client/ui/p5_header.gd").new()
 	header.text = "每日挑战" if daily else "格斗试炼"
@@ -374,6 +380,8 @@ func _suit_color(su: int) -> Color:
 func _update_transform() -> void:
 	if _aura == null:
 		return
+	if _bg != null and fm.group < GROUP_TINTS.size():
+		_bg.color = Color("191934").lerp(GROUP_TINTS[fm.group], 0.6)
 	var on := _transformed()
 	_aura.visible = on
 	_aura.position = _player_home - _aura.size / 2.0

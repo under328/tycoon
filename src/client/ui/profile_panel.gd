@@ -4,6 +4,7 @@
 extends Control
 
 signal closed
+signal replay_selected(entry: Dictionary)
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const WalletGd = preload("res://src/autoload/wallet.gd")
@@ -104,6 +105,7 @@ func _ready() -> void:
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动, 保证滑屏顺滑
 	_scroll.add_child(_grid)
+	_grid.set_meta("replay_emit", replay_selected)
 
 	# 底部提示(领取奖励回执等)
 	_toast = AppTheme.make_label(14, AppTheme.GOLD)
@@ -308,6 +310,23 @@ func _preload_mods() -> Array:
 ## 战绩: 头部汇总 + 最近记录行(模式/名次/积分/奖励)
 func _build_history() -> void:
 	var total := Wallet.local_matches
+	# 对局回放列表(最近 10 场, 点击进入只读回放)
+	if not Wallet.replays.is_empty():
+		var rp_head := AppTheme.make_label(15, AppTheme.GOLD)
+		rp_head.text = tr("对局回放(点击观看)")
+		_grid.add_child(rp_head)
+		for rp in Wallet.replays:
+			var entry: Dictionary = rp
+			var hands: int = (rp.get("actions", []) as Array).size()
+			var txt := "▶ %s · %s · %d 手" % [str(rp.get("day", "")),
+					str(rp.get("mode", "")), hands]
+			var btn := AppTheme.make_button(txt, Vector2(0, 40), 13)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.mouse_filter = Control.MOUSE_FILTER_STOP
+			btn.pressed.connect(func() -> void:
+				Audio.play("click")
+				replay_selected.emit(entry))
+			_grid.add_child(btn)
 	var wins := Wallet.local_wins
 	var head := AppTheme.make_label(16, AppTheme.WHITE)
 	head.text = tr("共 %d 场 · 胜 %d 场 · 胜率 %d%% · 称号 %s") % [total, wins,

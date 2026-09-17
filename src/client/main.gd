@@ -50,6 +50,7 @@ func _ready() -> void:
 	menu.online_game.connect(_start_online)
 	menu.fight_mode.connect(_start_fight)
 	menu.fight_daily.connect(_start_fight_daily)
+	menu.replay_game.connect(_open_replay)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
 
@@ -267,6 +268,22 @@ func _start_fight_daily() -> void:
 	if Wallet.daily_played_today():
 		return   # 每日一次: 已参与当日不再开局(按钮同步置灰)
 	_open_fight(true)
+
+
+## 只读回放: 挂载牌桌回放模式(录制动作自动播放)
+func _open_replay(entry: Dictionary) -> void:
+	if menu != null:
+		menu.visible = false
+	if table != null and is_instance_valid(table):
+		table.queue_free()
+		table = null
+	table = TableScene.instantiate()
+	table.name = "Table"
+	table.mode = "local"
+	table.replay_data = entry
+	add_child(table)
+	_fit_safe_area(table)
+	table.finished.connect(_back_to_menu, CONNECT_ONE_SHOT)
 
 
 func _open_fight(daily: bool) -> void:

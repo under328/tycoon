@@ -72,6 +72,7 @@ MANIFEST.update({
     "f_clear": "通关!",
     "f_transform": "变身!",
     "f_boss_skill": "看招!",
+    "daily_start": "每日挑战, 开始!",
     "f_round_win": "得分!",
     "f_round_lose": "失分!",
     "f_vs": "对决!",

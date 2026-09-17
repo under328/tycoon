@@ -81,6 +81,12 @@ var counter_toggle: Button = null
 var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
 var _counter_totals := {}       # 点数值 -> 总张数(王受带王与命运卡影响)
 var _counter_round := -1        # 记牌器归属局号(跨局重置; 本地/联机统一驱动)
+var _rec_actions: Array = []    # 回放录制: 本局动作序列(仅本地局)
+var _recording := false         # 回放录制开关
+var replay_data: Dictionary = {} # 回放数据(非空 = 只读回放模式)
+var _replay_actions: Array = [] # 回放待应用的动作序列
+var _replay_idx := 0            # 回放已应用动作数
+var _replay_wait := 0.0         # 回放节奏计时
 var emoji_popup: PanelContainer = null  # 表情/快捷回复向上弹出面板
 var emoji_grid: GridContainer = null
 var phrase_grid: GridContainer = null
@@ -124,7 +130,9 @@ func _ready() -> void:
 	# 自适应重排: 本地/联机都要(原先连接在 _new_match, 联机永不触发)
 	resized.connect(_relayout)
 	_relayout.call_deferred()
-	if mode == "online":
+	if not replay_data.is_empty():
+		_start_replay()
+	elif mode == "online":
 		_bind_net()
 		_refresh()
 		# 开局首条 draft 视图可能早于本表建立: 补弹命运二选一
@@ -137,7 +145,39 @@ func _ready() -> void:
 	Audio.play_bgm("rogue" if rogue else "table")
 
 
+## 只读回放: 按 seed 重建开局, 依次应用录制动作(语音/音效/记牌器全保留)
+func _start_replay() -> void:
+	_recording = false
+	var rogue_re: bool = bool(replay_data.get("rogue", false))
+	state = GameStateGd.new_match({"rogue": rogue_re}, int(replay_data.get("seed", 0)))
+	_replay_actions = (replay_data.get("actions", []) as Array).duplicate()
+	_replay_idx = 0
+	_replay_wait = 0.8
+	var ids: Array = []
+	for sk in SkinsLib.SKINS:
+		ids.append(str(sk["id"]))
+	_seat_skins = [Wallet.equipped_skin, "", "", ""]
+	for i in range(1, 4):
+		_seat_skins[i] = ids[randi() % ids.size()]
+
+
 func _process(delta: float) -> void:
+	# 回放驱动: 每 0.85s 应用一手录制动作
+	if not replay_data.is_empty() and _replay_idx < _replay_actions.size():
+		_replay_wait += delta
+		if _replay_wait >= 0.85:
+			_replay_wait = 0.0
+			var act: Dictionary = _replay_actions[_replay_idx]
+			_replay_idx += 1
+			var r := GameStateGd.apply(state, act)
+			if bool(r["ok"]):
+				state = r["state"]
+			_refresh()
+			if str(state.get("phase", "")) == "game_end":
+				var done_tw := get_tree().create_timer(2.0)
+				done_tw.timeout.connect(func() -> void:
+					if is_inside_tree():
+						finished.emit())
 	if _emoji_cd > 0.0:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:
@@ -223,6 +263,9 @@ func _new_match() -> void:
 	_voice_fin = -1
 	_voice_last1 = {}
 	_counter_round = -1
+	# 回放录制: 本地局(非回放模式)从开局起采集全部动作
+	_recording = replay_data.is_empty()
+	_rec_actions = [{"t": "start", "rogue": rogue}]
 	# 本地: 我用已装备皮肤, AI 随机皮肤
 	var ids: Array = []
 	for s in SkinsLib.SKINS:
@@ -240,7 +283,7 @@ func _new_match() -> void:
 ## 代际计数: 离开对局会重启新循环, 挂起中的旧协程恢复后凭 gen 失配自灭,
 ## 否则旧+新两个循环会同时驱动 AI(双出牌/非法动作)。
 func _advance() -> void:
-	if mode == "online":
+	if mode == "online" or not replay_data.is_empty():
 		return
 	if advancing:
 		return
@@ -312,6 +355,8 @@ func _advance() -> void:
 				continue
 			var action := BotPlayerGd.decide(state, int(state["turn"]), GameSettings.ai_level)
 			var r2 := GameStateGd.apply(state, action)
+			if _recording and bool(r2["ok"]):
+				_rec_actions.append(action.duplicate())
 			if not bool(r2["ok"]):
 				push_error("local table: 换牌返还非法 %s" % str(r2["error"]))
 				break
@@ -326,6 +371,8 @@ func _advance() -> void:
 				return
 			var r := GameStateGd.apply(state, {"t": "next_round"})
 			if bool(r["ok"]):
+				if _recording:
+					_rec_actions.append({"t": "next_round"})
 				state = r["state"]
 				if rogue and str(state["phase"]) == "draft":
 					# 引擎进入 draft(还有下一局) → 弹命运二选一;
@@ -371,6 +418,8 @@ func _my_pending_return(view: Dictionary) -> Dictionary:
 
 func _local_apply(action: Dictionary) -> Dictionary:
 	var r := GameStateGd.apply(state, action)
+	if _recording and bool(r["ok"]):
+		_rec_actions.append(action.duplicate())
 	if bool(r["ok"]) and int(action.get("seat", -1)) == 0 			and str(action["t"]) == "play" 			and (action["cards"] as Array).size() == 4:
 		Wallet.note_mission("m_quad")  # 我方四条=炸弹(本规则集 4 张组合仅四条)
 	if bool(r["ok"]) and str(action["t"]) == "pass":
@@ -379,12 +428,14 @@ func _local_apply(action: Dictionary) -> Dictionary:
 
 
 func _human_apply(action: Dictionary) -> void:
-	if advancing or state.is_empty():
+	if advancing or state.is_empty() or not replay_data.is_empty():
 		return
 	if str(action["t"]) == "pass":
 		_sfx("pass")
 		Audio.say("pass")
 	var r := GameStateGd.apply(state, action)
+	if _recording and bool(r["ok"]):
+		_rec_actions.append(action.duplicate())
 	if not bool(r["ok"]):
 		_flash_error(GameStateGd.error_msg(str(r["error"])))
 		return
@@ -398,6 +449,8 @@ func _human_apply(action: Dictionary) -> void:
 
 
 func _on_play_pressed() -> void:
+	if not replay_data.is_empty():
+		return   # 回放只读
 	_sfx("click")
 	# 换牌阶段: 确认返还所选牌
 	var cur_view: Dictionary = _current_view()
@@ -430,6 +483,8 @@ func _on_play_pressed() -> void:
 
 ## 提示: 用 AI 策略自动选中一手合理牌型, 玩家确认后打出; 压不过则自动不要。
 func _on_hint_pressed() -> void:
+	if not replay_data.is_empty():
+		return   # 回放只读
 	_sfx("click")
 	var view: Dictionary
 	if mode == "online" and net != null:
@@ -448,6 +503,8 @@ func _on_hint_pressed() -> void:
 
 
 func _on_pass_pressed() -> void:
+	if not replay_data.is_empty():
+		return   # 回放只读
 	_sfx("click")
 	if mode == "online":
 		Audio.say("pass")
@@ -465,6 +522,8 @@ func _auto_pass() -> void:
 		net.pass_turn()
 		return
 	var r := GameStateGd.apply(state, {"t": "pass", "seat": 0})
+	if _recording and bool(r["ok"]):
+		_rec_actions.append({"t": "pass", "seat": 0})
 	print("[auto] pass ok=%s passes=%d turn=%d" % [str(r["ok"]),
 			int(r["state"].get("passes", -9)) if bool(r["ok"]) else -9,
 			int(r["state"].get("turn", -9)) if bool(r["ok"]) else -9])
@@ -654,6 +713,8 @@ func _show_rogue_choice() -> void:
 						{"t": "rogue_pick", "idx": idx})
 				if bool(r["ok"]):
 					state = r["state"]
+					if _recording:
+						_rec_actions.append({"t": "rogue_pick", "idx": idx})
 			_show_rogue_reveal(idx))
 		row.add_child(pick)
 	var dice_row := HBoxContainer.new()
@@ -1537,6 +1598,15 @@ func _refresh_view(view: Dictionary) -> void:
 			_spawn_fx("anti_revolution")
 			Audio.play_bgm("rogue" if rogue else "table")  # 革命解除: 切回大调
 
+	# 回放录制收尾: 对局打完 → 存入钱包回放列表(本地局)
+	if phase == "game_end" and _prev_phase != "game_end" and _recording:
+		_recording = false
+		Wallet.push_replay({
+			"v": 1, "rogue": rogue, "seed": int(state.get("seed", 0)),
+			"actions": _rec_actions.duplicate(),
+			"day": Time.get_date_string_from_system(),
+			"mode": "肉鸽" if rogue else "普通",
+		})
 	# 阶段切换: 交换过场 / 一落千丈(上局大富豪本轮垫底)
 	if phase != _prev_phase:
 		if phase == "exchange":
