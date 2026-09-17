@@ -1169,7 +1169,7 @@ func _relayout() -> void:
 	# 抽牌面板: 底部居中
 	draft_panel.position = Vector2(w / 2.0 - 330.0, maxf(h * 0.30, 90.0))
 	draft_panel.custom_minimum_size = Vector2(640, 0)
-	draft_panel.size = Vector2(640, 220)
+	draft_panel.size = Vector2(640, 0)   # 高度随内容(提示多行)自动撑开
 
 
 func _layout_bars(w: float, h: float) -> void:

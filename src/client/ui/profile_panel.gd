@@ -105,7 +105,6 @@ func _ready() -> void:
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE  # 不吃触屏拖动, 保证滑屏顺滑
 	_scroll.add_child(_grid)
-	_grid.set_meta("replay_emit", replay_selected)
 
 	# 底部提示(领取奖励回执等)
 	_toast = AppTheme.make_label(14, AppTheme.GOLD)

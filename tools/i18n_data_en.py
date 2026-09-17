@@ -579,7 +579,6 @@ T.update({
     "图鉴见齐全部 10 张命运卡": "See all 10 Fate Cards",
     "联机格斗对战取得 1 场胜利": "Win an online Fight Duel",
     "🏆 成就解锁: %s": "🏆 Achievement: %s",
-    " cumulative": "",
 })
 # ── v1.2.1 批量补全 6: 牌桌/怪群/命运卡/杂项 ──
 T.update({

@@ -205,6 +205,8 @@ func _voice_stream(key: String) -> AudioStream:
 
 
 func _on_voice_finished() -> void:
+	if not is_inside_tree():
+		return   # 退出期不再排程
 	get_tree().create_timer(0.08).timeout.connect(_pump_voice)
 
 
