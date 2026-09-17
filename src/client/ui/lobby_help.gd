@@ -1,4 +1,5 @@
-## 联机帮助: 翻页式图文说明(三步开房 / 朋友加入 / 主机须知 / 常见问题)。
+## 联机帮助: 居中弹窗式图文说明(三步开房 / 朋友加入 / 主机须知 / 常见问题)。
+## 实底面板背景 + 滚动内容 + 图示按面板宽度等比缩放(窄屏不重叠)。
 ## 用法: var h = LobbyHelpScript.new(); add_child(h); h.closed.connect(...)
 extends Control
 
@@ -19,108 +20,151 @@ const PAGES := [
 		"[color=#e0a83c]搜索不到附近主机?[/color] 确认双方连同一个 WiFi、路由器未开「AP 隔离」;\n也可在【服务器】手动填主机信息卡的局域网 IP 后点【连接】。\n[color=#e0a83c]一直「无法连接」?[/color] 确认主机在线、双方 Tailscale 都已登录(异地时)。\n[color=#e0a83c]被踢出并提示版本?[/color] 主机的游戏版本更新了, 重新下载进入即可。\n[color=#e0a83c]对局中掉线?[/color] 自动凭凭证重连回座(掉线期间 AI 代打), 无需任何操作。", 3],
 ]
 
+const FIG_W := 960.0   # 图示设计宽度(内部绝对坐标以此为基准, 整体等比缩放)
+const FIG_H := 280.0
+
 var page := 0
 var _title: Label
 var _body: RichTextLabel
 var _fig: Control
+var _fig_holder: Control
 var _dots: Array = []
+var _page_lbl: Label
 var _prev_btn: Button
 var _next_btn: Button
 var _close_lbl: Label
+var _panel: PanelContainer
+var _scroll: ScrollContainer
 
 
 func _ready() -> void:
-	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级,
-	# 不再手动赋视口尺寸(那会溢出父级边界, 手机上按钮超界)
+	# 父级是 Control(已按安全区内缩) → FULL_RECT 锚点自适应父级
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	size = get_parent_area_size()  # 代码 new 挂 Control 父下锚点不自动求值
 
+	# 半透明遮罩(点击空白关闭)
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.55)
+	dim.color = Color(0, 0, 0, 0.6)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_close())
 	add_child(dim)
 
+	# 居中实底弹窗面板
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+	_panel = PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 16
+	sb.content_margin_bottom = 18
+	_panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(_panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	_panel.add_child(v)
 
-	_title = _label(32, AppTheme.GOLD)
-	_title.position = Vector2(0, 46)
-	_title.custom_minimum_size = Vector2(size.x, 46)
-	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_title)
+	# 头行: 标题 + ✕
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	v.add_child(head)
+	_title = _label(26, AppTheme.GOLD)
+	_title.text = PAGES[0][0]
+	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(_title)
+	# 关闭用悬浮的「关闭 ✕」Label(见 _relayout 定位), 头行不再放按钮
 
+	# 滚动内容: 正文 + 图示(窄屏/矮屏时滚动查看, 内容不重叠)
+	_scroll = ScrollContainer.new()
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(_scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(content)
 	_body = RichTextLabel.new()
 	_body.bbcode_enabled = true
+	_body.fit_content = true
 	_body.scroll_active = false
-	_body.position = Vector2(160, 120)
-	_body.custom_minimum_size = Vector2(960, 150)
-	_body.size = Vector2(960, 150)
 	_body.add_theme_font_size_override("normal_font_size", 18)
-	add_child(_body)
-
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(_body)
+	_fig_holder = Control.new()
+	_fig_holder.custom_minimum_size = Vector2(FIG_W, FIG_H)
+	_fig_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(_fig_holder)
 	_fig = Control.new()
-	_fig.position = Vector2(160, 300)
-	_fig.custom_minimum_size = Vector2(960, 280)
-	add_child(_fig)
+	_fig.size = Vector2(FIG_W, FIG_H)
+	_fig_holder.add_child(_fig)
 
+	# 底部: 圆点 + 翻页(固定面板底, 不随内容滚动)
+	var dot_row := HBoxContainer.new()
+	dot_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dot_row.add_theme_constant_override("separation", 10)
+	v.add_child(dot_row)
 	for i in PAGES.size():
 		var dot := ColorRect.new()
 		dot.custom_minimum_size = Vector2(12, 12)
 		dot.size = Vector2(12, 12)
-		dot.position = Vector2(size.x / 2.0 - PAGES.size() * 11 + i * 22, 610)
-		add_child(dot)
+		dot_row.add_child(dot)
 		_dots.append(dot)
-
-	var prev := AppTheme.nav_button("◀ 上一页", Vector2(340, 646))
+	var nav := HBoxContainer.new()
+	nav.alignment = BoxContainer.ALIGNMENT_CENTER
+	nav.add_theme_constant_override("separation", 16)
+	v.add_child(nav)
+	var prev := AppTheme.make_button("◀ 上一页", Vector2(150, 44), 15)
 	prev.pressed.connect(func() -> void:
 		if page > 0:
 			_show(page - 1))
-	add_child(prev)
+	nav.add_child(prev)
 	_prev_btn = prev
-	var next := AppTheme.nav_button("下一页 ▶", Vector2(760, 646))
+	_page_lbl = _label(15, AppTheme.DIM)
+	_page_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	nav.add_child(_page_lbl)
+	var next := AppTheme.make_button("下一页 ▶", Vector2(150, 44), 15)
 	next.pressed.connect(func() -> void:
 		if page < PAGES.size() - 1:
 			_show(page + 1)
 		else:
 			_close())
-	add_child(next)
+	nav.add_child(next)
 	_next_btn = next
 
-	var close := _label(16, AppTheme.DIM)
-	close.text = "关闭 ✕"
-	close.position = Vector2(size.x - 110, 24)
-	close.mouse_filter = Control.MOUSE_FILTER_STOP
-	close.gui_input.connect(func(ev: InputEvent) -> void:
+	# 关闭 ✕(悬浮面板右上; Label 避免被遍历误按)
+	var close_lbl := _label(16, AppTheme.DIM)
+	close_lbl.text = "关闭 ✕"
+	close_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	close_lbl.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed:
 			_close())
-	add_child(close)
-	_close_lbl = close
+	add_child(close_lbl)
+	_close_lbl = close_lbl
 
 	_show(0)
 	Responsive.watch(self, _relayout)
 
 
-## 多设备自适应: 内容列(960 宽)水平居中, 高度富余下移居中;
-## 紧凑高度(手机)时底部控件钳到屏内。
+## 多设备自适应: 面板尺寸钳在视口内; 图示按面板内宽等比缩放(不重叠不越界)
 func _relayout() -> void:
 	var w := size.x
 	var h := size.y
 	if w < 100.0 or h < 100.0:
 		return
-	var cx := (w - 960.0) / 2.0
-	var dy := maxf(h - 720.0, 0.0) * 0.4
-	var sq := h < 660.0   # 紧凑: 图示/圆点/按钮整体上收
-	_title.custom_minimum_size = Vector2(w, 46)
-	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
-	_body.size = Vector2(960, (150.0 if not sq else 132.0))
-	_fig.position = Vector2(cx, (218.0 if sq else 300.0) + dy)
-	_fig.size = Vector2(960, (210.0 if sq else 280.0))
-	for i in _dots.size():
-		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
-				(h - 132.0 if sq else 610.0) + dy)
-	_prev_btn.position = Vector2(w / 2.0 - 300.0, (h - 78.0 if sq else 646.0) + dy)
-	_next_btn.position = Vector2(w / 2.0 + 120.0, (h - 78.0 if sq else 646.0) + dy)
-	_close_lbl.position = Vector2(w - 110.0, 24)
+	var pw := minf(1000.0, w - 24.0)
+	var ph := minf(700.0, h - 24.0)
+	_panel.custom_minimum_size = Vector2(pw, ph)
+	var inner_w := pw - 48.0
+	var fs := minf(1.0, inner_w / FIG_W)
+	_fig.scale = Vector2(fs, fs)
+	_fig_holder.custom_minimum_size = Vector2(FIG_W * fs, FIG_H * fs)
+	_close_lbl.position = Vector2((w - pw) / 2.0 + pw - 92.0, (h - ph) / 2.0 + 12.0)
 
 
 func _close() -> void:
@@ -132,9 +176,12 @@ func _show(p: int) -> void:
 	page = p
 	_title.text = PAGES[p][0]
 	_body.text = PAGES[p][1]
+	_page_lbl.text = "%d / %d" % [p + 1, PAGES.size()]
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_build_fig(int(PAGES[p][2]))
+	if _scroll != null:
+		_scroll.scroll_vertical = 0   # 翻页回到内容顶部
 
 
 func _clear_fig() -> void:
@@ -204,7 +251,7 @@ func _build_fig(kind: int) -> void:
 					_line(Vector2(310 + col * 300, 65), Vector2(356 + col * 300, 65))
 			_text("房主专属: 开始游戏 / 空位加AI / 移除玩家 / 规则设置", Vector2(140, 200),
 					AppTheme.GOLD, 16)
-		3:  # FAQ 图: 问号 + 状态色说明
+		3:  # FAQ 图: 状态色说明
 			var rows := [
 				["无法连接 → 看红字提示与目标地址", AppTheme.RED],
 				["已连接 → 三大按钮解锁", AppTheme.GREEN],

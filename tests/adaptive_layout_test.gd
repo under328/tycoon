@@ -132,13 +132,24 @@ func _sweep(i: int, w: float, h: float) -> void:
 		for b_idx in range(a_idx + 1, inters.size()):
 			var a: Control = inters[a_idx]
 			var b: Control = inters[b_idx]
-			expect(not a.get_global_rect().intersects(b.get_global_rect()),
+			expect(not _vis_rect(a).intersects(_vis_rect(b)),
 					"%s 交互控件重叠 %s(%s) × %s(%s)" % [
-						SCENE_PATHS[i].get_file(), a.name, a.get_global_rect(),
-						b.name, b.get_global_rect()])
+						SCENE_PATHS[i].get_file(), a.name, _vis_rect(a),
+						b.name, _vis_rect(b)])
 	for c in texts:
 		var issue := _text_issue(c)
 		expect(issue == "", "%s %s %s" % [SCENE_PATHS[i].get_file(), c.name, issue])
+
+
+## 重叠判定用"可见矩形": 滚动容器后代按滚动视口裁剪
+## (内容矩形可超出滚动区, 但视觉上被裁掉 — 否则与滚动区外固定控件误报重叠)
+func _vis_rect(c: Control) -> Rect2:
+	var p: Node = c.get_parent()
+	while p is Control:
+		if p is ScrollContainer:
+			return c.get_global_rect().intersection((p as Control).get_global_rect())
+		p = p.get_parent()
+	return c.get_global_rect()
 
 
 func _check_scene(i: int, w: float, h: float) -> void:
@@ -218,12 +229,13 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					% [s._scroll.size.y, h])
 			expect(s._grid.columns >= 1 and s._grid.columns <= 4,
 					"shop 网格列数异常 %d" % s._grid.columns)
-		4:  # 联机帮助
-			expect(absf(s._prev_btn.position.x - (w / 2.0 - 300.0)) <= 1.0,
-					"help 上一页未居中左")
-			expect(absf(s._next_btn.position.x - (w / 2.0 + 120.0)) <= 1.0,
-					"help 下一页未居中右")
-			expect(absf(s._close_lbl.position.x - (w - 110.0)) <= 1.0, "help 关闭未锚右缘")
+		4:  # 联机帮助(居中实底弹窗: 翻页居中, 面板/正文钳在视口内)
+			expect(s._prev_btn.get_global_rect().position.x
+					< s._next_btn.get_global_rect().position.x, "help 翻页按钮左右颠倒")
+			expect(s._panel.size.x <= w + 1.0 and s._panel.size.y <= h + 1.0,
+					"help 面板越视口 %s (w=%d h=%d)" % [s._panel.size, w, h])
+			expect(s._close_lbl.get_global_rect().position.x <= w - 8.0,
+					"help 关闭越右缘")
 		5:  # 新手引导
 			var col_w: float = minf(w - 80.0, 900.0)
 			expect(absf(s._fig.position.x - (w - col_w) / 2.0) <= 1.0, "tutorial 图示未居中")
