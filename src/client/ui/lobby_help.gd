@@ -174,8 +174,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
-	_title.text = PAGES[p][0]
-	_body.text = PAGES[p][1]
+	_title.text = tr(PAGES[p][0])
+	_body.text = tr(PAGES[p][1])
 	_page_lbl.text = "%d / %d" % [p + 1, PAGES.size()]
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
@@ -198,7 +198,7 @@ func _box(pos: Vector2, box_size: Vector2, text: String, color: Color,
 	panel.size = box_size
 	_fig.add_child(panel)
 	var lb := _label(fsize, color)
-	lb.text = text
+	lb.text = tr(text)
 	lb.position = Vector2(10, box_size.y / 2.0 - fsize * 0.7)
 	panel.add_child(lb)
 
@@ -213,7 +213,7 @@ func _line(a: Vector2, b: Vector2, color := AppTheme.GOLD) -> void:
 
 func _text(text: String, pos: Vector2, color := AppTheme.DIM, fsize := 15) -> void:
 	var lb := _label(fsize, color)
-	lb.text = text
+	lb.text = tr(text)
 	lb.position = pos
 	_fig.add_child(lb)
 

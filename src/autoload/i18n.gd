@@ -48,6 +48,12 @@ func _register_translations() -> void:
 		zh[str(k)] = str(k)
 	var db: Dictionary = StringsDb.DB.duplicate(true)
 	db["zh_CN"] = zh
+	# 繁体中文缺词回退简体(同文可读, 优于英文)
+	var tw := db.get("zh_TW", {}) as Dictionary
+	for k in all_keys:
+		if not tw.has(k):
+			tw[str(k)] = str(k)
+	db["zh_TW"] = tw
 	for code in db:
 		var t := Translation.new()
 		t.locale = str(code)

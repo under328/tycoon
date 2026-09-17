@@ -121,8 +121,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
-	_title.text = PAGES[p][0]
-	_body.text = PAGES[p][1]
+	_title.text = tr(PAGES[p][0])
+	_body.text = tr(PAGES[p][1])
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_build_fig(int(PAGES[p][2]))
@@ -130,7 +130,7 @@ func _show(p: int) -> void:
 
 func _text(text: String, pos: Vector2, color: Color, fsize: int) -> void:
 	var lb := _label(fsize, color)
-	lb.text = text
+	lb.text = tr(text)
 	lb.position = pos
 	_fig.add_child(lb)
 

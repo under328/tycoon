@@ -129,8 +129,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
-	_title.text = PAGES[p][0]
-	_body.text = PAGES[p][1]
+	_title.text = tr(PAGES[p][0])
+	_body.text = tr(PAGES[p][1])
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_build_fig(int(PAGES[p][2]))
@@ -161,22 +161,22 @@ func _suit_card(pos: Vector2, glyph: String, name_txt: String,
 	g.text = glyph
 	v.add_child(g)
 	var nm := _label(15, AppTheme.WHITE)
-	nm.text = name_txt
+	nm.text = tr(name_txt)
 	v.add_child(nm)
 	var ds := _label(12, AppTheme.DIM)
-	ds.text = desc
+	ds.text = tr(desc)
 	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(ds)
 
 
 func _combo_row(pos: Vector2, tier: String) -> void:
 	var meta: Dictionary = FightModeGd.TIERS[tier]
-	_text("%s — %s" % [meta["name"], meta["desc"]], pos, AppTheme.WHITE, 15)
+	_text("%s — %s" % [tr(str(meta["name"])), tr(str(meta["desc"]))], pos, AppTheme.WHITE, 15)
 
 
 func _text(text: String, pos: Vector2, color := AppTheme.DIM, fsize := 15) -> void:
 	var lb := _label(fsize, color)
-	lb.text = text
+	lb.text = tr(text)
 	lb.position = pos
 	_fig.add_child(lb)
 
