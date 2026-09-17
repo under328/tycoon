@@ -9,14 +9,14 @@ const CardsGd = preload("res://src/rules/cards.gd")
 
 ## 牌型层级(大→小)与加成(不满 5 张也可判型: 一对/三条/两对…)
 const TIERS := {
-	"straight_flush": {"name": "同花顺", "desc": "全属性+60%"},
-	"quad": {"name": "四条", "desc": "物攻 ×1.8"},
+	"straight_flush": {"name": "同花顺", "desc": "全属性+90%"},
+	"quad": {"name": "四条", "desc": "物攻 ×2.0"},
 	"flush": {"name": "同花", "desc": "主属性 ×2(花色决定方向)"},
-	"full_house": {"name": "葫芦", "desc": "吸血 25%"},
+	"full_house": {"name": "葫芦", "desc": "全属性+30% · 吸血 25%"},
 	"straight": {"name": "顺子", "desc": "每 3 回合追加一次连击"},
-	"trips": {"name": "三条", "desc": "物攻 ×1.4"},
-	"two_pair": {"name": "两对", "desc": "护甲/魔抗 ×1.5"},
-	"pair": {"name": "一对", "desc": "全属性 +15%"},
+	"trips": {"name": "三条", "desc": "物攻 ×1.55"},
+	"two_pair": {"name": "两对", "desc": "护甲/魔抗 ×1.6"},
+	"pair": {"name": "一对", "desc": "全属性 +25%"},
 	"high": {"name": "高牌", "desc": "无加成"},
 }
 const TIER_RANK := ["straight_flush", "quad", "flush", "full_house",
@@ -72,6 +72,10 @@ const GROUPS := [
 			"boss": "深渊魔王"},
 	{"name": "熔火之心", "mob": ["熔岩史莱姆", "熔岩大史莱姆"], "elite": "炎魔卫士",
 			"boss": "熔岩龙王"},
+	{"name": "冰封雪原", "mob": ["雪原狼", "霜牙雪狼"], "elite": "冰晶卫士",
+			"boss": "极寒霜龙"},
+	{"name": "幽暗墓地", "mob": ["骷髅兵", "腐骸骷髅"], "elite": "死灵法师",
+			"boss": "亡灵君王"},
 ]
 
 # ---------------------------------------------------------------- 运行状态
@@ -666,33 +670,29 @@ static func uniq_suits(suits: Array) -> int:
 ## ── 属性推导: ♠物攻/♦护甲魔抗/♥生命/♣技能 + 牌型加成。
 ## 空手保底: 攻击 15 / 生命 100(防止纯♦♣开局毫无输出)。
 static func derive_stats(cards: Array, combo: Dictionary) -> Dictionary:
-	var spade := 0
-	var heart := 0
-	var dia := 0
-	var club := 0
-	for c in cards:
-		var v := CardsGd.value(int(c))
-		match CardsGd.suit(int(c)):
-			0: spade += v
-			1: heart += v
-			2: dia += v
-			3: club += v
 	var spade_cnt := _suit_count(cards, 0)
+	var heart_cnt := _suit_count(cards, 1)
+	var dia_cnt := _suit_count(cards, 2)
+	var club_cnt := _suit_count(cards, 3)
+	# 单张小加成: 每张牌按点数提供少量属性(点数 3..15 → 力量 1..13)
+	var rank_sum := 0
+	for c in cards:
+		rank_sum += maxi(CardsGd.value(int(c)) - 2, 0)
+	var atk := 15 + spade_cnt * 4 + int(rank_sum * 0.6)
+	var def := 4 + dia_cnt * 3 + int(rank_sum * 0.4)
+	var mres := 3 + dia_cnt * 3 + int(rank_sum * 0.4)
+	var skill := 10 + club_cnt * 4 + int(rank_sum * 0.6)
+	var max_hp := 100 + heart_cnt * 5 + int(rank_sum * 3)
 	var tier := str(combo["tier"])
-	var atk := 15 + spade * 6
-	var def := 5 + dia * 3
-	var mres := 3 + dia * 2
-	var skill := club * 6
-	var max_hp := 100 + heart * 12
 	match tier:
 		"straight_flush":
-			atk = int(atk * 1.6)
-			def = int(def * 1.6)
-			mres = int(mres * 1.6)
-			max_hp = int(max_hp * 1.6)
-			skill = int(skill * 1.6)
+			atk = int(atk * 1.9)
+			def = int(def * 1.9)
+			mres = int(mres * 1.9)
+			max_hp = int(max_hp * 1.9)
+			skill = int(skill * 1.9)
 		"quad":
-			atk = int(atk * 1.8)
+			atk = int(atk * 2.0)
 		"flush":
 			if spade_cnt >= 3:
 				atk = int(atk * 2.0)
@@ -703,21 +703,34 @@ static func derive_stats(cards: Array, combo: Dictionary) -> Dictionary:
 				mres = int(mres * 2.0)
 			else:
 				skill = int(skill * 2.0)
+		"full_house":
+			atk = int(atk * 1.3)
+			def = int(def * 1.3)
+			mres = int(mres * 1.3)
+			max_hp = int(max_hp * 1.3)
+			skill = int(skill * 1.3)
 		"trips":
-			atk = int(atk * 1.4)
+			atk = int(atk * 1.55)
 		"two_pair":
-			def = int(def * 1.5)
-			mres = int(mres * 1.5)
+			def = int(def * 1.6)
+			mres = int(mres * 1.6)
 		"pair":
-			atk = int(atk * 1.15)
-			def = int(def * 1.15)
-			mres = int(mres * 1.15)
-			max_hp = int(max_hp * 1.15)
-			skill = int(skill * 1.15)
-	var club_cnt := _suit_count(cards, 3)
+			atk = int(atk * 1.25)
+			def = int(def * 1.25)
+			mres = int(mres * 1.25)
+			max_hp = int(max_hp * 1.25)
+			skill = int(skill * 1.25)
+	# 集满五张 = 变身: 全属性 +5%(变身演出由 UI 播放)
+	if cards.size() >= 5:
+		atk = int(atk * 1.05)
+		def = int(def * 1.05)
+		mres = int(mres * 1.05)
+		skill = int(skill * 1.05)
+		max_hp = int(max_hp * 1.05)
 	return {
 		"atk": atk, "def": def, "mres": mres, "skill": skill,
 		"max_hp": max_hp,
+		"transformed": cards.size() >= 5,
 		"crit_rate": 0.10 + 0.05 * spade_cnt,
 		"crit_dmg": 1.5 + 0.1 * spade_cnt,
 		"vamp": 0.25 if tier == "full_house" else 0.0,

@@ -51,6 +51,9 @@ var act_atk: Button
 var act_skill: Button
 var act_def: Button
 var draft_panel: PanelContainer
+var _aura: Control            # 变身光环(五张集满显示, 随主花色变色)
+var _aura_spin := 0.0
+var _transform_floor := -1    # 已播变身演出的层(每层首次集满五张触发)
 var draft_title: Label
 var cand_row: HBoxContainer
 var draft_ops: HBoxContainer
@@ -252,6 +255,13 @@ func _ready() -> void:
 	draft_ops.add_theme_constant_override("separation", 14)
 	dbox.add_child(draft_ops)
 
+	_aura = Control.new()
+	_aura.size = Vector2(140, 140)
+	_aura.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_aura.visible = false
+	_aura.draw.connect(_draw_aura)
+	add_child(_aura)
+
 	Responsive.watch(self, _relayout)
 	_render()
 	Audio.play_bgm("table")
@@ -265,6 +275,10 @@ func _process(delta: float) -> void:
 		monster.position.x = _enemy_home.x + sin(_bob_t * 0.8) * 3.0
 		avatar.position.y = _player_home.y + sin(_bob_t * 1.7) * 4.0
 		avatar.rotation = sin(_bob_t * 1.2) * 0.02
+	if _aura != null and _aura.visible:
+		_aura_spin += delta * 1.5   # 变身光环旋转
+		_aura.position = _player_home - _aura.size / 2.0
+		_aura.queue_redraw()
 
 
 func _label(size_num: int, color: Color) -> Label:
@@ -289,6 +303,7 @@ func _update_hits() -> void:
 ## ── 总渲染: 按引擎 phase 切换可见区 ──
 func _render() -> void:
 	_say_phase()
+	_update_transform()
 	round_lbl.text = ("[%s] " % Wallet.daily_day if daily and Wallet.daily_day != ""
 		else "") + tr("第 %d 层 · 第 %d/%d 回合 · %s") % [fm.floor_num,
 		fm.round_num, FightModeGd.ROUNDS,
@@ -335,6 +350,96 @@ func _fill_enemy_view() -> void:
 	_refresh_bars()
 
 
+## ── 五张变身 ──
+func _transformed() -> bool:
+	return fm != null and fm.slots.size() >= 5
+
+
+func _dominant_suit() -> int:
+	var cnt := [0, 0, 0, 0]
+	var best := 0
+	for c in fm.slots:
+		var su := CardsGd.suit(int(c))
+		cnt[su] += 1
+		if cnt[su] > cnt[best]:
+			best = su
+	return best
+
+
+func _suit_color(su: int) -> Color:
+	return [Color("ff7050"), Color("7dd87d"), Color("ffd166"), Color("7ec8ff")][su]
+
+
+func _update_transform() -> void:
+	if _aura == null:
+		return
+	var on := _transformed()
+	_aura.visible = on
+	_aura.position = _player_home - _aura.size / 2.0
+	avatar.modulate = Color(1, 1, 1).lerp(_suit_color(_dominant_suit()), 0.3) if on 			else Color.WHITE
+	if on and _transform_floor != fm.floor_num:
+		_transform_floor = fm.floor_num
+		_play_transform()
+
+
+func _draw_aura() -> void:
+	if not _transformed():
+		return
+	var c := _aura.size / 2.0
+	var col := _suit_color(_dominant_suit())
+	_aura.draw_arc(c, 52.0, 0, TAU, 40, Color(col, 0.8), 3.0, true)
+	_aura.draw_arc(c, 45.0, 0, TAU, 40, Color(col, 0.35), 7.0, true)
+	for i in 8:
+		var a := TAU * i / 8.0 + _aura_spin
+		_aura.draw_line(c + Vector2.from_angle(a) * 57.0,
+				c + Vector2.from_angle(a) * 65.0, Color(col, 0.85), 2.5, true)
+
+
+## 变身演出: 白闪 + 「变 身!」横幅 + 光环展开 + 震屏 + 播报
+func _play_transform() -> void:
+	Audio.say("f_transform", 1.0, true)
+	Audio.play("win")
+	var flash := ColorRect.new()
+	flash.color = Color(1, 1, 1, 0.85)
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(flash)
+	var ftw := flash.create_tween()
+	ftw.tween_property(flash, "color:a", 0.0, 0.45)
+	ftw.tween_callback(flash.queue_free)
+	var lb := _label(42, _suit_color(_dominant_suit()))
+	lb.text = tr("变 身!")
+	lb.position = Vector2(_px(0.5) - 130.0, _py(0.20))
+	lb.pivot_offset = Vector2(130, 30)
+	lb.z_index = 30
+	add_child(lb)
+	var tw := lb.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lb, "scale", Vector2(1.25, 1.25), 0.3) 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lb, "modulate:a", 0.0, 0.8).set_delay(0.6)
+	tw.chain().tween_callback(lb.queue_free)
+	_aura.visible = true
+	_aura.scale = Vector2(0.3, 0.3)
+	var atw := _aura.create_tween()
+	atw.tween_property(_aura, "scale", Vector2.ONE, 0.4) 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_shake(8.0)
+
+
+## 单卡小加成文案(抽牌预览/装备槽提示)
+func _card_effect_text(card: int) -> String:
+	var pw := maxi(CardsGd.value(card) - 2, 0)
+	match CardsGd.suit(card):
+		0:
+			return "物攻+4 · 暴击率+5%% · 点数+%d" % pw
+		1:
+			return "生命+5+3×点数(+%d) " % (pw * 3)
+		2:
+			return "护甲/魔抗+3 · 点数+%d" % pw
+		3:
+			return "技能+4 · 点数+%d" % pw
+	return ""
+
+
 func _px(f: float) -> float:
 	return size.x * f
 
@@ -376,10 +481,12 @@ func _refresh_slots() -> void:
 			cv.size = Vector2(52, 74)
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			wrap.add_child(cv)
-			# 悬停提示: 当前装备牌 + 全套牌型协同效果
+			# 悬停提示: 当前装备牌的单卡效果 + 全套牌型协同效果
 			wrap.tooltip_text = "%s
+单卡: %s
 牌型协同: %s · %s" % [CardsGd.label(card),
-					tr(str(fm.combo["name"])), tr(str(fm.combo["desc"]))]
+					_card_effect_text(card), tr(str(fm.combo["name"])),
+					tr(str(fm.combo["desc"]))]
 		else:
 			wrap.tooltip_text = "空槽位 — 抽牌阶段点选装备"
 		var sb: StyleBoxFlat = e["sb"]
@@ -483,11 +590,14 @@ func _build_normal_card(card: int) -> Control:
 		preview[0] = card
 	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
-	if fm.slots.size() >= 5:
-		hint.text = ((tr("稀有!") + " ") if rare else "") 				+ tr("替换后 %s") % tr(str(combo["name"]))
-	else:
-		hint.text = ((tr("稀有!") + " ") if rare else "") 				+ tr("装备后 %s") % tr(str(combo["name"]))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var rare_txt := (tr("稀有!") + "
+") if rare else ""
+	hint.text = "此牌 %s: %s
+%s%s" % [CardsGd.SUIT_NAMES[CardsGd.suit(card)],
+			_card_effect_text(card), rare_txt,
+			(tr("替换后 %s") if fm.slots.size() >= 5 else tr("装备后 %s"))
+					% tr(str(combo["name"]))]
 	box.add_child(hint)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrap.gui_input.connect(func(ev: InputEvent) -> void:
@@ -755,9 +865,10 @@ func _player_strike() -> void:
 		if w != null:
 			skin = str(w.equipped_skin)
 	# 每个皮肤不同动作: 狐妖/花魁=疾冲, 鬼类=跳劈, 其他=直进
-	var hop := skin in ["skin_aka", "skin_ao", "skin_tengu"]
-	var dash := skin in ["skin_kitsu", "skin_oiran"]
-	var reach := 70.0 if dash else 52.0
+	# 变身状态: 一律疾冲且位移更大(打出残影级气势)
+	var hop := skin in ["skin_aka", "skin_ao", "skin_tengu"] and not _transformed()
+	var dash := (skin in ["skin_kitsu", "skin_oiran"] or _transformed())
+	var reach := (78.0 if _transformed() else (70.0 if dash else 52.0))
 	var tw := create_tween()
 	if hop:
 		tw.tween_property(avatar, "position",

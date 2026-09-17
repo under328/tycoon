@@ -70,6 +70,7 @@ MANIFEST.update({
     "f_rare": "稀有卡!",
     "f_relic": "获得奇物!",
     "f_clear": "通关!",
+    "f_transform": "变身!",
     "f_round_win": "得分!",
     "f_round_lose": "失分!",
     "f_vs": "对决!",

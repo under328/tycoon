@@ -11,7 +11,10 @@ const FightModeGd = preload("res://src/rules/fight/fight_mode.gd")
 
 const PAGES := [
 	["花色与属性", "你的扑克就是你的装备, 数值越大属性越强:", 0],
-	["牌型协同", "组合自动触发套装加成(越大越强), 不满 5 张也可判型:", 1],
+	["牌型协同", "每张牌都有小幅单卡加成(♠物攻+4·暴击+5% / ♥生命 / ♦防抗 / ♣技能, 点数越高越多);
+组合自动触发套装加成(越大越强), 不满 5 张也可判型:", 1],
+	["五张变身", "集满 5 张装备牌即触发『变身』: 光环随主花色变色,
+全属性 +5%, 冲刺距离更远, 下一层重置后重新集满再次变身:", 6],
 	["回合流程", "共 5 回合: 每回合先『二选一』抽 1 张牌, 再战斗:", 2],
 	["战斗操作", "回合制三选操作; 怪物意图公示, 见招拆招:", 3],
 	["连击与奥义", "连击加成 + 怒气大招 + 完美格挡, 三重爽点:", 4],
@@ -247,6 +250,30 @@ func _build_fig(kind: int) -> void:
 						AppTheme.GOLD, 17)
 				_text(str(rows[i][1]), Vector2(400, 16 + i * 52),
 						AppTheme.WHITE, 15)
+		6:  # 五张变身: 主花色光环示意
+			var suits := [["♠ 赤红战魂", Color("ff7050")], ["♥ 翠绿生机", Color("7dd87d")],
+					["♦ 金刚护体", Color("ffd166")], ["♣ 苍蓝法魂", Color("7ec8ff")]]
+			for i in suits.size():
+				var col := 60 + (i % 2) * 420
+				var row := 40 + int(i / 2.0) * 130
+				var wrap := PanelContainer.new()
+				var wsb := AppTheme.flat(Color(0.13, 0.13, 0.28), AppTheme.GOLD, 10, 1)
+				wrap.add_theme_stylebox_override("panel", wsb)
+				wrap.position = Vector2(col, row)
+				wrap.custom_minimum_size = Vector2(360, 100)
+				_fig.add_child(wrap)
+				var hbb := HBoxContainer.new()
+				hbb.add_theme_constant_override("separation", 12)
+				wrap.add_child(hbb)
+				var ring := _label(40, suits[i][1])
+				ring.text = "◎"
+				hbb.add_child(ring)
+				var nm := _label(18, AppTheme.WHITE)
+				nm.text = str(suits[i][0])
+				nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				hbb.add_child(nm)
+			_text("变身: 全属性 +5% · 冲刺更远 · 下一层重新集满再变身",
+					Vector2(140, 240), AppTheme.GOLD, 16)
 		5:  # 稀有卡与无尽
 			var rows := [
 				["金框稀有卡", "候选 12% 出现, 装备后生命上限永久 +8% + 奖励怒气"],

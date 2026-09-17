@@ -10,7 +10,7 @@ var kind := "mob": set = _setv_kind
 var variant := 0: set = _setv_variant
 
 func _setv_group(v: int) -> void:
-	group = clampi(v, 0, 2)
+	group = clampi(v, 0, 4)
 	queue_redraw()
 
 
@@ -193,6 +193,99 @@ const GRID_DRAGON := [
 ]
 
 
+# ── 冰封雪原: 雪原狼 / 冰晶卫士 / 极寒霜龙 ──
+const GRID_WOLF := [
+	"............",
+	".WW......WW.",
+	".WWW....WWW.",
+	"..WWWWWWWW..",
+	".WWEWWWWWWW.",
+	".WWWWWWWWWW.",
+	"..WWKKWWWW..",
+	"..WWWWWWWW..",
+	"...WWWWWW...",
+	"..WW.WW.WW..",
+	"..W...W..W..",
+	"............",
+]
+
+const GRID_ICEGUARD := [
+	"...CCCCCC...",
+	"..CCWCCWCC..",
+	".CCCCCCCCCC.",
+	".CCECCCCECC.",
+	"..CCCCCCCC..",
+	"...CCCCCC...",
+	".CCCCCCCCCC.",
+	".CCWCCCCWCC.",
+	".CCCCCCCCCC.",
+	"..CCCCCCCC..",
+	"..CC....CC..",
+	"..CC....CC..",
+]
+
+const GRID_FROSTDRAGON := [
+	"..I......I..",
+	"..II.II.II..",
+	"...IIIIII...",
+	"..IIEIIEII..",
+	".IIIIIIIIII.",
+	"IKKIIIIIIKII",
+	".IIIIIIIIII.",
+	"..IIIIIIII..",
+	"...IIIIII...",
+	".IIIIIIIIII.",
+	"II.II..II.II",
+	"I...II..I..I",
+]
+
+# ── 幽暗墓地: 骷髅兵 / 死灵法师 / 亡灵君王 ──
+const GRID_SKELETON := [
+	"...BBBBBB...",
+	"..BBKBBKBB..",
+	"..BBBBBBBB..",
+	"...BBBBBB...",
+	"....BBBB....",
+	"..BBBBBBBB..",
+	".BEBBBBKBBB.",
+	".BBBBBBBBBB.",
+	"..BBBBBBBB..",
+	"..BB.BB.BB..",
+	"..B..B..B...",
+	"............",
+]
+
+const GRID_NECRO := [
+	"...PPPPPP...",
+	"..PPKKKKPP..",
+	".PPPPPPPPPP.",
+	".PPEPPPPEPP.",
+	"..PPPPPPPP..",
+	".PPPPPPPPPP.",
+	".PPPPPPPPPP.",
+	"PPPPPPPPPPPP",
+	".PPPPPPPPPP.",
+	"..PPPPPPPP..",
+	"...PP..PP...",
+	"............",
+]
+
+const GRID_LICH := [
+	"..Y..YY..Y..",
+	"..YYYYYYYY..",
+	"...PPPPPP...",
+	"..PPKPPKPP..",
+	".PPPPPPPPPP.",
+	".PPPPPPPPPP.",
+	"..PPPPPPPP..",
+	".PPPPPPPPPP.",
+	"PPPPPPPPPPPP",
+	".PP.PPPP.PP.",
+	"..PP....PP..",
+	"............",
+]
+
+
 func _art(g: int) -> Dictionary:
 	match g:
 		0:
@@ -211,6 +304,20 @@ func _art(g: int) -> Dictionary:
 						"E": Color("ffd040"), "K": Color("f0f0f0"),
 						"S": Color("9a9aa8"), "D": Color("4a4a58"),
 						"H": Color("4a2a6a"),
+					}}
+		3:
+			return {"mob": GRID_WOLF, "elite": GRID_ICEGUARD,
+					"boss": GRID_FROSTDRAGON, "pal": {
+						"W": Color("dce8f5"), "E": Color("1a2a3a"),
+						"K": Color("3a4a5a"), "C": Color("9fd8e8"),
+						"I": Color("b8e0f0"),
+					}}
+		4:
+			return {"mob": GRID_SKELETON, "elite": GRID_NECRO,
+					"boss": GRID_LICH, "pal": {
+						"B": Color("d8d4c0"), "E": Color("70e0e8"),
+						"K": Color("2a1a1a"), "P": Color("5a3a8a"),
+						"Y": Color("e8d040"),
 					}}
 		_:
 			return {"mob": GRID_SLIME, "elite": GRID_FLAME,
