@@ -36,7 +36,6 @@ var _prof_avatar: Control
 var _prof_name: Label
 var _prof_rank: Label
 var _badge: PanelContainer
-var _rank_lbl: Label
 var _mode_dlg: Control = null   # 模式选择弹窗
 var _tutorial: Control = null   # 新手引导页(打开期间持有)
 var _ver_lbl: Label
@@ -325,20 +324,7 @@ func _play_entrance() -> void:
 	div.custom_minimum_size = Vector2(0, 1)
 	badge_box.add_child(div)
 
-	# ── 第二行: 称号徽章 + 胜负比 ──
-	var rank_row := HBoxContainer.new()
-	rank_row.add_theme_constant_override("separation", 6)
-	badge_box.add_child(rank_row)
-	var trophy := _label(14, AppTheme.GOLD)
-	trophy.text = "🏆"
-	rank_row.add_child(trophy)
-	_rank_lbl = AppTheme.make_label(13, AppTheme.GOLD)
-	_rank_lbl.text = "%s · %d胜/%d场" % [Wallet.rank_title(),
-			Wallet.local_wins, Wallet.local_matches]
-	_rank_lbl.reset_size()
-	rank_row.add_child(_rank_lbl)
-
-	# ── 第三行: 签到 + 成就·战绩 按钮行 ──
+	# ── 第二行: 签到 + 成就·战绩 按钮行(战绩展示已移至左上角头像卡) ──
 	var ops := HBoxContainer.new()
 	ops.add_theme_constant_override("separation", 6)
 	badge_box.add_child(ops)
@@ -699,10 +685,6 @@ func _refresh_balance() -> void:
 	if _badge != null and size.x > 100.0:
 		# 金额文本晚成型会撑宽徽章: 刷新时按新尺寸重锚右上
 		_badge.position = Vector2(size.x - _badge.size.x - maxf(28.0, size.x * 0.025), 30)
-	if _rank_lbl != null:
-		_rank_lbl.text = "称号 %s · %d胜/%d场" % [Wallet.rank_title(),
-				Wallet.local_wins, Wallet.local_matches]
-		_rank_lbl.reset_size()
 	_refresh_profile()
 
 
