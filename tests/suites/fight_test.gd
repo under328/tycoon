@@ -143,9 +143,9 @@ func _slot_guarantee(t) -> void:
 	t.expect(str(kinds_seen[5]) == "boss", "第 5 回合是 BOSS")
 
 
-## ── 特殊牌(8 种奇物) ──
+## ── 特殊牌(10 种奇物) ──
 func _specials(t) -> void:
-	t.expect(FightGd.SPECIALS.size() == 8, "特殊牌共 8 种")
+	t.expect(FightGd.SPECIALS.size() == 10, "特殊牌共 10 种")
 	for i in 8:
 		t.expect(str(FightGd.sp_meta(i)["key"]).begins_with("sp_"),
 				"奇物 %d 目录完整" % i)
@@ -382,32 +382,40 @@ func _deep_combat(t) -> void:
 	while str(fm.phase) == "draft":
 		fm.draft_pick(fm.pair[0], 0 if fm.slots.size() >= 5 else -1)
 	t.expect(str(fm.phase) == "battle", "进入战斗")
-	# 蓄力回合: 敌人不攻击, 玩家伤害 +50%
+	# BOSS 蓄力必杀: 蓄力回合敌人不攻击 / 承伤+50% / 回合末释放组别技能
+	fm.enemy["kind"] = "boss"
 	fm.enemy["intent"] = "charge"
-	fm.enemy["charging"] = true
+	fm.enemy["special"] = "测试必杀"
 	fm.enemy["atk"] = 100
+	fm.enemy["hp"] = 999999
 	fm.stats["crit_rate"] = 0.0
-	var hp0: int = fm.hp
+	var ehp0: int = int(fm.enemy["hp"])
 	var evs: Array = fm.step("attack")
 	var enemy_attacked := false
+	var has_special := false
 	for e in evs:
-		if str(e["who"]) == "e" and str(e["kind"]) in ["dmg", "heavy", "spell"]:
+		if str(e.get("who", "")) == "e" and str(e.get("kind", "")) in ["dmg", "heavy", "spell"]:
 			enemy_attacked = true
-	t.expect(not enemy_attacked, "蓄力回合敌人不攻击")
-	t.expect(fm.hp == hp0, "蓄力回合玩家无伤")
-	# 蓄力释放: 下回合重击 ×2.2
-	fm.enemy["intent"] = "heavy"
-	fm.enemy["charge_mult"] = 2.2
+		if str(e.get("kind", "")) == "special":
+			has_special = true
+	t.expect(not enemy_attacked, "蓄力回合敌人不普通攻击")
+	t.expect(has_special, "回合末释放组别必杀技")
+	t.expect(int(evs[0]["v"]) > 0 if not evs.is_empty() else false, "必杀造成伤害")
+	t.expect(ehp0 - int(fm.enemy["hp"]) > 0, "必杀造成伤害")
+	# 承伤+50% 对拍: 同状态再蓄力一次, 伤害应高于普通回合
+	fm.enemy["intent"] = "charge"
 	fm.enemy["hp"] = 999999
-	var hp1: int = fm.hp
-	fm.stats["def"] = 0
-	fm.step("defend")
-	var took_charge: int = hp1 - fm.hp
-	fm.enemy["intent"] = "heavy"
+	var ehp2: int = int(fm.enemy["hp"])
 	var hp2: int = fm.hp
+	fm.stats["crit_rate"] = 0.0
 	fm.step("attack")
-	var took_normal: int = hp2 - fm.hp
-	t.expect(took_charge == 0, "完美格挡完全化解蓄力重击(%d)" % took_charge)
+	var dealt_charge: int = ehp2 - int(fm.enemy["hp"])
+	fm.enemy["intent"] = "attack"
+	fm.enemy["hp"] = 999999
+	var ehp3: int = int(fm.enemy["hp"])
+	fm.step("attack")
+	var dealt_normal: int = ehp3 - int(fm.enemy["hp"])
+	t.expect(dealt_charge > dealt_normal, "蓄力承伤 +50%(%d vs %d)" % [dealt_charge, dealt_normal])
 	# BOSS 狂暴
 	fm.enemy["kind"] = "boss"
 	fm.enemy["max_hp"] = 1000

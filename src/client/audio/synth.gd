@@ -330,6 +330,43 @@ static func bgm_koto() -> AudioStreamWAV:
 
 ## 肉鸽 BGM: E 和声小调 128BPM 神秘急板(笛长音 + 拨弦音型 + 深鼓),
 ## 命运卡的不可预知感 → 小调色彩 + 增二度装饰音。
+## 格斗 BGM: A 小调 132BPM 战斗曲 — 密集鼓组 + 低音推进 + 高音呼喊,
+## 与牌桌曲(慢板古筝)区分, 打斗的紧张感。
+static func bgm_fight() -> AudioStreamWAV:
+	var ev := []
+	var bass_roots := [110.0, 110.0, 87.31, 98.0]   # A A F G
+	for rep in 2:
+		for bi in 4:
+			var t0: float = rep * 8 + bi * 2
+			var root: float = bass_roots[bi]
+			# 低音推进: 八分音符 riff
+			for e8 in 4:
+				ev.append(_n(t0 + e8 * 0.5, 0.45, "bass", root, 0.16))
+			# 鼓组: 军鼓反拍 + 底鼓正拍 + 密集踩镲
+			ev.append(_n(t0, 0.4, "taiko", 0, 0.28))
+			ev.append(_n(t0 + 1.0, 0.3, "snare", 0, 0.14))
+			ev.append(_n(t0 + 1.5, 0.4, "taiko", 0, 0.20))
+			ev.append(_n(t0 + 2.0, 0.4, "taiko", 0, 0.24))
+			ev.append(_n(t0 + 3.0, 0.3, "snare", 0, 0.14))
+			for e8 in 8:
+				ev.append(_n(t0 + e8 * 0.5, 0.12, "snare", 0, 0.05))
+			# 力量和弦刺击(反拍)
+			var fifth := root * 1.5
+			ev.append(_n(t0 + 0.5, 0.3, "pluck", root * 2.0, 0.10))
+			ev.append(_n(t0 + 0.5, 0.3, "pluck", fifth * 2.0, 0.08))
+			ev.append(_n(t0 + 2.5, 0.3, "pluck", root * 2.0, 0.10))
+			ev.append(_n(t0 + 2.5, 0.3, "pluck", fifth * 2.0, 0.08))
+	# 高音呼喊(第 2 遍进入): A 小调急促音型
+	var lead := [
+		[8, .5, 440], [8.5, .5, 523.25], [9, 1, 659.25], [10, .5, 587.33],
+		[10.5, .5, 523.25], [11, 1, 440], [12, 1, 493.88], [13, 1.5, 523.25],
+		[14.5, .5, 440], [15, 1, 329.63],
+	]
+	for n in lead:
+		ev.append(_n(float(n[0]), float(n[1]), "flute", float(n[2]), 0.15))
+	return render_track(16, 132, ev)
+
+
 static func bgm_rogue() -> AudioStreamWAV:
 	var ev := []
 	# 笛主旋律(E 和声小调, 8 小节): E5 D#5 B4 G4 A4 B4 / C5 B4 A4 F#4 E4

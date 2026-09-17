@@ -223,7 +223,8 @@ func play_bgm(track: String = "lobby") -> void:
 							play_bgm.bind(track))
 					return
 				_bgm_tracks[track] = Synth.bgm_koto() if track == "table" \
-						else Synth.bgm_koto_rev()
+						else (Synth.bgm_rogue() if track == "rogue" \
+						else Synth.bgm_fight())
 			_:
 				return
 	if _bgm_current == track and bgm_player.playing:

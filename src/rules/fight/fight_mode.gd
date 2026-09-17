@@ -41,6 +41,10 @@ const SPECIALS := [
 		"desc": "每场战斗开始获得 20% 生命护盾"},
 	{"id": 7, "key": "sp_regen", "name": "泉涌珠", "icon": "💧",
 		"desc": "每回合开始回复 5% 生命"},
+	{"id": 8, "key": "sp_eye", "name": "狂暴之眼", "icon": "👁",
+		"desc": "连击上限 16, 连击伤害加成提升至 6%/层"},
+	{"id": 9, "key": "sp_sand", "name": "时之沙漏", "icon": "⏳",
+		"desc": "技能冷却缩短为 1 回合"},
 ]
 ## 候选抽到特殊牌的概率(普通牌用尽时回落普通)
 const SPECIAL_RATE := 0.12
@@ -114,6 +118,18 @@ var rng := RandomNumberGenerator.new()
 var _skill_cd := 0
 var _battle_round := 0     # 本场战斗回合数(先制符/顺子用)
 var _first_used := false   # 先制符本场是否已消耗
+var _burn_turns := 0       # 灼烧剩余回合(烈焰吐息)
+var _burn_dmg := 0         # 灼烧每回合伤害
+var _player_frozen := false # 冰冻: 下次攻击伤害减半(极寒冰封)
+
+## BOSS 专属必杀技(按主题组): 蓄力回合承伤+50%, 回合末释放
+const BOSS_SPECIALS := [
+	{"name": "藤蔓缠绕", "desc": "重击并吸取生命"},
+	{"name": "暗影尖啸", "desc": "无视护甲魔抗的重击"},
+	{"name": "烈焰吐息", "desc": "重击并施加灼烧"},
+	{"name": "极寒冰封", "desc": "冰冻玩家, 下次攻击伤害减半"},
+	{"name": "亡者召唤", "desc": "重击并回复自身生命"},
+]
 
 
 func _init(seed_v: int = -1) -> void:
@@ -124,7 +140,7 @@ func _init(seed_v: int = -1) -> void:
 	for i in 52:
 		deck.append(i)
 	_shuffle(deck)
-	specials_left = [0, 1, 2, 3, 4, 5, 6, 7]
+	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 	group = rng.randi() % GROUPS.size()
 	hp = 100
 	_refresh_stats()
@@ -306,6 +322,9 @@ func _start_battle() -> void:
 	hits = 0
 	_round_dmg_taken = 0
 	last_rank = ""
+	_burn_turns = 0
+	_burn_dmg = 0
+	_player_frozen = false
 	var plan: Dictionary
 	if round_num <= ROUNDS:
 		plan = ROUND_PLAN[clampi(round_num - 1, 0, ROUNDS - 1)]
@@ -313,7 +332,7 @@ func _start_battle() -> void:
 		# 无尽层: 5 回合循环 [怪/精英/怪/精英/BOSS], 每轮 ×1.35
 		var idx := (round_num - 1) % ROUNDS
 		var cycle := floor_num - 1
-		var scale := pow(1.45, cycle)
+		var scale := pow(1.40, cycle)
 		var base: Dictionary = ENDLESS_PLAN[idx]
 		plan = {"kind": str(base["kind"]),
 			"hp": int(int(base["hp"]) * scale),
@@ -349,18 +368,64 @@ func _start_battle() -> void:
 		round_num, kind_name, name_txt, e_hp, e_atk])
 
 
+## BOSS 必杀技: 蓄力回合玩家承伤+50%, 回合末按主题组释放特色技能
+func _cast_boss_special(evs: Array) -> void:
+	var skill_name := str(BOSS_SPECIALS[group]["name"])
+	var base := float(enemy["atk"])
+	var dmg := 0
+	match group:
+		0:  # 森林巨鹿 · 藤蔓缠绕: 重击 + 吸取生命
+			dmg = maxi(int(base * 1.5), 1)
+			_damage_player(dmg)
+			var hl := maxi(int(int(enemy["max_hp"]) * 0.08), 1)
+			enemy["hp"] = mini(int(enemy["hp"]) + hl, int(enemy["max_hp"]))
+			evs.append({"who": "e", "kind": "special", "v": dmg, "skill": skill_name,
+					"heal": hl})
+		1:  # 深渊魔王 · 暗影尖啸: 无视护甲魔抗
+			dmg = maxi(int(base * 1.8 * rng.randf_range(0.9, 1.1)), 1)
+			_damage_player(dmg)
+			evs.append({"who": "e", "kind": "special", "v": dmg, "skill": skill_name})
+		2:  # 熔岩龙王 · 烈焰吐息: 重击 + 灼烧 2 回合
+			dmg = maxi(int(base * 1.2), 1)
+			_damage_player(dmg)
+			_burn_turns = 2
+			_burn_dmg = maxi(int(base * 0.35), 1)
+			evs.append({"who": "e", "kind": "special", "v": dmg, "skill": skill_name,
+					"burn": _burn_dmg})
+		3:  # 极寒霜龙 · 极寒冰封: 冰冻玩家(下次攻击伤害减半)
+			dmg = maxi(int(base * 0.8), 1)
+			_damage_player(dmg)
+			_player_frozen = true
+			evs.append({"who": "e", "kind": "special", "v": dmg, "skill": skill_name,
+					"frozen": true})
+		4:  # 亡灵君王 · 亡者召唤: 攻击 + 回复自身 15%
+			dmg = maxi(int(base * 1.1), 1)
+			_damage_player(dmg)
+			var hl2 := maxi(int(int(enemy["max_hp"]) * 0.15), 1)
+			enemy["hp"] = mini(int(enemy["hp"]) + hl2, int(enemy["max_hp"]))
+			evs.append({"who": "e", "kind": "special", "v": dmg, "skill": skill_name,
+					"heal": hl2})
+	_round_dmg_taken += dmg
+	_log(tr("%s 释放必杀技「%s」!") % [str(enemy["name"]), skill_name])
+
+
 func _choose_intent() -> void:
 	var r := rng.randf()
 	var kind := str(enemy.get("kind", "mob"))
 	if kind == "mob":
 		enemy["intent"] = "heavy" if r < 0.3 else "attack"
+		return
+	if kind == "boss" and r < 0.20:
+		# BOSS 蓄力必杀: 意图公示技能名, 蓄力回合承伤+50%
+		enemy["intent"] = "charge"
+		enemy["special"] = str(BOSS_SPECIALS[group]["name"])
+		return
+	if r < 0.3:
+		enemy["intent"] = "heavy"
+	elif r < 0.55:
+		enemy["intent"] = "spell"
 	else:
-		if r < 0.3:
-			enemy["intent"] = "heavy"
-		elif r < 0.55:
-			enemy["intent"] = "spell"
-		else:
-			enemy["intent"] = "attack"
+		enemy["intent"] = "attack"
 
 
 ## 战斗回合: action ∈ {"attack","skill","defend"}
@@ -374,6 +439,13 @@ func step(action: String) -> Array:
 	_battle_round += 1
 	if _skill_cd > 0:
 		_skill_cd -= 1
+	# 灼烧: 回合开始受伤(烈焰吐息)
+	if _burn_turns > 0:
+		_burn_turns -= 1
+		_damage_player(_burn_dmg)
+		evs.append({"who": "p", "kind": "burn", "v": _burn_dmg})
+		if player_dead():
+			return evs
 	# 泉涌: 回合开始回血
 	if bool(stats.get("regen", false)) and hp < int(stats["max_hp"]):
 		var rg := maxi(int(int(stats["max_hp"]) * 0.05), 2)
@@ -381,7 +453,7 @@ func step(action: String) -> Array:
 		evs.append({"who": "p", "kind": "heal", "v": rg})
 	match action:
 		"attack":
-			hits = mini(hits + 1, 11)
+			hits = mini(hits + 1, 16 if specials.has(8) else 11)
 			var crit: bool = rng.randf() < float(stats["crit_rate"])
 			if _combo_crit_next:
 				crit = true   # 连击 5 层里程碑: 本击必暴
@@ -392,8 +464,15 @@ func step(action: String) -> Array:
 			var dmg := int(float(stats["atk"]) * rng.randf_range(0.9, 1.1))
 			if crit:
 				dmg = int(dmg * float(stats["crit_dmg"]))
-			dmg = int(dmg * (1.0 + 0.04 * mini(maxi(hits - 1, 0), 10)))   # 连击伤害加成
+			var rate := 0.06 if specials.has(8) else 0.04   # 狂暴之眼: 6%/层
+			dmg = int(dmg * (1.0 + rate * mini(maxi(hits - 1, 0), 15 if specials.has(8) else 10)))
 			dmg = maxi(dmg - 2, 1)
+			if _player_frozen:
+				dmg = maxi(int(dmg * 0.5), 1)   # 冰冻: 伤害减半后解除
+				_player_frozen = false
+				evs.append({"who": "p", "kind": "chilled", "v": 0})
+			if str(enemy.get("intent", "")) == "charge":
+				dmg = int(dmg * 1.5)   # 蓄力回合: 承伤 +50%
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			fury = mini(fury + 12, 100)
 			evs.append({"who": "p", "kind": "crit" if crit else "dmg", "v": dmg})
@@ -408,6 +487,8 @@ func step(action: String) -> Array:
 			_vamp_heal(evs, dmg)
 		"skill":
 			var dmg := maxi(int(float(stats["skill"]) * rng.randf_range(0.9, 1.2)), 1)
+			if str(enemy.get("intent", "")) == "charge":
+				dmg = int(dmg * 1.5)   # 蓄力回合: 承伤 +50%
 			enemy["hp"] = int(enemy["hp"]) - dmg
 			var kind_name := str(stats.get("skill_kind", "fire"))
 			match kind_name:
@@ -421,11 +502,11 @@ func step(action: String) -> Array:
 			evs.append({"who": "p", "kind": "skill", "v": dmg,
 					"skill_kind": kind_name})
 			_vamp_heal(evs, dmg)
-			hits = mini(hits + 1, 11)
+			hits = mini(hits + 1, 16 if specials.has(8) else 11)
 			fury = mini(fury + 8, 100)
 			if hits >= 2:
 				evs.append({"who": "p", "kind": "combo", "v": hits})
-			_skill_cd = 2
+			_skill_cd = 1 if specials.has(9) else 2
 		"defend":
 			hits = 0   # 防御打断连击(攻与守的取舍)
 			var heal := maxi(int(stats["max_hp"]) / 25, 3)
@@ -446,6 +527,8 @@ func step(action: String) -> Array:
 	if action != "defend" and action != "ult" and bool(stats.get("straight", false)) \
 			and _battle_round % 3 == 0 and int(enemy["hp"]) > 0:
 		var dmg2 := maxi(int(float(stats["atk"]) * 0.7), 1)
+		if str(enemy.get("intent", "")) == "charge":
+			dmg2 = int(dmg2 * 1.5)   # 蓄力回合: 承伤 +50%
 		enemy["hp"] = int(enemy["hp"]) - dmg2
 		evs.append({"who": "p", "kind": "dmg", "v": dmg2})
 		_vamp_heal(evs, dmg2)
@@ -463,9 +546,10 @@ func step(action: String) -> Array:
 		evs.append({"who": "e", "kind": "die", "v": 0})
 		_win_round()
 		return evs
-	# 蓄力回合: 敌人不攻击且承伤 +50%, 下回合释放强化重击
+	# 蓄力回合: 不进行普通攻击(玩家伤害处放大 +50%), 回合末释放组别必杀技
 	if str(enemy.get("intent", "attack")) == "charge":
-		evs.append({"who": "e", "kind": "charging", "v": 0})
+		_cast_boss_special(evs)
+		_choose_intent()
 		return evs
 	# 怪物按意图行动
 	var intent := str(enemy.get("intent", "attack"))
@@ -564,7 +648,7 @@ func start_next_floor() -> void:
 	run_won = false
 	slots.clear()
 	specials.clear()
-	specials_left = [0, 1, 2, 3, 4, 5, 6, 7]
+	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 	deck.clear()
 	for i in 52:
 		deck.append(i)

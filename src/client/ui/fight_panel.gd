@@ -78,6 +78,7 @@ func _ready() -> void:
 	fm.hard = daily   # 每日挑战: 怪物 HP/攻击 +25%, 玩家伤害 -20%
 	if daily:
 		Wallet.mark_daily_played()   # 每日一次: 开局即占用当日名额
+	Audio.play_bgm("fight")   # 格斗专属战斗曲
 
 	var bg := ColorRect.new()
 	bg.color = Color("191934")
@@ -690,6 +691,9 @@ func _intent_text() -> String:
 			return "💥 重击(防御可减!)"
 		"spell":
 			return "🔥 法术(魔抗可减!)"
+		"charge":
+			var sn: String = str(fm.enemy.get("special", "必杀技"))
+			return "⚡ 蓄力: %s(此回合承伤+50%!)" % sn
 	return "⚔ 攻击"
 
 
@@ -787,6 +791,18 @@ func _run_events(evs: Array) -> void:
 		"charging":
 			_skill_cast(monster, Color("ffb14e"))
 			_floater(tr("⚡ 蓄力中…"), _px(0.68), _py(0.24), Color("ffb14e"))
+		"special":
+			Audio.say("f_boss_skill", 1.0, true)   # BOSS 喊话
+			_floater("%s -%d" % [tr("必杀"), int(ev["v"])], _px(0.68), _py(0.30),
+					Color("ff9a5a"))
+			_shake(9.0)
+			if ev.has("burn"):
+				_floater(tr("🔥 灼烧 %d 回合") % 2, _px(0.17), _py(0.26), Color("ff8850"))
+			if ev.has("frozen"):
+				_floater(tr("❄ 被冰冻!"), _px(0.17), _py(0.24), Color("9fd8ff"))
+		"burn":
+			_floater("🔥 灼烧 -%d" % int(ev["v"]), _px(0.17), _py(0.32), Color("ff8850"))
+			_sfx("hurt")
 		"chilled":
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
