@@ -1120,6 +1120,7 @@ func _build_ui() -> void:
 	emoji_popup.position = Vector2(16, 408)  # 😀 钮上方(664-面板高-8)
 	emoji_popup.custom_minimum_size = Vector2(360, 248)
 	emoji_popup.visible = false
+	emoji_popup.z_index = 10   # 压过聊天历史(构建顺序在其后), 弹窗永远在最上层
 	add_child(emoji_popup)
 	var ep_box := VBoxContainer.new()
 	ep_box.add_theme_constant_override("separation", 8)
