@@ -397,21 +397,29 @@ func buy_special(item_id: String) -> bool:
 
 ## ── 格斗试炼 ──
 
-## 通关/终局发放: 层数越高钻石越多(1 + 层数); 记录历史最高层。
+## 通关/终局发放: 胜者层数越高钻石越多(1 + 层数); 记录历史最高层。
 ## daily=每日挑战(每日一次, 全额); 格斗试炼可重复, 奖励为其一半。
-func grant_fight_reward(floor_num: int, bosses: int = 0, daily: bool = false) -> Dictionary:
+## 失败(won=false): 不发放钻石, 金币 -15(下限 0)。
+func grant_fight_reward(floor_num: int, bosses: int = 0, daily: bool = false,
+		won: bool = true) -> Dictionary:
 	fight_runs += 1
 	if floor_num >= 5:
 		fight_clears += 1
 	fight_bosses += maxi(bosses, 0)
-	var mult := 1
-	if diamond_triple_active():
-		mult = 3
-	elif double_diamond_active():
-		mult = 2
-	var d := (1 + floor_num) * mult
-	if not daily:
-		d = maxi(int(d * 0.5), 1)   # 格斗试炼: 每日挑战奖励的一半
+	var d := 0
+	var g := 0
+	var mult := 1   # 函数级作用域: 返回值携带 mult, 不能声明在分支内
+	if won:
+		if diamond_triple_active():
+			mult = 3
+		elif double_diamond_active():
+			mult = 2
+		d = (1 + floor_num) * mult
+		if not daily:
+			d = maxi(int(d * 0.5), 1)   # 格斗试炼: 每日挑战奖励的一半
+	else:
+		g = -15   # 失败惩罚
+	gold = maxi(gold + g, 0)
 	diamonds += d
 	diamonds_earned += d
 	var best := maxi(fight_best, floor_num)
@@ -420,14 +428,14 @@ func grant_fight_reward(floor_num: int, bosses: int = 0, daily: bool = false) ->
 	var newly := check_achievements()
 	_mark_dirty()
 	balance_changed.emit()
-	return {"diamonds": d, "best": best, "new_record": new_record,
+	return {"diamonds": d, "gold": g, "best": best, "new_record": new_record,
 			"mult": mult, "achievements": newly}
 
 
 ## 联机格斗对战结算(客户端本地入账, 与联机大富豪同策略):
-## 胜 +25 金币 +1 钻石, 败 +6 金币; 计入场次/胜负(称号进度)与每日任务。
+## 胜 +25 金币 +1 钻石, 败 -10 金币(下限 0); 计入场次/胜负/每日任务。
 func grant_pvp_result(win: bool) -> Dictionary:
-	var g := 25 if win else 6
+	var g := 25 if win else -10
 	var d := 1 if win else 0
 	gold = maxi(gold + g, 0)
 	diamonds += d
