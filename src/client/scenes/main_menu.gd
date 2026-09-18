@@ -334,11 +334,10 @@ func _play_entrance() -> void:
 	badge_box.add_child(ops)
 	var sign_btn := AppTheme.make_button("签到", Vector2(64, 30), 14)
 	sign_btn.visible = Wallet.can_sign_today()
-	sign_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_show_signin(sign_btn))
 	ops.add_child(sign_btn)
 	var prof_btn := AppTheme.make_button("成就·战绩", Vector2(120, 30), 14)
+	if not sign_btn.visible:
+		prof_btn.custom_minimum_size.x = 190  # 今日已签: 吸收签到钮宽(64)+间距(6)
 	prof_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		var pp: Control = (load("res://src/client/ui/profile_panel.gd") as GDScript).new()
@@ -350,6 +349,9 @@ func _play_entrance() -> void:
 			pp.queue_free()
 			_refresh_balance()))
 	ops.add_child(prof_btn)
+	sign_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_show_signin(sign_btn, prof_btn))
 
 	# 版本号(锚左下)
 	_ver_lbl = AppTheme.make_label(13, AppTheme.DIM)
@@ -594,7 +596,7 @@ func _open_mode_help(script_name: String) -> void:
 
 
 ## 每日签到弹窗: 7 天奖励轨道 + 今日领取
-func _show_signin(sign_btn: Button) -> void:
+func _show_signin(sign_btn: Button, prof_btn: Button = null) -> void:
 	if not Wallet.can_sign_today():
 		return
 	var dlg := Control.new()
@@ -661,6 +663,9 @@ func _show_signin(sign_btn: Button) -> void:
 		Audio.play("win")
 		_refresh_balance()
 		sign_btn.visible = false
+		if prof_btn != null:
+			# 领取后吸收签到钮宽(64)+间距(6), 右侧不留空
+			prof_btn.custom_minimum_size.x = 190
 		dlg.queue_free()
 		_toast_msg("签到成功: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])])
 	)
