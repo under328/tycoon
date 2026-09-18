@@ -272,10 +272,23 @@ func _special_panel(item: Dictionary) -> Control:
 			Audio.play("win")
 			_refresh()
 			_toast_msg("战绩已清空!" if effect == "clearr" else "购买成功, 已生效!")
-		else:
-			_toast_msg("余额不足, 先去赚一赚吧"))
+			else:
+				_toast_msg("余额不足, 先去赚一赚吧"))
 	foot.add_child(buy)
+	_touch_pass_through(panel)
 	return panel
+
+
+## 触屏滑动修复: 卡片内除按钮外全部放行拖动 — PanelContainer/容器默认 STOP
+## 会吃掉 ScrollContainer 的触摸滑动手势, 手机上表现为"卡片上滑不动、
+## 卡间空隙能滑"的不一致。按钮保留 STOP 以正常点击。
+func _touch_pass_through(node: Node) -> void:
+	for child in node.get_children():
+		if child is Button:
+			continue
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_touch_pass_through(child)
 
 
 func _item_active(id: String, effect: String) -> bool:
@@ -405,6 +418,7 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 			else:
 				_toast_msg("钻石不足, 打几局赚钻石吧"))
 		foot.add_child(buy)
+	_touch_pass_through(panel)
 	return panel
 
 
