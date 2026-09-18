@@ -225,6 +225,21 @@ func _draft_specials(t) -> void:
 	fm._open_round()
 	t.expect((fm.pair as Array).has(card(11, 0)), "锁定的牌下回合重新出现")
 	t.expect(int(fm.locked) == -1, "锁定已消费")
+	# 锁环保留值跨层幸存 + 奇物池每层重置 → 组内不得出现两份同一奇物
+	# (回归: 曾撞车出 [105, 105])
+	var dup_hits := 0
+	for seed_i in 400:
+		var fmL = FightGd.new(1000 + seed_i)
+		fmL.specials = [1]          # 持有锁环
+		fmL.specials_left = [5]     # 池内仅剩奇物5 → sp roll 必得 105
+		fmL.locked = 105            # 上层锁环保留的也是奇物5
+		fmL._open_pair()
+		var uniq := {}
+		for c in fmL.pair:
+			uniq[int(c)] = true
+		if uniq.size() < (fmL.pair as Array).size():
+			dup_hits += 1
+	t.expect(dup_hits == 0, "锁环保留值与新 roll 撞车时组内不重复(400 种子)")
 	# 增援令: 下回合起每组回合多一组
 	var fm2 = FightGd.new(12)
 	fm2._take_special(0)

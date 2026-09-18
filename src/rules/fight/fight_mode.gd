@@ -198,6 +198,14 @@ func _open_pair() -> void:
 	comp = false
 	var cands := [_roll_candidate(false)]
 	if locked >= 0:
+		# 锁环保留值跨层幸存而奇物池/牌库每层重置 → 可能与新 roll 撞出
+		# 两份同一奇物/同一牌。撞车则降级为普通牌重抽(最多 8 次, 撞车概率
+		# 指数衰减; 重抽后同牌不可能再现 — 单副牌每张只 pop 一次)。
+		if cands[0] == locked:
+			for _attempt in 8:
+				cands[0] = _roll_candidate(true)
+				if cands[0] != locked:
+					break
 		cands.append(locked)   # 锁环: 上轮未选中的牌保留出现
 		locked = -1
 	else:
