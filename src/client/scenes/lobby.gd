@@ -817,10 +817,10 @@ func _build_ui() -> void:
 	mode_option.position = Vector2(880, 288)
 	_reg(mode_lbl, "right")
 	_reg(mode_option, "right")
-	mode_lbl.position = Vector2(830, 545)
-	mode_option.position = Vector2(880, 541)
-	_reg_room(mode_lbl, Vector2(830, 545), "right")
-	_reg_room(mode_option, Vector2(880, 541), "right")
+	mode_lbl.position = Vector2(830, 312)
+	mode_option.position = Vector2(880, 308)
+	_reg_room(mode_lbl, Vector2(830, 312), "right")
+	_reg_room(mode_option, Vector2(880, 308), "right")
 	for i in _emoji_btns.size():
 		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
 
