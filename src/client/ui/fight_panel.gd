@@ -1020,7 +1020,7 @@ func _show_endless_choice() -> void:
 	Audio.say("f_clear", 1.0, true)   # R5 通关
 	_busy = true
 	_close_overlay()
-	var overlay := CenterContainer.new()
+	overlay = CenterContainer.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
