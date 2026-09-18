@@ -413,6 +413,19 @@ func _enter_room() -> void:
 	_apply_view("room")
 	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = false
+	_sync_rules_visibility()
+
+
+## 规则设置按模式联动: 普通/肉鸽显示规则(肉鸽的命运卡在其上动态改规则),
+## 格斗对战无规则设置 — 仅保留模式选择。
+func _sync_rules_visibility() -> void:
+	if _view != "room" or mode_option == null:
+		return
+	var fight: bool = mode_option.selected == 2
+	rules_lbl.visible = not fight
+	for w: Control in [chk_joker, chk_revolution, stakes_lbl, stakes_option,
+			rounds_lbl, rounds_option, save_settings_btn]:
+		w.visible = not fight
 
 
 func _exit_room() -> void:
@@ -536,6 +549,7 @@ func _build_ui() -> void:
 	mode_option.custom_minimum_size = Vector2(160, 36)
 	mode_option.item_selected.connect(func(_i: int) -> void:
 		Audio.play("click")
+		_sync_rules_visibility()
 		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
 		net.set_settings(_gather_rules()))
 	add_child(mode_option)
@@ -808,23 +822,25 @@ func _build_ui() -> void:
 	_reg_room(kick_btn, Vector2(190, 290), "center")
 	_reg_room(start_btn, Vector2(340, 290), "center")
 	_reg_room(rules_lbl, Vector2(832, 20), "right")
-	_reg_room(chk_joker, Vector2(832, 54), "right")
-	_reg_room(chk_revolution, Vector2(832, 90), "right")
-	_reg_room(stakes_lbl, Vector2(832, 136), "right")
-	_reg_room(stakes_option, Vector2(880, 124), "right")
-	_reg_room(rounds_lbl, Vector2(832, 174), "right")
-	_reg_room(rounds_option, Vector2(880, 162), "right")
-	_reg_room(save_settings_btn, Vector2(832, 240), "right")
+	_reg_room(mode_lbl, Vector2(832, 62), "right")
+	_reg_room(mode_option, Vector2(880, 50), "right")
+	_reg_room(chk_joker, Vector2(832, 96), "right")
+	_reg_room(chk_revolution, Vector2(832, 132), "right")
+	_reg_room(stakes_lbl, Vector2(832, 180), "right")
+	_reg_room(stakes_option, Vector2(880, 168), "right")
+	_reg_room(rounds_lbl, Vector2(832, 218), "right")
+	_reg_room(rounds_option, Vector2(880, 206), "right")
+	_reg_room(save_settings_btn, Vector2(832, 252), "right")
 	# 模式选择 双视图注册: 入口页(建房前选模式) + 房间页(房主随时改)
 	# (先设入口坐标注册 entry, 再设房间坐标注册 room — _reg 按注册时坐标记位)
 	mode_lbl.position = Vector2(830, 292)
 	mode_option.position = Vector2(880, 288)
 	_reg(mode_lbl, "right")
 	_reg(mode_option, "right")
-	mode_lbl.position = Vector2(832, 212)
-	mode_option.position = Vector2(880, 200)
-	_reg_room(mode_lbl, Vector2(832, 212), "right")
-	_reg_room(mode_option, Vector2(880, 200), "right")
+	mode_lbl.position = Vector2(832, 62)
+	mode_option.position = Vector2(880, 50)
+	_reg_room(mode_lbl, Vector2(832, 62), "right")
+	_reg_room(mode_option, Vector2(880, 50), "right")
 	for i in _emoji_btns.size():
 		_reg_room(_emoji_btns[i], Vector2(40 + i * 52, 662), "left", 1.0)  # 贴底缘
 
@@ -1079,6 +1095,7 @@ func _on_room_state(state: Dictionary) -> void:
 	_refresh_invite(state)
 	_apply_settings(state.get("settings", {}))
 	_enter_room()
+	_sync_rules_visibility()
 	var host_seat := int(state.get("host_seat", -1))
 	kick_btn.visible = net.in_room and host_seat == net.my_seat
 	# 房间页标题 + 邀请行
