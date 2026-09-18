@@ -22,7 +22,7 @@ var vsync_enabled := true       # 显示偏好: 垂直同步(持久化)
 var window_size := Vector2i.ZERO  # 显示偏好: 窗口尺寸(ZERO=不改)
 var vibration := true           # 触感偏好: 震动反馈(移动端)
 var ai_level := "normal"        # 本地 AI 难度: easy/normal
-var language := ""              # 界面语言(空=首次启动, 按 OS 语言检测)
+var language := ""              # 界面语言(空=首次启动, 默认中文)
 var card_counter := true        # 记牌器 HUD 开关
 var voice_on := true            # 语音播报开关(欢乐斗地主式出牌/战斗播报)
 
@@ -58,17 +58,14 @@ func load_settings() -> void:
 				cf.get_value("display", "window_size_y", 0))
 
 
-## 按 OS 语言检测默认界面语言(仅首启; 此后以玩家设置为准)
+## 首启默认中文(仅首次; 此后以玩家设置为准)。
+## 繁体系统(TW/HK/繁体)给 zh_TW, 其余一律 zh_CN — 不再跟随英文等系统语言。
 func detect_language() -> String:
 	var lang := OS.get_locale_language()          # "zh"/"en"/"ja"…
 	if lang.begins_with("zh"):
 		var loc := OS.get_locale().to_upper()
 		return "zh_TW" if ("TW" in loc or "HK" in loc or "HANT" in loc) 				else "zh_CN"
-	for supported in ["ja", "ko", "es", "fr", "de", "pt", "it", "ru",
-			"ar", "th", "vi", "id", "tr"]:
-		if lang == supported:
-			return lang
-	return "en"
+	return "zh_CN"
 
 
 func save_settings() -> void:

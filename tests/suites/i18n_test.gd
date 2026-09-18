@@ -62,5 +62,8 @@ func tst(t) -> void:
 		if child.name == "GameSettings":
 			gs = child
 	t.expect(gs == null or str(gs.language) == "fr", "语言选择已持久化")
+	# 首启默认中文(回归: 曾跟随系统语言, 非中文系统首启显示英文)
+	t.expect(gs != null and str(gs.detect_language()) in ["zh_CN", "zh_TW"],
+			"首启默认中文(非中文系统也返回中文)")
 	# 还原默认
 	i18n_node.set_language("zh_CN")
