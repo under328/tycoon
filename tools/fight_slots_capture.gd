@@ -1,4 +1,5 @@
-## 格斗装备槽截图: 挂载 fight_panel, 装满 5 槽后截左上装备区
+## 格斗选牌即时上槽验证: draft 阶段走真实 _on_candidate 选牌,
+## 不进入战斗即截图 —— 选中的牌必须立即出现在左上装备槽。
 extends SceneTree
 
 var frames := 0
@@ -16,13 +17,19 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 5:
-		# _ready 已自建 fm → 此时装填; 5 张不同花色展示边框内边距
-		panel.fm.slots = [0, 8, 16, 24, 53]   # ♠3 ♠5 ♠7 ♠9 大王
-		panel._refresh_slots()
-	elif frames == 40:
+		print("[cap] phase=", panel.fm.phase, " pair=", str(panel.fm.pair),
+				" slots_before=", str(panel.fm.slots))
+		# 走真实选牌路径(非特殊牌, 未满 5 槽 → 直接装备)
+		var cand: int = int(panel.fm.pair[0])
+		if cand >= 100:
+			cand = int(panel.fm.pair[1])   # 首候选是奇物则选另一张
+		panel._on_candidate(cand)
+		print("[cap] picked=", cand, " slots_after=", str(panel.fm.slots))
+	elif frames == 25:
 		var img := root.get_viewport().get_texture().get_image()
 		img.get_region(Rect2i(0, 0, 480, 300)).save_png("builds/fight_slots.png")
-		print("[cap] fight_slots saved")
-	elif frames == 50:
+		print("[cap] fight_slots saved (draft 阶段, 未攻击)")
+		print("[cap] slots_ui_check=", str(panel.fm.slots))
+	elif frames == 35:
 		quit(0)
 	return false

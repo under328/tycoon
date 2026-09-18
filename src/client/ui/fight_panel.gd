@@ -321,6 +321,7 @@ func _render() -> void:
 		fm.round_num, FightModeGd.ROUNDS,
 		str(FightModeGd.GROUPS[fm.group]["name"])]
 	_refresh_bars()
+	_refresh_slots()   # 选牌/替换后立即反映到左上装备槽(原来只在战斗事件里刷)
 	_update_hits()
 	var is_battle: bool = fm.phase == "battle"
 	var is_draft: bool = fm.phase == "draft"
