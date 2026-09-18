@@ -214,7 +214,8 @@ func _test_over() -> void:
 	_apply_over()
 	_expect(arena.overlay != null, "终局弹出结算面板")
 	_expect(str(arena.score_lbl.text) == "1 : 3", "终局比分")
-	_expect(wallet.gold > gold0, "败北也有参与奖励入账")
+	# 失败惩罚(新经济规则): 败北扣 10 金币(下限 0), 不发放钻石
+	_expect(wallet.gold == maxi(gold0 - 10, 0), "败北扣 10 金币(失败惩罚)")
 	var gold1: int = wallet.gold
 	arena._apply(fake_net.latest_fight, [])
 	_expect(wallet.gold == gold1, "结算幂等(重复广播不再入账)")
