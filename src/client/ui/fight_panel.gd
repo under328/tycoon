@@ -289,7 +289,7 @@ func _process(delta: float) -> void:
 		avatar.rotation = sin(_bob_t * 1.2) * 0.02
 	if _aura != null and _aura.visible:
 		_aura_spin += delta * 1.5   # 变身光环旋转
-		_aura.position = _player_home - _aura.size / 2.0
+		_aura.position = _player_home + avatar.size / 2.0 - _aura.size / 2.0
 		_aura.queue_redraw()
 
 
@@ -395,7 +395,9 @@ func _update_transform() -> void:
 		_bg.color = Color("191934").lerp(GROUP_TINTS[fm.group], 0.6)
 	var on := _transformed()
 	_aura.visible = on
-	_aura.position = _player_home - _aura.size / 2.0
+	# 光环对齐角色中心: _player_home 是角色控件左上角锚点,
+	# 旧代码以它为光环中心 → 光环整体偏向角色左上 70px
+	_aura.position = _player_home + avatar.size / 2.0 - _aura.size / 2.0
 	avatar.modulate = Color(1, 1, 1).lerp(_suit_color(_dominant_suit()), 0.3) if on 			else Color.WHITE
 	if on and _transform_floor != fm.floor_num:
 		_transform_floor = fm.floor_num
