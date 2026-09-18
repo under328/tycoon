@@ -135,7 +135,7 @@ static func pluck(f: float, dur := 0.6, vol := 0.22) -> PackedFloat32Array:
 	return out
 
 
-## 笛(尺八风): 正弦 + 颤音 + 气声噪声, 缓起缓收
+## 笛: 正弦 + 轻颤音 + 二次谐波提亮 + 气声噪声, 缓起缓收
 static func flute(f: float, dur: float, vol := 0.2) -> PackedFloat32Array:
 	var n := int(dur * RATE)
 	var out := PackedFloat32Array()
@@ -145,9 +145,10 @@ static func flute(f: float, dur: float, vol := 0.2) -> PackedFloat32Array:
 	for i in n:
 		var t := float(i) / RATE
 		var env := minf(t / 0.09, 1.0) * minf(maxf((dur - t) / 0.18, 0.0), 1.0)
-		var vib := sin(TAU * 5.2 * t) * 0.006
+		var vib := sin(TAU * 5.5 * t) * 0.004
 		var tone := sin(TAU * (f * (1.0 + vib)) * t)
-		out[i] = (tone * 0.85 + (rng.randf() * 2 - 1) * 0.06) * vol * env
+		out[i] = ((tone + 0.22 * sin(TAU * f * 2.0 * t)) * 0.82
+				+ (rng.randf() * 2 - 1) * 0.06) * vol * env
 	return out
 
 
@@ -163,18 +164,19 @@ static func bass_note(f: float, dur: float, vol := 0.16) -> PackedFloat32Array:
 	return out
 
 
-## 铜钵: 非谐泛音簇, 长衰减
-static func kane(vol := 0.2) -> PackedFloat32Array:
-	var n := int(2.2 * RATE)
+## 亮铃(钟琴风): 谐波泛音簇 1:2:3, 快衰减 — 旧铜钵为非谐泛音(2.76/5.4),
+## 敲击感阴森, 全曲换用亮铃保节奏句读不变
+static func chime(vol := 0.2) -> PackedFloat32Array:
+	var n := int(1.1 * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
 	for i in n:
 		var t := float(i) / RATE
-		var env := exp(-2.2 * t)
+		var env := exp(-3.8 * t)
 		if t < 0.002:
 			env *= t / 0.002
-		out[i] = (sin(TAU * 523.25 * t) + 0.6 * sin(TAU * 523.25 * 2.76 * t)
-				+ 0.35 * sin(TAU * 523.25 * 5.4 * t)) / 1.95 * vol * env
+		out[i] = (sin(TAU * 523.25 * t) + 0.5 * sin(TAU * 523.25 * 2.0 * t)
+				+ 0.25 * sin(TAU * 523.25 * 3.0 * t)) / 1.75 * vol * env
 	return out
 
 
@@ -192,7 +194,7 @@ static func snare(vol := 0.2) -> PackedFloat32Array:
 
 
 ## 音序器: 按 BPM 渲染音符事件列表为 BGM 流(无缝循环)。
-## event: {t: 起始拍, len: 拍数, kind: "pluck/flute/bass/taiko/kane/snare", f: 频率, v: 音量}
+## event: {t: 起始拍, len: 拍数, kind: "pluck/flute/bass/taiko/chime/snare", f: 频率, v: 音量}
 static func render_track(bars: int, bpm: float, events: Array) -> AudioStreamWAV:
 	var spb := 60.0 / bpm
 	var dur := bars * 4 * spb
@@ -210,8 +212,8 @@ static func render_track(bars: int, bpm: float, events: Array) -> AudioStreamWAV
 				buf = bass_note(float(e["f"]), float(e["len"]) * spb, float(e.get("v", 0.15)))
 			"taiko":
 				buf = drum(0.28, float(e.get("v", 0.4)))
-			"kane":
-				buf = kane(float(e.get("v", 0.2)))
+			"chime":
+				buf = chime(float(e.get("v", 0.2)))
 			"snare":
 				buf = snare(float(e.get("v", 0.16)))
 			_:
@@ -282,13 +284,13 @@ static func bgm_lobby() -> AudioStreamWAV:
 			var pair: Array = bass_pairs[bi]
 			ev.append(_n(rep * 16 + bi * 4, 2, "bass", float(pair[0]), 0.14))
 			ev.append(_n(rep * 16 + bi * 4 + 2, 2, "bass", float(pair[1]), 0.12))
-	# 打击: 太鼓每小节头, 军鼓反拍(第3拍), 钹标句读
+	# 打击: 太鼓每小节头, 军鼓反拍(第3拍), 亮铃标句读
 	for rep in 2:
 		for bi in 4:
 			ev.append(_n(rep * 16 + bi * 4, 1, "taiko", 0, 0.22))
 			ev.append(_n(rep * 16 + bi * 4 + 2, 1, "snare", 0, 0.09))
-	ev.append(_n(0, 1, "kane", 523.25, 0.12))
-	ev.append(_n(16, 1, "kane", 523.25, 0.10))
+	ev.append(_n(0, 1, "chime", 523.25, 0.12))
+	ev.append(_n(16, 1, "chime", 523.25, 0.10))
 	return render_track(8, 112, ev)
 
 
@@ -322,17 +324,14 @@ static func bgm_koto() -> AudioStreamWAV:
 			ev.append(_n(t0, 4, "bass", float(chord_roots[bi]), 0.15))
 			for e8 in 8:
 				ev.append(_n(t0 + e8 * 0.5, 0.45, "pluck", float(arp[e8 % arp.size()]), 0.09))
-			ev.append(_n(t0, 1, "taiko", 0, 0.25))
-			ev.append(_n(t0 + 2, 1, "snare", 0, 0.10))
+			ev.append(_n(t0, 1, "taiko", 0, 0.18))
+			ev.append(_n(t0 + 2, 1, "snare", 0, 0.08))
 	return render_track(8, 116, ev)
 
-## 肉鸽 BGM: E 和声小调 128BPM 神秘急板(笛长音 + 拨弦音型 + 深鼓),
-## 命运卡的不可预知感 → 小调色彩 + 增二度装饰音。
-## 格斗 BGM: A 小调 132BPM 战斗曲 — 密集鼓组 + 低音推进 + 高音呼喊,
-## 与牌桌曲(慢板古筝)区分, 打斗的紧张感。
+## 格斗 BGM: C 大调 132BPM 热血进行 — 低音推进 + 轻鼓组 + 大调和弦刺击 + 高音呼喊
 static func bgm_fight() -> AudioStreamWAV:
 	var ev := []
-	var bass_roots := [110.0, 110.0, 87.31, 98.0]   # A A F G
+	var bass_roots := [130.81, 130.81, 87.31, 98.0]   # C C F G
 	for rep in 2:
 		for bi in 4:
 			var t0: float = rep * 8 + bi * 2
@@ -341,24 +340,23 @@ static func bgm_fight() -> AudioStreamWAV:
 			for e8 in 4:
 				ev.append(_n(t0 + e8 * 0.5, 0.45, "bass", root, 0.16))
 			# 鼓组: 军鼓反拍 + 底鼓正拍 + 密集踩镲
-			ev.append(_n(t0, 0.4, "taiko", 0, 0.28))
-			ev.append(_n(t0 + 1.0, 0.3, "snare", 0, 0.14))
-			ev.append(_n(t0 + 1.5, 0.4, "taiko", 0, 0.20))
-			ev.append(_n(t0 + 2.0, 0.4, "taiko", 0, 0.24))
-			ev.append(_n(t0 + 3.0, 0.3, "snare", 0, 0.14))
+			ev.append(_n(t0, 0.4, "taiko", 0, 0.22))
+			ev.append(_n(t0 + 1.0, 0.3, "snare", 0, 0.12))
+			ev.append(_n(t0 + 1.5, 0.4, "taiko", 0, 0.16))
+			ev.append(_n(t0 + 2.0, 0.4, "taiko", 0, 0.20))
+			ev.append(_n(t0 + 3.0, 0.3, "snare", 0, 0.12))
 			for e8 in 8:
-				ev.append(_n(t0 + e8 * 0.5, 0.12, "snare", 0, 0.05))
-			# 力量和弦刺击(反拍)
-			var fifth := root * 1.5
+				ev.append(_n(t0 + e8 * 0.5, 0.12, "snare", 0, 0.04))
+			# 大调和弦刺击(反拍): 根音八度 + 大三度
 			ev.append(_n(t0 + 0.5, 0.3, "pluck", root * 2.0, 0.10))
-			ev.append(_n(t0 + 0.5, 0.3, "pluck", fifth * 2.0, 0.08))
+			ev.append(_n(t0 + 0.5, 0.3, "pluck", root * 2.52, 0.08))
 			ev.append(_n(t0 + 2.5, 0.3, "pluck", root * 2.0, 0.10))
-			ev.append(_n(t0 + 2.5, 0.3, "pluck", fifth * 2.0, 0.08))
-	# 高音呼喊(第 2 遍进入): A 小调急促音型
+			ev.append(_n(t0 + 2.5, 0.3, "pluck", root * 3.0, 0.07))
+	# 高音呼喊(第 2 遍进入): C 大调五声急促音型, 末句翻高八度收束
 	var lead := [
-		[8, .5, 440], [8.5, .5, 523.25], [9, 1, 659.25], [10, .5, 587.33],
-		[10.5, .5, 523.25], [11, 1, 440], [12, 1, 493.88], [13, 1.5, 523.25],
-		[14.5, .5, 440], [15, 1, 329.63],
+		[8, .5, 523.25], [8.5, .5, 659.26], [9, 1, 783.99], [10, .5, 659.26],
+		[10.5, .5, 587.33], [11, 1, 523.25], [12, 1, 587.33], [13, 1.5, 659.26],
+		[14.5, .5, 783.99], [15, 1, 1046.5],
 	]
 	for n in lead:
 		ev.append(_n(float(n[0]), float(n[1]), "flute", float(n[2]), 0.15))
@@ -367,61 +365,60 @@ static func bgm_fight() -> AudioStreamWAV:
 
 static func bgm_rogue() -> AudioStreamWAV:
 	var ev := []
-	# 笛主旋律(E 和声小调, 8 小节): E5 D#5 B4 G4 A4 B4 / C5 B4 A4 F#4 E4
+	# 笛主旋律(C 大调五声, 8 小节): 明快跳跃, 末句落回 C5 无缝循环
 	var mel := [
-		[0, 1.0, 659.25], [1, 0.5, 622.25], [1.5, 1.5, 493.88],
-		[3, 0.5, 392.0], [3.5, 0.5, 440.0], [4, 2.0, 493.88],
-		[6, 0.5, 523.25], [6.5, 0.5, 493.88], [7, 1.0, 440.0],
-		[8, 1.0, 369.99], [9, 0.5, 392.0], [9.5, 0.5, 440.0],
-		[10, 3.0, 329.63], [13, 0.5, 493.88], [13.5, 0.5, 523.25],
-		[14, 2.0, 659.25],
+		[0, 1.0, 659.26], [1, 0.5, 783.99], [1.5, 1.5, 880.0],
+		[3, 0.5, 783.99], [3.5, 0.5, 659.26], [4, 2.0, 783.99],
+		[6, 0.5, 880.0], [6.5, 0.5, 783.99], [7, 1.0, 659.26],
+		[8, 1.0, 587.33], [9, 0.5, 659.26], [9.5, 0.5, 783.99],
+		[10, 2.0, 880.0], [12, 1.0, 783.99], [13, 0.5, 659.26],
+		[13.5, 0.5, 587.33], [14, 2.0, 523.25],
 	]
 	for rep in 2:
 		for n in mel:
 			ev.append(_n(float(n[0]) + rep * 16, float(n[1]), "flute",
 					float(n[2]), 0.15))
-	# 和声: Em / C / D / Em(带 D# 色彩)
-	var roots := [82.41, 65.41, 73.42, 82.41]
+	# 和声: C / G / Am / F 大调圈进行, 跌宕感靠切分不靠小调
+	var roots := [130.81, 98.0, 110.0, 87.31]
 	var arps := [
-		[329.63, 392.0, 493.88, 392.0],
 		[261.63, 329.63, 392.0, 329.63],
-		[293.66, 369.99, 440.0, 369.99],
-		[329.63, 415.3, 622.25, 493.88],
+		[246.94, 293.66, 392.0, 293.66],
+		[220.0, 261.63, 329.63, 261.63],
+		[174.61, 220.0, 261.63, 220.0],
 	]
 	for rep in 2:
 		for bi in 4:
 			var t0: float = rep * 16 + bi * 4
 			var arp: Array = arps[bi]
-			ev.append(_n(t0, 4, "bass", float(roots[bi]), 0.16))
+			ev.append(_n(t0, 4, "bass", float(roots[bi]), 0.15))
 			for e8 in 8:
 				ev.append(_n(t0 + e8 * 0.5, 0.4, "pluck",
 						float(arp[e8 % arp.size()]), 0.10))
-			ev.append(_n(t0, 1, "taiko", 0.0, 0.3))
-			ev.append(_n(t0 + 2.5, 0.5, "snare", 0.0, 0.10))
-			ev.append(_n(t0 + 3.5, 0.5, "snare", 0.0, 0.14))
+			ev.append(_n(t0, 1, "taiko", 0.0, 0.18))
+			ev.append(_n(t0 + 2.5, 0.5, "snare", 0.0, 0.08))
 	return render_track(8, 128, ev)
 
 
 static func bgm_koto_rev() -> AudioStreamWAV:
 	var ev := []
-	var riff := [[110.0, 0.5], [110.0, 0.5], [130.81, 0.5], [164.81, 0.5],
-			[146.83, 1.0], [130.81, 0.5], [146.83, 0.5]]
-	var bars := [[220.0, 130.81], [220.0, 146.83], [196.0, 110.0], [164.81, 196.0]]
+	# 革命对局曲: C 大调 138BPM 明快推进 — 拨弦五声走句 + 轻鼓 + 亮铃句读,
+	# 翻盘的热闹感替代旧的低音小调 riff + 铜钵(阴森)
+	var run := [523.25, 587.33, 659.26, 783.99]    # C5 D5 E5 G5
+	var alt := [659.26, 783.99, 880.0, 659.26]     # E5 G5 A5 E5 变奏
+	var roots := [130.81, 98.0, 110.0, 87.31]      # C G A F
 	for bi in 8:
-		var pair: Array = bars[bi % 4]
-		var base := 0.0
-		for note in riff:
-			var f: float = float(note[0])
-			if base > 0.0:
-				f = float(pair[0]) if f < 150.0 else float(pair[1])
-			ev.append(_n(bi * 8 + base, float(note[1]), "pluck", f, 0.2))
-			base += float(note[1])
-		ev.append(_n(bi * 8, 1, "taiko", 0.0, 0.5))
-		ev.append(_n(bi * 8 + 1.5, 1, "taiko", 0.0, 0.3))
-		ev.append(_n(bi * 8 + 2.5, 1, "taiko", 0.0, 0.34))
-		ev.append(_n(bi * 8 + 3, 1, "snare", 0.0, 0.12))
-		ev.append(_n(bi * 8 + 4, 1, "kane", 523.25, 0.14))
-		ev.append(_n(bi * 8 + 4, 2, "flute", 440.0, 0.14))
+		var t0 := float(bi) * 4.0
+		var row: Array = run if bi % 2 == 0 else alt
+		for e8 in 8:
+			ev.append(_n(t0 + e8 * 0.5, 0.4, "pluck",
+					float(row[e8 % row.size()]), 0.12))
+		ev.append(_n(t0, 2, "bass", float(roots[bi % 4]), 0.13))
+		ev.append(_n(t0, 1, "taiko", 0.0, 0.18))
+		ev.append(_n(t0 + 2, 1, "snare", 0.0, 0.08))
+	ev.append(_n(0, 1, "chime", 0.0, 0.14))
+	ev.append(_n(16, 1, "chime", 0.0, 0.12))
+	ev.append(_n(28, 2, "flute", 1046.5, 0.14))
+	ev.append(_n(30, 2, "flute", 783.99, 0.12))
 	return render_track(8, 138, ev)
 
 
@@ -435,5 +432,5 @@ static func result_fanfare() -> AudioStreamWAV:
 	for i in 8:
 		ev.append(_n(i * 0.25, 0.25, "taiko", 0.0, 0.3 - i * 0.02))
 	ev.append(_n(2, 1, "taiko", 0.0, 0.5))
-	ev.append(_n(2, 1, "kane", 523.25, 0.2))
+	ev.append(_n(2, 1, "chime", 523.25, 0.2))
 	return render_track(4, 140, ev)
