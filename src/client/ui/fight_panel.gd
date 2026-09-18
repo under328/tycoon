@@ -130,6 +130,11 @@ func _ready() -> void:
 		var wrap := PanelContainer.new()
 		var sb := AppTheme.flat(Color(0.06, 0.06, 0.14),
 				Color(1, 1, 1, 0.25), 6, 1)
+		# 边框内边距: 卡牌与边框留出呼吸感, 不再顶边贴边
+		sb.content_margin_left = 4
+		sb.content_margin_right = 4
+		sb.content_margin_top = 4
+		sb.content_margin_bottom = 4
 		wrap.add_theme_stylebox_override("panel", sb)
 		wrap.custom_minimum_size = Vector2(56, 78)
 		wrap.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -486,8 +491,9 @@ func _refresh_slots() -> void:
 		e["card"] = card
 		if card >= 0:
 			var cv: Control = CardViewScript.new(card)
-			cv.custom_minimum_size = Vector2(52, 74)
-			cv.size = Vector2(52, 74)
+			# 槽 56×78 − 内边距 4×2 → 内容区 48×70; 卡 min 略小交给容器拉伸
+			cv.custom_minimum_size = Vector2(46, 68)
+			cv.size = Vector2(48, 70)
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			wrap.add_child(cv)
 			# 悬停提示: 当前装备牌的单卡效果 + 全套牌型协同效果
