@@ -534,10 +534,15 @@ func _build_mode_card(m: Array) -> Button:
 	desc.position = Vector2(88, 50)
 	card.add_child(desc)
 	# 圆包 ? 帮助钮(方块内右上角, 小巧不抢视觉)
-	var help := AppTheme.make_button("?", Vector2(28, 28), 15)
+	# 固定 40×40 正方形 + 角半径=半径 20 → 各端一致的正圆。
+	# 不能走 make_button 的触屏热区规则(它只把高度抬到 44 → 28×44 椭圆);
+	# 40×40 在触屏上也有足够热区。锚定右上角, 卡片被网格拉伸时仍贴角。
+	var help := AppTheme.make_button("?", Vector2(40, 40), 15)
+	help.custom_minimum_size = Vector2(40, 40)
+	help.size = Vector2(40, 40)
 	var circle := StyleBoxFlat.new()
 	circle.bg_color = Color(0.16, 0.15, 0.32)
-	circle.set_corner_radius_all(14)
+	circle.set_corner_radius_all(20)
 	circle.set_border_width_all(1)
 	circle.border_color = Color(AppTheme.GOLD, 0.7)
 	help.add_theme_stylebox_override("normal", circle)
@@ -547,7 +552,12 @@ func _build_mode_card(m: Array) -> Button:
 	help.add_theme_stylebox_override("hover", circle_h)
 	help.add_theme_stylebox_override("pressed", circle_h)
 	help.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	help.position = Vector2(336 - 38, 8)
+	help.anchor_left = 1.0
+	help.anchor_right = 1.0
+	help.offset_left = -50
+	help.offset_right = -10
+	help.offset_top = 8
+	help.offset_bottom = 48
 	help.tooltip_text = "查看 %s 玩法说明" % str(m[0])
 	var help_script := str(m[4])
 	help.pressed.connect(func() -> void:
