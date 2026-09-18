@@ -372,6 +372,13 @@ func c_room_kick(data: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func c_room_transfer(data: Dictionary) -> void:
+	if not is_server:
+		return
+	_flush(manager.transfer_host(_sender(), int(data.get("seat", -1))))
+
+
+@rpc("any_peer", "call_remote", "reliable")
 func c_bot_fill(_data: Dictionary) -> void:
 	if not is_server:
 		return
@@ -667,6 +674,11 @@ func send_fight_act(action: String) -> void:
 ## 房主：移除指定座位的人类玩家
 func kick_seat(seat: int) -> void:
 	_c_send("c_room_kick", {"seat": seat})
+
+
+## 房主：把房主转让给目标座位(服务端校验房主身份与目标合法性)
+func transfer_host(seat: int) -> void:
+	_c_send("c_room_transfer", {"seat": seat})
 
 
 ## 房主：修改房间规则（对局未开始时）

@@ -34,6 +34,7 @@ var stakes_option: OptionButton
 var update_btn: Button
 var paste_btn: Button
 var _emoji_btns: Array = []
+var _transfer_btns: Array = []   # 房间页: 座位卡右上角转让房主按钮
 var host_panel: PanelContainer
 var host_ip_value: Label
 var host_hint_lbl: Label      # 主机信息卡: 加入指引(随有无 Tailscale 变化)
@@ -231,6 +232,10 @@ func _relayout() -> void:
 		rounds_option.position = Vector2(380, 470)
 		for i in _emoji_btns.size():
 			_emoji_btns[i].position = Vector2(40 + i * 52, h - 62.0)
+
+	for i in 4:
+		var sp: Control = _seat_cards[i]["panel"]
+		_transfer_btns[i].position = sp.position + Vector2(sp.size.x - 44.0, 6.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -453,8 +458,69 @@ func _sync_rules_visibility() -> void:
 		w.visible = not fight
 
 
+## 转让房主确认弹窗: 点击座位右上角 👑 后二次确认(成员 overlay, 可靠关闭)
+var _xfer_overlay: Control = null   # 转让确认弹窗(自持, 可靠关闭)
+
+
+func _close_xfer_overlay() -> void:
+	if _xfer_overlay != null and is_instance_valid(_xfer_overlay):
+		_xfer_overlay.queue_free()
+	_xfer_overlay = null
+
+
+func _confirm_transfer(seat: int, name: String) -> void:
+	_close_xfer_overlay()
+	_xfer_overlay = CenterContainer.new()
+	_xfer_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_xfer_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_xfer_overlay.add_child(dim)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 16, 2)
+	sb.content_margin_left = 44
+	sb.content_margin_right = 44
+	sb.content_margin_top = 28
+	sb.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", sb)
+	_xfer_overlay.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var t := AppTheme.make_label(24, AppTheme.GOLD)
+	t.text = "转让房主"
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var b := AppTheme.make_label(15, AppTheme.WHITE)
+	b.text = "确定将房主转让给 %s 吗？\n转让后你将不再是房主" % name
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(b)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	box.add_child(row)
+	var ok := AppTheme.make_button("确认转让", Vector2(170, 46), 16)
+	ok.pressed.connect(func() -> void:
+		Audio.play("click")
+		net.transfer_host(seat)
+		_close_xfer_overlay())
+	row.add_child(ok)
+	var cancel := AppTheme.make_button("取 消", Vector2(140, 46), 16)
+	cancel.pressed.connect(func() -> void:
+		Audio.play("click")
+		_close_xfer_overlay())
+	row.add_child(cancel)
+	add_child(_xfer_overlay)
+	_xfer_overlay.position = Vector2.ZERO
+	_xfer_overlay.size = size
+
+
 func _exit_room() -> void:
 	_apply_view("entry")
+	for tb: Button in _transfer_btns:
+		tb.visible = false
+	_close_xfer_overlay()
 	if net != null:
 		net.leave_room()
 	hide_host_panel()
@@ -654,6 +720,20 @@ func _build_ui() -> void:
 		var tag := AppTheme.make_label(13, COLOR_DIM)
 		sv.add_child(tag)
 		_seat_cards.append({"panel": sp, "name": nm, "tag": tag})
+
+	# 转让房主按钮(座位卡右上角 👑, 仅房主可见; 点击弹窗二次确认)
+	for i in 4:
+		var tb := AppTheme.make_button("👑", Vector2(40, 30), 17)
+		tb.position = Vector2(40 + i * 160 + 106, 122)
+		tb.visible = false
+		tb.tooltip_text = "将房主转让给该玩家"
+		var idx := i
+		tb.pressed.connect(func() -> void:
+			Audio.play("click")
+			var nm_lbl: Label = _seat_cards[idx]["name"]
+			_confirm_transfer(idx, str(nm_lbl.text)))
+		add_child(tb)
+		_transfer_btns.append(tb)
 
 	# 房主操作按钮
 	fill_btn = AppTheme.make_button("空位加AI", Vector2(140, 46), 17)
@@ -1165,6 +1245,14 @@ func _on_room_state(state: Dictionary) -> void:
 	var host: bool = host_seat == int(net.my_seat)
 	fill_btn.disabled = not host
 	start_btn.disabled = not host
+	# 转让按钮: 我是房主时, 每个真人座位右上角显示(自己的座位/机器人除外)
+	for i in 4:
+		var occupied_human := false
+		for p in state.get("players", []):
+			if int(p.get("seat", -1)) == i and not bool(p.get("empty", true)) 					and not bool(p.get("is_bot", false)):
+				occupied_human = true
+				break
+		_transfer_btns[i].visible = host and occupied_human and i != host_seat
 
 
 func _set_status(text: String, color: Color) -> void:

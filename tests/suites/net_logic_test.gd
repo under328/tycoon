@@ -16,6 +16,38 @@ func run(t) -> void:
 	_chat_rate_limit(t)
 	_room_limit(t)
 	_rejoin_finished_match(t)
+	_transfer_host(t)
+
+
+## 转让房主: 仅房主/真人座位/非自己; 转让后房主权利随 host_seat 走
+func _transfer_host(t) -> void:
+	var m = _mgr()
+	var out: Array = m.create_room(100, "甲", {})
+	var code := str(_room_state_to(out, 100)["room_code"])
+	m.join_room(101, "乙", code)
+	# 非房主发起 → 拒绝
+	out = m.transfer_host(101, 0)
+	t.expect_eq(_count(out, "s_room_state"), 0, "非房主转让被拒")
+	# 转让给自己 → 拒绝
+	out = m.transfer_host(100, 0)
+	t.expect_eq(_count(out, "s_room_state"), 0, "转让给自己被拒")
+	# 正常转让给乙(座位1)
+	out = m.transfer_host(100, 1)
+	t.expect(_count(out, "s_room_state") >= 1, "转让后广播房间状态")
+	t.expect_eq(int(_room_state_to(out, 101)["host_seat"]), 1, "乙成为新房主")
+	# 权利随房主走: 新房主可补AI, 老房主被拒
+	out = m.fill_bots(101)
+	t.expect(_count(out, "s_room_state") >= 1, "新房主可补AI")
+	out = m.fill_bots(100)
+	t.expect_eq(_count(out, "s_room_state"), 0, "老房主失去补AI权")
+	# 空座位/机器人座位转让被拒
+	out = m.transfer_host(101, 3)
+	t.expect_eq(_count(out, "s_room_state"), 0, "空座位转让被拒")
+	out = m.transfer_host(101, 2)
+	t.expect_eq(_count(out, "s_room_state"), 0, "机器人座位转让被拒")
+	# 房主可再转回甲
+	out = m.transfer_host(101, 0)
+	t.expect_eq(int(_room_state_to(out, 100)["host_seat"]), 0, "房主可再转回")
 
 
 ## 重入已结束对局的房间: 只发房间状态不发 game_end 视图(防上局结算残影)

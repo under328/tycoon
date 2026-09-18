@@ -313,6 +313,24 @@ func kick(host_peer: int, target_seat: int) -> Array:
 	return out
 
 
+## 转让房主: 仅房主可操作; 目标须为房内真人座位且非自己; 对局进行中不可转让
+func transfer_host(host_peer: int, target_seat: int) -> Array:
+	var out := []
+	var room = _room_of(host_peer)
+	if room == null or int(room.host_seat) != _seat_of(room, host_peer):
+		return out
+	if room.match_ctl != null or target_seat < 0 \
+			or target_seat >= (room.seats as Array).size():
+		return out
+	var seat_data = room.seats[target_seat]
+	if seat_data == null or bool(seat_data["bot"]) \
+			or target_seat == _seat_of(room, host_peer):
+		return out
+	room.host_seat = target_seat
+	_bcast_room_state(out, room)
+	return out
+
+
 func fill_bots(peer: int) -> Array:
 	var out := []
 	var room = _room_of(peer)
