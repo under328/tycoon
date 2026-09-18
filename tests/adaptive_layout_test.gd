@@ -172,9 +172,9 @@ func _check_scene(i: int, w: float, h: float) -> void:
 			for n in s._layouts:
 				if (s._layouts[n] as Dictionary).has("entry"):
 					_in_rect(n, w, h, "lobby entry %s" % n.name)
-			expect(absf(s.port_edit.position.x - (1040.0 + extra)) <= 1.0,
-					"lobby 端口输入未锚右缘 x=%s extra=%s" % [s.port_edit.position.x, extra])
-			expect(s.code_edit.visible and not s.room_title_lbl.visible,
+			expect(s.host_btn.position.x + s.host_btn.size.x <= w - 16.0,
+					"lobby 本机开房按钮越右缘 x=%s w=%s" % [s.host_btn.position.x, w])
+			expect(s.host_btn.visible and not s.room_title_lbl.visible,
 					"入口页显隐错误")
 			# 房间页(独立子页面): 切视图后断言
 			s._apply_view("room")
@@ -185,9 +185,9 @@ func _check_scene(i: int, w: float, h: float) -> void:
 					"lobby 房间页表情未贴底缘 y=%s eh=%s" % [s._emoji_btns[0].position.y, eh])
 			expect(absf(s._seat_cards[0]["panel"].position.x - (150.0 + extra * 0.45)) <= 1.0,
 					"lobby 座位卡未随宽漂移 x=%s" % s._seat_cards[0]["panel"].position.x)
-			expect(s.room_title_lbl.visible and not s.code_edit.visible,
+			expect(s.room_title_lbl.visible and not s.host_btn.visible,
 					"房间页显隐错误")
-			expect(not s.quick_btn.visible and not s.host_edit.visible,
+			expect(not s.host_btn.visible and not s.paste_btn.visible,
 					"房间页仍显示入口控件")
 			s._apply_view("entry")
 		2:  # 牌桌 + 离开确认框(模态层一并对入遍历)

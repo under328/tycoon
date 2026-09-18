@@ -22,10 +22,6 @@ const COLOR_RED := Color("ff6b6b")
 
 var net: Node = null
 var nickname_edit: LineEdit
-var code_edit: LineEdit
-var quick_btn: Button
-var create_btn: Button
-var join_btn: Button
 var fill_btn: Button
 var start_btn: Button
 var copy_btn: Button
@@ -35,10 +31,6 @@ var chk_joker: CheckButton
 var chk_revolution: CheckButton
 var rounds_option: OptionButton
 var stakes_option: OptionButton
-var host_edit: LineEdit
-var port_edit: LineEdit
-var connect_btn: Button
-var host_btn: Button
 var update_btn: Button
 var paste_btn: Button
 var _emoji_btns: Array = []
@@ -70,10 +62,11 @@ var _cand := {"ips": [], "port": 0, "i": 0, "seq": -1}  # 多地址加入进度
 var kick_btn: Button
 var mode_option: OptionButton
 var help_btn: Button
+var host_btn: Button
+var mode_lbl: Label
 var back_btn: Button
 var title_lbl: Label
 var nick_lbl: Label
-var server_lbl: Label
 var rules_lbl: Label
 var stakes_lbl: Label
 var rounds_lbl: Label
@@ -224,8 +217,6 @@ func _unhandled_input(event: InputEvent) -> void:
 ## 重新可见时立即刷新联机准备条(隐藏期间定时器空转, 不主动查地址)
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and visible:
-		if code_edit != null:
-			code_edit.text = ""
 		_refresh_ts_chip()
 
 
@@ -358,8 +349,6 @@ func _join_candidates(ips: Array, port: int, code: String) -> void:
 	_auto_join_code = code
 	_conn_fails = 0
 	_loopback_hint = false
-	host_edit.text = str(ips[0])
-	port_edit.text = str(port)
 	_join_seq += 1
 	_cand = {"ips": ips, "port": port, "i": 0, "seq": _join_seq}
 	_try_next_candidate()
@@ -402,8 +391,6 @@ func _connect_join(ip: String, port: int, msg: String) -> void:
 		g.host = ip
 		g.host_port = port
 		g.save_settings()
-	host_edit.text = ip
-	port_edit.text = str(port)
 	_join_seq += 1  # 作废仍在途的探测回调
 	net.disconnect_all()
 	net.auto_reconnect = true
@@ -466,31 +453,6 @@ func hide_host_panel() -> void:
 	status_label.visible = true
 
 
-func _manual_connect() -> void:
-	var host := host_edit.text.strip_edges()
-	var port_text := port_edit.text.strip_edges()
-	var port := int(port_text) if port_text.is_valid_int() else 0
-	if host == "":
-		_set_status("请输入服务器地址", COLOR_RED)
-		return
-	if port < 1 or port > 65535:
-		_set_status("端口需为 1-65535 的数字", COLOR_RED)
-		return
-	var gs := get_node_or_null("/root/GameSettings")
-	if gs != null:
-		gs.host = host
-		gs.host_port = port
-		gs.save_settings()
-	_conn_fails = 0
-	_join_seq += 1  # 作废在途的候选探测(手动连接优先)
-	net.disconnect_all()
-	net.auto_reconnect = true
-	net.connect_to(host, port)
-	_arm_loopback_guard()
-	_loopback_hint = false
-	_set_status("正在连接 %s:%d …" % [host, port], COLOR_DIM)
-
-
 ## 版本更新地址: 优先从当前联机主机的内置下载服务获取
 ## (http://主机:健康端口/download — 与联机同一条 Tailscale/局域网通路,
 ## 国内无障碍); 无主机信息时退回配置的 DOWNLOAD_URL。
@@ -536,57 +498,47 @@ func _build_ui() -> void:
 	nickname_edit.add_theme_font_size_override("font_size", 16)
 	add_child(nickname_edit)
 
-	# 三大主按钮(大尺寸, 好按)
-	quick_btn = AppTheme.make_button("🎲  快速匹配", Vector2(300, 52), 19)
-	quick_btn.position = Vector2(450, 96)
-	quick_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_save_nickname()
-		net.quick_match(_gather_rules()))
-	add_child(quick_btn)
-
-	create_btn = AppTheme.make_button("🏠  创建房间", Vector2(300, 52), 19)
-	create_btn.position = Vector2(450, 160)
-	create_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_save_nickname()
-		net.create_room(_gather_rules()))
-	add_child(create_btn)
-
-	# 邀请码一键加入: 粘贴房主发的 TC|IP|端口|房间码, 自动连接并进房
-	paste_btn = AppTheme.make_button("📋 粘贴邀请码, 一键加入", Vector2(300, 52), 18)
-	paste_btn.position = Vector2(450, 228)
-	paste_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_save_nickname()
-		_paste_join())
-	add_child(paste_btn)
-
-	# 手动输房间码(已连接时使用)
-	code_edit = LineEdit.new()
-	code_edit.position = Vector2(450, 294)
-	code_edit.custom_minimum_size = Vector2(200, 44)
-	code_edit.size = Vector2(200, 44)
-	code_edit.placeholder_text = "或输入房间码"
-	code_edit.add_theme_font_size_override("font_size", 18)
-	add_child(code_edit)
-	join_btn = AppTheme.make_button("加入", Vector2(62, 44), 18)
-	join_btn.position = Vector2(658, 294)
-	join_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_save_nickname()
-		net.join_room(code_edit.text.strip_edges()))
-	add_child(join_btn)
-
-	# 本机开房: 同进程内嵌服务器并自动建房, 朋友粘贴邀请码即可加入
-	# (宽度与「搜索附近主机」一致, 右列按钮对齐)
-	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(300, 52), 17)
-	host_btn.position = Vector2(830, 228)  # 与搜索附近主机左对齐
+	# 核心联机三动作(主列, 大尺寸好按):
+	#   ① 本机开房(当主机, 随 create_room 带上当前所选模式)
+	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(360, 56), 18)
+	host_btn.position = Vector2(470, 96)
 	host_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
 		host_requested.emit())
 	add_child(host_btn)
+	#   ② 搜索附近主机(同 WiFi 一键加入)
+	discover_btn = AppTheme.make_button("🔍 搜索附近主机", Vector2(360, 56), 18)
+	discover_btn.position = Vector2(470, 184)
+	discover_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_scan_tick())
+	add_child(discover_btn)
+	#   ③ 粘贴邀请码(异地一键加入)
+	paste_btn = AppTheme.make_button("📋 粘贴邀请码, 一键加入", Vector2(360, 56), 18)
+	paste_btn.position = Vector2(470, 272)
+	paste_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_save_nickname()
+		_paste_join())
+	add_child(paste_btn)
+	# 对局模式(建房前选定, 房间内房主可随时改)
+	mode_lbl = AppTheme.make_label(15, AppTheme.WHITE)
+	mode_lbl.text = "模式"
+	mode_lbl.position = Vector2(470, 356)
+	add_child(mode_lbl)
+	mode_option = OptionButton.new()
+	mode_option.add_item("普通模式")
+	mode_option.add_item("肉鸽模式")
+	mode_option.add_item("格斗对战(2人)")
+	mode_option.select(0)
+	mode_option.position = Vector2(530, 352)
+	mode_option.custom_minimum_size = Vector2(160, 36)
+	mode_option.item_selected.connect(func(_i: int) -> void:
+		Audio.play("click")
+		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
+		net.set_settings(_gather_rules()))
+	add_child(mode_option)
 
 	# 发现新版本: 版本握手不匹配时显示, 点击打开下载页
 	update_btn = AppTheme.make_button("⬇ 发现新版本, 点击更新", Vector2(260, 46), 16)
@@ -607,44 +559,7 @@ func _build_ui() -> void:
 		add_child(help))
 	add_child(help_btn)
 
-	# 服务器地址区(右上)
-	server_lbl = AppTheme.section_label("服务器")
-	server_lbl.position = Vector2(830, 66)
-	add_child(server_lbl)
-	host_edit = LineEdit.new()
-	host_edit.position = Vector2(830, 94)
-	host_edit.custom_minimum_size = Vector2(200, 36)
-	host_edit.size = Vector2(200, 36)
-	host_edit.placeholder_text = "IP 或域名"
-	var gs2 := get_node_or_null("/root/GameSettings")
-	if gs2 != null:
-		host_edit.text = str(gs2.host)
-	host_edit.add_theme_font_size_override("font_size", 15)
-	add_child(host_edit)
-	port_edit = LineEdit.new()
-	port_edit.position = Vector2(1040, 94)
-	port_edit.custom_minimum_size = Vector2(90, 36)
-	port_edit.size = Vector2(90, 36)
-	var gs3 := get_node_or_null("/root/GameSettings")
-	port_edit.text = str(int(gs3.host_port) if gs3 != null else 24565)
-	port_edit.add_theme_font_size_override("font_size", 15)
-	add_child(port_edit)
-	connect_btn = AppTheme.make_button("连接", Vector2(140, 36), 15)
-	connect_btn.position = Vector2(830, 138)
-	connect_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_manual_connect())
-	add_child(connect_btn)
-
-	# 局域网发现: 同 WiFi 主机自动列出, 点击即加(无 Tailscale 也能联机)
-	discover_btn = AppTheme.make_button("🔍 搜索附近主机", Vector2(300, 40), 15)
-	discover_btn.position = Vector2(830, 182)
-	discover_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		_scan_tick())
-	add_child(discover_btn)
-
-	# 附近主机结果列表(扫描到才有内容; 每行=一个可加入的房间)
+	# 附近主机结果列表(搜索按钮已并入主列; 扫描到才有内容)(扫描到才有内容; 每行=一个可加入的房间)
 	found_panel = PanelContainer.new()
 	var fp_sb := AppTheme.flat(Color(0.06, 0.06, 0.14, 0.92), Color(AppTheme.GOLD, 0.4), 10, 1)
 	fp_sb.content_margin_left = 12
@@ -736,24 +651,7 @@ func _build_ui() -> void:
 		_set_status("已复制: " + payload + " , 发给朋友即可加入", COLOR_GREEN))
 	add_child(copy_btn)
 
-	# 模式选择(房主专用, 联机肉鸽/普通)
-	var mode_lbl := AppTheme.make_label(15, AppTheme.WHITE)
-	mode_lbl.text = "模式"
-	mode_lbl.position = Vector2(830, 545)
-	add_child(mode_lbl)
-	mode_option = OptionButton.new()
-	mode_option.add_item("普通模式")
-	mode_option.add_item("肉鸽模式")
-	mode_option.add_item("格斗对战(2人)")
-	mode_option.select(0)
-	mode_option.position = Vector2(880, 541)
-	mode_option.custom_minimum_size = Vector2(120, 34)
-	mode_option.item_selected.connect(func(_i: int) -> void:
-		Audio.play("click")
-		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
-		net.set_settings(_gather_rules()))
-	add_child(mode_option)
-	# 规则设置
+	# 规则设置(模式选择器已在入口页创建, 双视图共用)
 	rules_lbl = AppTheme.section_label("规则设置")
 	rules_lbl.position = Vector2(830, 310)
 	add_child(rules_lbl)
@@ -886,17 +784,11 @@ func _build_ui() -> void:
 	_reg(title_lbl, "center")
 	_reg(nick_lbl, "center")
 	_reg(nickname_edit, "center")
-	_reg(quick_btn, "center")
-	_reg(create_btn, "center")
-	_reg(paste_btn, "center")
 	_reg(host_btn, "center")
-	_reg(code_edit, "center")
-	_reg(join_btn, "center")
-	_reg(server_lbl, "right")
-	_reg(host_edit, "right")
-	_reg(port_edit, "right")
-	_reg(connect_btn, "right")
-	_reg(discover_btn, "right")
+	_reg(discover_btn, "center")
+	_reg(paste_btn, "center")
+	_reg(mode_lbl, "center")
+	_reg(mode_option, "center")
 	_reg(found_panel, "left", 0.1)
 	_reg(help_btn, "right")
 
@@ -932,10 +824,8 @@ func _build_ui() -> void:
 	for i in _emoji_btns.size():
 		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
 
-	for b: Button in [quick_btn, create_btn, join_btn, fill_btn, start_btn, copy_btn, save_settings_btn]:
+	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
-	host_btn.disabled = false
-	connect_btn.disabled = false
 	paste_btn.disabled = false
 	_apply_view("entry")
 
@@ -1075,8 +965,6 @@ func _join_found(ip: String, port: int, room_code: String) -> void:
 		g.host = ip
 		g.host_port = port
 		g.save_settings()
-	host_edit.text = ip
-	port_edit.text = str(port)
 	_join_seq += 1
 	net.disconnect_all()
 	net.auto_reconnect = true
@@ -1116,8 +1004,7 @@ func _bind_net() -> void:
 		if auto_create_room:
 			auto_create_room = false
 			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房
-		for b: Button in [quick_btn, create_btn, join_btn]:
-			b.disabled = false)
+	)
 	net.connection_failed.connect(func() -> void:
 		_conn_fails += 1
 		# 手机连 127.0.0.1 = 连自己, 那里没有服务器; 停止无休止重试, 给出明确指引
