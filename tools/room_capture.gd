@@ -12,7 +12,7 @@ var names := ["normal", "rogue", "fight"]
 
 
 func _initialize() -> void:
-	root.size = Vector2i(1280, 720)
+	root.size = Vector2i(1248, 576)   # 手机横屏逻辑视口
 
 
 func _process(_delta: float) -> bool:
@@ -23,14 +23,15 @@ func _process(_delta: float) -> bool:
 			if f == 10:
 				main = (load("res://src/client/main.tscn") as PackedScene).instantiate()
 				root.add_child(main)
-			elif f == 25:
+			elif f == 26:
+				root.content_scale_factor = 1.25   # 模拟手机触屏缩放(逻辑视口 1024x576)
 				var probe := UDPServer.new()
 				if probe.listen(24565) != OK:
 					for c in root.get_children():
 						if c.name == "GameSettings":
 							c.host_port = 24695
 				probe.stop()
-			elif f == 30:
+			elif f == 32:
 				main._start_online()
 			elif f == 40:
 				main._start_host()

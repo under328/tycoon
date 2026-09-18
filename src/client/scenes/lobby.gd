@@ -206,6 +206,31 @@ func _relayout() -> void:
 		var dy_frac := float(lay[2])
 		var dy := pad * (1.0 - dy_frac) + dy_frac * eh
 		(n as Control).position = Vector2(lay[0]) + Vector2(dx, dy)
+	# ── 房间页窄屏(逻辑宽 <1100, 手机横屏)自适应 ──
+	# 宽度不足两栏并排: 取消 center 负位移(否则座位/标题被推出屏幕左缘),
+	# 规则设置从右列改为座位/按钮下方横排两行, 表情栏显式锚定底缘。
+	if _view == "room" and w < 1100.0:
+		room_title_lbl.position = Vector2(150, 22)
+		copy_btn.position = Vector2(minf(330.0, w - 170.0), 14)
+		invite_lbl.position = Vector2(150, 64)
+		for i in 4:
+			_seat_cards[i]["panel"].position = Vector2(40 + i * 160, 116)
+		fill_btn.position = Vector2(40, 290)
+		kick_btn.position = Vector2(190, 290)
+		start_btn.position = Vector2(340, 290)
+		status_label.position = Vector2(40, 360)
+		rules_lbl.position = Vector2(40, 424)
+		mode_lbl.position = Vector2(210, 428)
+		mode_option.position = Vector2(270, 424)
+		chk_joker.position = Vector2(490, 424)
+		chk_revolution.position = Vector2(670, 424)
+		save_settings_btn.position = Vector2(minf(860.0, w - 170.0), 420)
+		stakes_lbl.position = Vector2(40, 482)
+		stakes_option.position = Vector2(110, 470)
+		rounds_lbl.position = Vector2(310, 482)
+		rounds_option.position = Vector2(380, 470)
+		for i in _emoji_btns.size():
+			_emoji_btns[i].position = Vector2(40 + i * 52, h - 62.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
