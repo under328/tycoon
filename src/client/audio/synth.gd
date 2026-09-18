@@ -193,7 +193,7 @@ static func snare(vol := 0.2) -> PackedFloat32Array:
 
 ## 音序器: 按 BPM 渲染音符事件列表为 BGM 流(无缝循环)。
 ## event: {t: 起始拍, len: 拍数, kind: "pluck/flute/bass/taiko/kane/snare", f: 频率, v: 音量}
-static func render_track(bars: int, bpm: float, events: Array, loop := true) -> AudioStreamWAV:
+static func render_track(bars: int, bpm: float, events: Array) -> AudioStreamWAV:
 	var spb := 60.0 / bpm
 	var dur := bars * 4 * spb
 	var out := PackedFloat32Array()
@@ -221,12 +221,10 @@ static func render_track(bars: int, bpm: float, events: Array, loop := true) -> 
 			if idx >= out.size():
 				break
 			out[idx] += buf[i]
-	var wav := _to_wav(out)
-	if loop:
-		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		wav.loop_begin = 0
-		wav.loop_end = out.size()
-	return wav
+	# 不设 WAV 内建循环(LOOP_FORWARD): 引擎循环回绕在 loop_end==帧数时
+	# 每圈越界读 1 帧, 越界字节落在未映射页即 SIGSEGV(Android 实测闪退)。
+	# 无缝循环由 audio.gd 在 finished 信号后重放。
+	return _to_wav(out)
 
 
 ## 音符事件辅助
@@ -438,4 +436,4 @@ static func result_fanfare() -> AudioStreamWAV:
 		ev.append(_n(i * 0.25, 0.25, "taiko", 0.0, 0.3 - i * 0.02))
 	ev.append(_n(2, 1, "taiko", 0.0, 0.5))
 	ev.append(_n(2, 1, "kane", 523.25, 0.2))
-	return render_track(4, 140, ev, false)
+	return render_track(4, 140, ev)

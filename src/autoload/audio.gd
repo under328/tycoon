@@ -86,6 +86,9 @@ func _setup_buses() -> void:
 	bgm_player = AudioStreamPlayer.new()
 	bgm_player.bus = "BGM"
 	add_child(bgm_player)
+	# BGM 曲目不再用 WAV 内建循环(引擎循环回绕越界读, Android 闪退),
+	# 改为播完自动重放; fight 短曲(战斗登场 fanfare)播完即止
+	bgm_player.finished.connect(_on_bgm_finished)
 	for i in 4:
 		var p := AudioStreamPlayer.new()
 		p.bus = "SFX"
@@ -234,6 +237,14 @@ func play_bgm(track: String = "lobby") -> void:
 	_bgm_current = track
 	bgm_player.stream = _bgm_tracks[track]
 	bgm_player.play()
+
+
+## 循环曲目播完重放(fight 登场短曲除外); 切曲走 stop() 不触发 finished
+func _on_bgm_finished() -> void:
+	if _bgm_current == "fight":
+		return
+	if _bgm_tracks.has(_bgm_current):
+		bgm_player.play()
 
 
 func apply_volumes() -> void:
