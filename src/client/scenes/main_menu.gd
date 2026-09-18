@@ -632,20 +632,28 @@ func _show_signin(sign_btn: Button) -> void:
 	var next_idx := Wallet.sign_streak % Wallet.SIGN_REWARDS.size()
 	for i in Wallet.SIGN_REWARDS.size():
 		var rw: Dictionary = Wallet.SIGN_REWARDS[i]
-		var txt := "第%d天
-%s" % [i + 1, _signin_reward_text(rw)]
-		var cell := AppTheme.make_label(14,
-				AppTheme.GOLD if i == next_idx else AppTheme.DIM)
-		cell.text = txt
-		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		cell.custom_minimum_size = Vector2(76, 52)
+		var today := i == next_idx
+		# 天数 + 奖励拆成两个 Label 垂直居中: 单 Label 双行会被字体行高撑满整格
+		var cell := VBoxContainer.new()
+		cell.alignment = BoxContainer.ALIGNMENT_CENTER
+		cell.add_theme_constant_override("separation", 2)
+		var day_lb := AppTheme.make_label(12, AppTheme.DIM if not today else AppTheme.GOLD)
+		day_lb.text = "第%d天" % (i + 1)
+		day_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var reward_lb := AppTheme.make_label(14, AppTheme.DIM if not today else AppTheme.GOLD)
+		reward_lb.text = _signin_reward_text(rw)
+		reward_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cell.add_child(day_lb)
+		cell.add_child(reward_lb)
 		var wrap := PanelContainer.new()
+		wrap.custom_minimum_size = Vector2(76, 52)
 		wrap.add_theme_stylebox_override("panel", AppTheme.flat(
-				Color(0.10, 0.10, 0.22) if i == next_idx else Color(0.07, 0.07, 0.16),
-				AppTheme.GOLD if i == next_idx else Color(1, 1, 1, 0.1), 8, 1))
+				Color(0.10, 0.10, 0.22) if today else Color(0.07, 0.07, 0.16),
+				AppTheme.GOLD if today else Color(1, 1, 1, 0.1), 8, 1))
 		wrap.add_child(cell)
 		track.add_child(wrap)
-	var claim := AppTheme.make_button("签 到 领 取", Vector2(240, 50), 19)
+	# 领取钮宽度贴合文字(4 字 20px ≈ 80px + 呼吸边距), 过宽会显得中间空
+	var claim := AppTheme.make_button("签到领取", Vector2(168, 50), 20)
 	claim.pressed.connect(func() -> void:
 		var r: Dictionary = Wallet.claim_signin()
 		if r.is_empty():

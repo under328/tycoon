@@ -111,7 +111,7 @@ T = {
     "端口需为 1-65535 的数字": "Port must be 1-65535",
     "等待加入": "Waiting to join",
     "等待服务器…": "Waiting for server…",
-    "签 到 领 取": "CLAIM",
+    "签到领取": "CLAIM",
     "签到": "Sign In",
     "简单": "Easy",
     "精英怪": "Elite",
