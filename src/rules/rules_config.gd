@@ -11,7 +11,7 @@ static func defaults() -> Dictionary:
 		"eight_cut": true,
 		"rounds": 3,
 		"turn_seconds": 20,
-		"exchange_seconds": 15,
+		"exchange_seconds": 30,
 		"stakes": 1,
 		"mode": "normal",   # normal | rogue | fight(联机格斗对战: 前2座互殴, 其余观战)
 		"rogue": false,

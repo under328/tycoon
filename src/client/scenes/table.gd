@@ -206,11 +206,28 @@ func _process(delta: float) -> void:
 				timer_label.text = "⏱ %d" % cur
 				timer_label.add_theme_color_override("font_color",
 						AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
-				if remain <= 5.0 and cur >= 1:
-					_sfx("tick")
+				if remain <= 10.0 and cur >= 1:
+					_sfx("tick")   # 剩余 <10s: 每秒提示音
+	# 本地换牌阶段: 30s 倒计时(剩余 <10s 每秒提示音), 超时托管自动返还
+	if mode == "local" and str(state.get("phase", "")) == "exchange" 			and _turn_remain > 0.0 and _my_return_pending():
+		_turn_remain -= delta
+		var remain := maxf(_turn_remain, 0.0)
+		var cur := int(ceil(remain))
+		if cur != _prev_tick and cur >= 1 and cur <= 10:
+			_prev_tick = cur
+			_sfx("tick")
+		if _turn_remain <= 0.0:
+			var act := BotPlayerGd.decide(state, 0, GameSettings.ai_level)
+			_human_apply(act)   # 超时托管: AI 代选返还(走正常应用+录制)
 	# 移动端: 聊天框聚焦时虚拟键盘会盖住底部输入行 → 整行上移避让
 	if mode == "online" and OS.has_feature("android"):
 		_update_keyboard_avoid()
+
+
+## 本地换牌: 当前是否轮到我选牌返还(exchange_returns 队首且是我)
+func _my_return_pending() -> bool:
+	var ers: Array = state.get("exchange_returns", []) if not state.is_empty() else []
+	return not ers.is_empty() and int((ers[0] as Dictionary).get("seat", -1)) == 0
 
 
 ## 虚拟键盘高度(物理px)换算到逻辑画布并驱动避让; 失焦归零由 _relayout 复位
@@ -1659,7 +1676,7 @@ func _refresh_view(view: Dictionary) -> void:
 	elif phase == "exchange":
 		var er: Dictionary = _my_pending_return(view)
 		if not er.is_empty():
-			var remain_txt := "，剩余 %d 秒" % int(maxf(_turn_remain, 0.0)) if mode == "online" else ""
+			var remain_txt := "，剩余 %d 秒" % int(maxf(_turn_remain, 0.0)) 					if _turn_remain > 0.0 else ""
 			status_label.text = "换牌：请选 %d 张返还给 %s（已选 %d%s）" % [
 					int(er["n"]), _seat_name(view, int(er["to"])), selected.size(), remain_txt]
 		elif int(view["turn"]) >= 0:

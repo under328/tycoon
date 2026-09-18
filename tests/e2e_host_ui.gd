@@ -31,6 +31,16 @@ func _process(delta: float) -> bool:
 	match f:
 		10:
 			stage = "main 场景"
+			# 端口隔离: 24565 被本机其他实例占用时换测试端口(嵌入式服务器才能绑定)
+			var probe := UDPServer.new()
+			var alt := ""
+			if probe.listen(24565) != OK:
+				alt = "(24565 占用, 改用 24695)"
+				var gs := root.get_node_or_null("/root/GameSettings")
+				if gs != null:
+					gs.host_port = 24695
+			probe.stop()
+			print("[e2e-ui] ", alt)
 			main = (load("res://src/client/main.tscn") as PackedScene).instantiate()
 			root.add_child(main)
 		30:
