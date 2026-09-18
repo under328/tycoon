@@ -357,6 +357,11 @@ func _fill_enemy_view() -> void:
 	(monster as Control).group = int(fm.enemy.get("group", 0))
 	(monster as Control).kind = str(fm.enemy.get("kind", "mob"))
 	(monster as Control).variant = int(fm.enemy.get("variant", 0))
+	# 复位上一只的死亡残留: _monster_die 淡出 alpha→0 并旋转 0.6 —
+	# 若不复位, 新怪物 visible=true 仍是透明的(alpha 0), 直到首次受击
+	# flash 才"显形" — 即"有时怪物未显示"。位置由 bob/布局接管, 不动。
+	monster.modulate = Color.WHITE
+	monster.rotation = 0.0
 	var kind_txt: String = {"mob": tr("小怪"), "elite": tr("精英怪"),
 			"boss": "BOSS"}.get(str(fm.enemy.get("kind", "mob")), "")
 	e_name.text = "%s · %s" % [str(fm.enemy.get("name", "")), kind_txt]
