@@ -394,13 +394,18 @@ func _exchange_details(t) -> void:
 ## 记牌器数据契约: 每点数 死牌计数 + 各家手牌张数 = 总张数(3..15 各 4,
 ## 王 = 带王 2 / 无王 0)。记牌器用 视图死牌计数 剔除永不出现的牌。
 func _counter_view(t) -> void:
-	for cfg in [{}, {"with_joker": true}, {"with_joker": false}]:
+	for cfg in [{}, {"with_joker": true}, {"with_joker": false},
+			{"rogue_mod": "short_hands"}, {"rogue_mod": "blitz"},
+			{"rogue_mod": "joker_x2"}, {"rogue_mod": "joker_ban"},
+			{"with_joker": false, "rogue_mod": "joker_x2"}]:
 		var st := GameStateGd.new_match(cfg, 7)
 		var with_joker := bool(st["cfg"]["with_joker"])   # 读实际生效规则
+		var mod := str(st["cfg"].get("rogue_mod", ""))
 		var totals := {}
 		for v in range(3, 16):
 			totals[v] = 4
-		totals[16] = 2 if with_joker else 0
+		# 王基数: 带王 2 + 王者归来追加 2; 无王之地/未带王 0
+		totals[16] = (2 if with_joker and mod != "joker_ban" else 0) 				+ (2 if mod == "joker_x2" else 0)
 		var v0 := ViewGd.build(st, 0)
 		var dead: Array = v0["dead_counts"]
 		var dead_sum := 0
