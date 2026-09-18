@@ -28,6 +28,10 @@ func _ready() -> void:
 		net = NetNodeGd.new()
 		net.name = "Net"
 		net.setup(true)
+		# 端口被占用等绑定失败: 打印明确结论并以非零码退出, 不留空转进程
+		net.server_bind_failed.connect(func(port: int, err: int) -> void:
+			print("[server] BIND_FAILED port=%d err=%d —— 端口被占用, 进程退出" % [port, err])
+			get_tree().quit(1))
 		add_child(net)
 		return
 	_bleed_bg = ColorRect.new()

@@ -16,6 +16,7 @@ signal errored(code: String, msg: String)
 signal kicked_off(reason: String)
 signal stats_updated(entry: Dictionary)
 signal fight_state(view: Dictionary)   # 联机格斗对战: 按座位裁剪的战斗视图
+signal server_bind_failed(port: int, err: int)   # 专用服端口占用(占用时进程应退出而非空转)
 
 const MsgC = preload("res://src/protocol/msg.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
@@ -80,6 +81,7 @@ func _ready() -> void:
 		var err := peer.create_server(port_v, 64)
 		if err != OK:
 			push_error("服务器启动失败 port=%d err=%d" % [port_v, err])
+			server_bind_failed.emit(port_v, err)
 			return
 		multiplayer.multiplayer_peer = peer
 		_listen_port = port_v
