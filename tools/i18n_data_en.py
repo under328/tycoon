@@ -175,6 +175,7 @@ T = {
 }
 # ── v1.2.1 批量补全: 大厅/帮助/设置/档案/回放/格斗 ──
 T.update({
+    "第 %d/%d 回合 · 第 %d/%d 局    %s": "Round %d/%d · Hand %d/%d    %s",
     "? 联机帮助": "? Online Help",
     "关闭 ✕": "Close ✕",
     "◀ 上一页": "◀ Prev",
@@ -634,7 +635,6 @@ T.update({
     "需选择 %d 张返还给 %s（已选 %d%s）": "Pick %d cards to return to %s (chosen %d%s)",
     "确认返还": "Confirm Return",
     "换牌：请选 %d 张返还给 %s（已选 %d%s）": "Swap: pick %d cards to return to %s (chosen %d%s)",
-    "第 %d 回合 · 第 %d/%d 局    %s": "Round %d · Hand %d/%d    %s",
     "第 %d 层 · 第 %d/%d 回合 · %s": "Floor %d · Round %d/%d · %s",
     "第 %d/%d 回合 — 二选一编成": "Round %d/%d — draft your gear",
     "第 %d 层开始 — %s 地下城": "Floor %d begins — %s Dungeon",

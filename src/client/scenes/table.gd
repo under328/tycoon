@@ -1556,13 +1556,12 @@ func _refresh_view(view: Dictionary) -> void:
 	var phase: String = view["phase"]
 
 	# 回合制展示: 一回合 = 3 局 → "第 X 回合 第 Y/Z 局"
-	var round_num := int(view["round"]) + 1
-	var rounds_total := int(view["rounds_total"])
-	var in_round := (round_num - 1) % 3 + 1
-	var round_idx := (round_num - 1) / 3 + 1
-	var round_total := ceili(rounds_total / 3.0)
-	info_label.text = "第 %d 回合 · 第 %d/%d 局    %s" % [
-		round_idx, in_round, rounds_total,
+	var hand := int(view["round"]) + 1              # 全局第几局(1..hands_total)
+	var hands_total := int(view["rounds_total"])
+	var round_idx := ceili(hand / 3.0)              # 每回合 3 局
+	var rounds_total := ceili(hands_total / 3.0)
+	info_label.text = "第 %d/%d 回合 · 第 %d/%d 局    %s" % [
+		round_idx, rounds_total, hand, hands_total,
 		"革命!" if bool(view["revolution"]) else "",
 	]
 
