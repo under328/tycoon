@@ -585,8 +585,9 @@ func _build_ui() -> void:
 	room_title_lbl.position = Vector2(150, 20)
 	add_child(room_title_lbl)
 	invite_lbl = AppTheme.make_label(14, COLOR_DIM)
-	invite_lbl.position = Vector2(150, 62)
+	invite_lbl.position = Vector2(110, 64)
 	invite_lbl.custom_minimum_size = Vector2(660, 24)
+	invite_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # 限宽换行, 不再压到右列
 	add_child(invite_lbl)
 	for i in 4:
 		var sp := PanelContainer.new()
@@ -792,37 +793,40 @@ func _build_ui() -> void:
 	_reg(found_panel, "left", 0.1)
 	_reg(help_btn, "right")
 
-	# ── 房间页锚定(独立子页面布局) ──
+	# ── 房间页锚定(独立子页面布局; 1280×720 设计基准) ──
+	# 顶部: 离开 | 房号+复制邀请码 | 说明(限宽 660, 与右列留出 160px 间隔)
+	# 左列: 4 座位卡(40 起步, 间距 10) + 操作按钮行 + 状态行
+	# 右列: 规则设置统一 38px 行距(label x=832 / 控件 x=880)
 	_reg_room(back_btn, Vector2(20, 16), "left")
-	_reg_room(status_label, Vector2(150, 386), "center", 0.08)
-	_reg_room(room_title_lbl, Vector2(150, 20), "center")
-	_reg_room(copy_btn, Vector2(660, 16), "center")
-	_reg_room(invite_lbl, Vector2(150, 62), "center")
+	_reg_room(status_label, Vector2(40, 360), "left")
+	_reg_room(room_title_lbl, Vector2(150, 22), "center")
+	_reg_room(copy_btn, Vector2(330, 14), "center")
+	_reg_room(invite_lbl, Vector2(150, 64), "center")
 	for i in 4:
-		_reg_room(_seat_cards[i]["panel"], Vector2(150 + i * 166, 104), "center")
-	_reg_room(fill_btn, Vector2(150, 306), "center", 0.05)
-	_reg_room(kick_btn, Vector2(310, 306), "center", 0.05)
-	_reg_room(start_btn, Vector2(470, 306), "center", 0.05)
-	_reg_room(rules_lbl, Vector2(830, 66), "right")
-	_reg_room(chk_joker, Vector2(830, 100), "right")
-	_reg_room(chk_revolution, Vector2(830, 140), "right")
-	_reg_room(stakes_lbl, Vector2(830, 184), "right")
-	_reg_room(stakes_option, Vector2(880, 180), "right")
-	_reg_room(rounds_lbl, Vector2(830, 224), "right")
-	_reg_room(rounds_option, Vector2(880, 220), "right")
-	_reg_room(save_settings_btn, Vector2(830, 264), "right")
+		_reg_room(_seat_cards[i]["panel"], Vector2(40 + i * 160, 116), "center")
+	_reg_room(fill_btn, Vector2(40, 290), "center")
+	_reg_room(kick_btn, Vector2(190, 290), "center")
+	_reg_room(start_btn, Vector2(340, 290), "center")
+	_reg_room(rules_lbl, Vector2(832, 20), "right")
+	_reg_room(chk_joker, Vector2(832, 54), "right")
+	_reg_room(chk_revolution, Vector2(832, 90), "right")
+	_reg_room(stakes_lbl, Vector2(832, 136), "right")
+	_reg_room(stakes_option, Vector2(880, 124), "right")
+	_reg_room(rounds_lbl, Vector2(832, 174), "right")
+	_reg_room(rounds_option, Vector2(880, 162), "right")
+	_reg_room(save_settings_btn, Vector2(832, 240), "right")
 	# 模式选择 双视图注册: 入口页(建房前选模式) + 房间页(房主随时改)
 	# (先设入口坐标注册 entry, 再设房间坐标注册 room — _reg 按注册时坐标记位)
 	mode_lbl.position = Vector2(830, 292)
 	mode_option.position = Vector2(880, 288)
 	_reg(mode_lbl, "right")
 	_reg(mode_option, "right")
-	mode_lbl.position = Vector2(830, 312)
-	mode_option.position = Vector2(880, 308)
-	_reg_room(mode_lbl, Vector2(830, 312), "right")
-	_reg_room(mode_option, Vector2(880, 308), "right")
+	mode_lbl.position = Vector2(832, 212)
+	mode_option.position = Vector2(880, 200)
+	_reg_room(mode_lbl, Vector2(832, 212), "right")
+	_reg_room(mode_option, Vector2(880, 200), "right")
 	for i in _emoji_btns.size():
-		_reg_room(_emoji_btns[i], Vector2(150 + i * 52, 662), "left", 1.0)  # 贴底缘
+		_reg_room(_emoji_btns[i], Vector2(40 + i * 52, 662), "left", 1.0)  # 贴底缘
 
 	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
