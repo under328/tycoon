@@ -748,6 +748,10 @@ func _build_ui() -> void:
 	mode_option.select(0)
 	mode_option.position = Vector2(880, 541)
 	mode_option.custom_minimum_size = Vector2(120, 34)
+	mode_option.item_selected.connect(func(_i: int) -> void:
+		Audio.play("click")
+		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
+		net.set_settings(_gather_rules()))
 	add_child(mode_option)
 	# 规则设置
 	rules_lbl = AppTheme.section_label("规则设置")
@@ -915,6 +919,14 @@ func _build_ui() -> void:
 	_reg_room(rounds_lbl, Vector2(830, 224), "right")
 	_reg_room(rounds_option, Vector2(880, 220), "right")
 	_reg_room(save_settings_btn, Vector2(830, 264), "right")
+	# 模式选择 双视图注册: 入口页(建房前选模式) + 房间页(房主随时改)
+	# (先设入口坐标注册 entry, 再设房间坐标注册 room — _reg 按注册时坐标记位)
+	mode_lbl.position = Vector2(830, 292)
+	mode_option.position = Vector2(880, 288)
+	_reg(mode_lbl, "right")
+	_reg(mode_option, "right")
+	mode_lbl.position = Vector2(830, 545)
+	mode_option.position = Vector2(880, 541)
 	_reg_room(mode_lbl, Vector2(830, 545), "right")
 	_reg_room(mode_option, Vector2(880, 541), "right")
 	for i in _emoji_btns.size():
