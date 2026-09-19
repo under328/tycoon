@@ -389,12 +389,17 @@ func _backup_code(t) -> void:
 	w.unlocked = ["first_win", "wins_10"]
 	w.inventory["item_revive_coin"] = 2
 	w.fight_best = 4
+	# 奇物图鉴: 收集计数 + 备份码 int 键往返(JSON 会字符串化键, 必须归一)
+	w.note_relic(3)
+	w.note_relic(3)
+	w.note_relic(7)
 	var code: String = w.export_backup()
 	t.expect(code.begins_with("TB1-"), "备份码前缀 TB1-")
 	t.expect(code.length() > 60, "备份码包含完整载荷")
 	# 篡改与破坏
 	w.gold = 0
 	w.diamonds = 0
+	w.relic_seen = {}
 	t.expect(w.import_backup(code + "X").has("error"), "篡改尾字符被拒")
 	t.expect(w.import_backup("TB1-AAAAAAAA-10-JUNK").has("error"), "乱码被拒")
 	t.expect(w.import_backup("hello world").has("error"), "无前缀被拒")
@@ -408,6 +413,8 @@ func _backup_code(t) -> void:
 	t.expect_eq(int(w.unlocked.size()), 2, "成就恢复")
 	t.expect_eq(int(w.fight_best), 4, "格斗纪录恢复")
 	t.expect_eq(int(w.item_count("item_revive_coin")), 2, "库存恢复")
+	t.expect(int(w.relic_seen.get(3, 0)) == 2 and int(w.relic_seen.get(7, 0)) == 1,
+			"奇物图鉴恢复(int 键归一)")
 	# 跨实例: 另一钱包实例从存档读回(持久化闭环)
 	w.save_wallet()
 	var w2 = WalletGd.new()

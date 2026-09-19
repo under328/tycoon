@@ -521,10 +521,11 @@ func _on_candidate(cand: int) -> void:
 		return
 	var my: Dictionary = view.get("my", {})
 	var slots: Array = my.get("slots", [])
-	# 奇物第三选项: 直接拾取(服务器决定入槽)
+	# 奇物第三选项: 直接拾取(服务器决定入槽); 图鉴收集
 	if cand >= 100 and cand < 200:
 		Audio.play("click")
 		_pick_lock_ms = Time.get_ticks_msec() + 400
+		Wallet.note_relic(FightModeGd.sp_of(cand))
 		if net != null:
 			net.send_fight_pick(cand)
 		_rebuild_bottom()
@@ -707,10 +708,16 @@ func _show_result() -> void:
 		else:
 			body += "\n" + tr("失败惩罚: %d 金币 · 未获得钻石") % int(r["gold"])
 		Audio.play("win" if win else "fall")
-	_show_overlay(title, body)
+	_show_overlay(title, body, _am_host())
 
 
-func _show_overlay(title: String, body: String) -> void:
+func _am_host() -> bool:
+	# 房主可见「再来一局」快捷重开(同规则直接开新对局)
+	return net != null \
+			and int(net.last_room_state.get("host_seat", -1)) == int(net.my_seat)
+
+
+func _show_overlay(title: String, body: String, restart := false) -> void:
 	if overlay != null and is_instance_valid(overlay):
 		overlay.queue_free()
 	overlay = CenterContainer.new()
@@ -743,6 +750,14 @@ func _show_overlay(title: String, body: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
+	if restart:
+		var again := AppTheme.make_button("🔁 再来一局", Vector2(160, 46), 16)
+		again.pressed.connect(func() -> void:
+			Audio.play("click")
+			_close_overlay()   # 新对局视图到达后自动进入下一局编成
+			if net != null:
+				net.start_game())
+		row.add_child(again)
 	var stay := AppTheme.make_button("留在房间", Vector2(150, 46), 16)
 	stay.pressed.connect(func() -> void:
 		Audio.play("click")

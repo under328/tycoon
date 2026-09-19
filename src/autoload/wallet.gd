@@ -117,6 +117,7 @@ var daily_best_hp := 0         # 当日最佳剩余生命百分比(0-100)
 var daily_days := 0            # 累计参与每日挑战天数
 var mod_seen := {}             # 命运卡图鉴: mod_id → 出现次数
 var mod_taken := {}            # 命运卡图鉴: mod_id → 选用次数
+var relic_seen := {}           # 格斗奇物图鉴: sp_id → 获得次数
 var purchases := 0             # 累计商城消费次数
 var revives := 0               # 累计使用复活币次数
 var inventory := {}            # 消耗品库存: id -> 数量
@@ -185,6 +186,7 @@ func _reset_defaults() -> void:
 	daily_days = 0
 	mod_seen = {}
 	mod_taken = {}
+	relic_seen = {}
 	purchases = 0
 	revives = 0
 	inventory = {}
@@ -256,6 +258,8 @@ func _read_into(path: String) -> bool:
 	mod_seen = ms if ms is Dictionary else {}
 	var mt = cf.get_value("wallet", "mod_taken", {})
 	mod_taken = mt if mt is Dictionary else {}
+	var rs = cf.get_value("wallet", "relic_seen", {})
+	relic_seen = rs if rs is Dictionary else {}
 	purchases = int(cf.get_value("wallet", "purchases", 0))
 	revives = int(cf.get_value("wallet", "revives", 0))
 	var inv = cf.get_value("wallet", "inventory", {})
@@ -305,6 +309,7 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "daily_days", daily_days)
 	cf.set_value("wallet", "mod_seen", mod_seen)
 	cf.set_value("wallet", "mod_taken", mod_taken)
+	cf.set_value("wallet", "relic_seen", relic_seen)
 	cf.set_value("wallet", "purchases", purchases)
 	cf.set_value("wallet", "revives", revives)
 	cf.set_value("wallet", "inventory", inventory)
@@ -518,6 +523,12 @@ func note_rogue_mod(mod_id: String, taken: bool) -> void:
 		mod_seen[id] = int(mod_seen.get(id, 0)) + 1
 	_mark_dirty()
 	check_achievements()   # 图鉴收集成就即时解锁(不等下局结算)
+
+
+## 格斗奇物图鉴计数(本地/联机拾取都记)
+func note_relic(sp_id: int) -> void:
+	relic_seen[int(sp_id)] = int(relic_seen.get(int(sp_id), 0)) + 1
+	_mark_dirty()
 
 
 ## ── 每日任务 ──
@@ -786,7 +797,7 @@ func _backup_payload() -> Dictionary:
 		"pw": pvp_wins,
 		"ddy": daily_day, "dbr": daily_best_round, "dbh": daily_best_hp,
 		"ddy2": daily_days,
-		"ms": mod_seen, "mt": mod_taken,
+		"ms": mod_seen, "mt": mod_taken, "rs": relic_seen,
 		"pu": purchases, "rv": revives, "iv": inventory,
 		"dmd": diamond_mult_day, "dm": diamond_mult,
 		"sdy": sign_day, "sst": sign_streak, "sto": sign_total,
@@ -854,6 +865,15 @@ func import_backup(code: String) -> Dictionary:
 	daily_best_hp = clampi(int(parsed.get("dbh", 0)), 0, 100)
 	daily_days = maxi(int(parsed.get("ddy2", 0)), 0)
 	mod_seen = parsed.get("ms", {})
+	relic_seen = parsed.get("rs", {})
+	if relic_seen is not Dictionary:
+		relic_seen = {}
+	else:
+		# JSON 往返会把 int 键字符串化 — 归一回 int
+		var rs_norm := {}
+		for k in relic_seen:
+			rs_norm[int(k)] = int(relic_seen[k])
+		relic_seen = rs_norm
 	mod_taken = parsed.get("mt", {})
 	purchases = maxi(int(parsed.get("pu", 0)), 0)
 	revives = maxi(int(parsed.get("rv", 0)), 0)

@@ -19,6 +19,8 @@ const PAGES := [
 	["战斗操作", "回合制三选操作; 怪物意图公示, 见招拆招:", 3],
 	["连击与奥义", "连击加成 + 怒气大招 + 完美格挡, 三重爽点:", 4],
 	["稀有卡与无尽", "金框稀有卡 + 通关后无尽挑战:", 5],
+	["奇物图鉴", "格斗途中拾得的奇物会收录于此(每局最多带 2 件);
+本地面板与联机对战都可收集, 集齐全部 8 件:", 7],
 ]
 
 var page := 0
@@ -289,3 +291,46 @@ func _build_fig(kind: int) -> void:
 						AppTheme.GOLD, 17)
 				_text(str(rows[i][1]), Vector2(400, 16 + i * 52),
 						AppTheme.WHITE, 15)
+		7:  # 奇物图鉴: 获得过才点亮(本地面板/联机对战拾取都计数)
+			for i in FightModeGd.SPECIALS.size():
+				_relic_chip(Vector2(20 + (i % 4) * 236,
+						8 + int(i / 4.0) * 140), i,
+						int(Wallet.relic_seen.get(i, 0)) > 0)
+
+
+## 奇物图鉴芯片(未获得置灰)
+func _relic_chip(pos: Vector2, sp_id: int, seen: bool) -> void:
+	var meta: Dictionary = FightModeGd.sp_meta(sp_id)
+	var panel := PanelContainer.new()
+	var sb := AppTheme.flat(
+			Color(0.13, 0.09, 0.22, 0.96) if seen else Color(0.08, 0.08, 0.14, 0.96),
+			Color("b070e0") if seen else Color(1, 1, 1, 0.15), 8, 1)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = pos
+	panel.custom_minimum_size = Vector2(224, 124)
+	_fig.add_child(panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	panel.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	v.add_child(top)
+	var g := _label(20, Color("c89ae8") if seen else AppTheme.DIM)
+	g.text = str(meta["icon"]) if seen else "◇"
+	top.add_child(g)
+	var nm := _label(14, AppTheme.WHITE if seen else AppTheme.DIM)
+	nm.text = tr("奇物·%s") % str(meta["name"])
+	top.add_child(nm)
+	var ds := _label(11, Color("c8a8e0") if seen else AppTheme.DIM)
+	ds.text = str(meta["desc"])
+	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ds.custom_minimum_size = Vector2(200, 40)
+	v.add_child(ds)
+	if seen:
+		var cc := _label(11, AppTheme.GOLD)
+		cc.text = tr("已获得 ×%d") % int(Wallet.relic_seen.get(sp_id, 0))
+		v.add_child(cc)

@@ -305,13 +305,17 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	# 怪物呼吸浮动 + 玩家轻微起伏(战斗阶段)
+	# 怪物呼吸(浮动+缩放脉动) + 玩家轻微起伏(战斗阶段)
 	if fm != null and fm.phase == "battle":
 		_bob_t += delta
 		monster.position.y = _enemy_home.y + sin(_bob_t * 2.2) * 6.0
 		monster.position.x = _enemy_home.x + sin(_bob_t * 0.8) * 3.0
+		monster.pivot_offset = monster.size / 2.0
+		monster.scale = Vector2.ONE * (1.0 + sin(_bob_t * 2.2) * 0.035)
 		avatar.position.y = _player_home.y + sin(_bob_t * 1.7) * 4.0
 		avatar.rotation = sin(_bob_t * 1.2) * 0.02
+	elif monster != null:
+		monster.scale = Vector2.ONE   # 离开战斗复位, 防止定格在脉动帧
 	if _aura != null and _aura.visible:
 		_aura_spin += delta * 1.5   # 变身光环旋转
 		_aura.position = _player_home + avatar.size / 2.0 - _aura.size / 2.0
@@ -732,6 +736,7 @@ func _on_candidate(cand: int) -> void:
 				Color("ffd166"))
 	elif cand >= 100:
 		Audio.say("f_relic")   # 奇物
+		Wallet.note_relic(FightModeGd.sp_of(cand))   # 图鉴收集
 		var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
 		_floater("%s %s" % [str(meta["icon"]), str(meta["name"])],
 				_px(0.5), _py(0.34), Color("c89ae8"))
