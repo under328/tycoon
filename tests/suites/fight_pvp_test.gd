@@ -13,6 +13,8 @@ const ManagerGd = preload("res://src/server/room_manager.gd")
 func run(t: T) -> void:
 	_test_rules_mode(t)
 	_test_pure_pvp(t)
+	_test_new_draft_semantics(t)
+	_test_full_match_sim(t)
 	_test_controller(t)
 	_test_manager_integration(t)
 	_test_bot_full_match(t)
@@ -39,11 +41,22 @@ func _test_pure_pvp(t: T) -> void:
 	FightPvpGd.open_round(st, rng)
 	t.expect(str(st["phase"]) == "draft", "开局 draft")
 	t.expect(int(st["round_num"]) == 1, "第 1 回合")
-	# 双方拿到同一主候选组
+	# 双方独立候选(共享一副牌): 组互不相同, 牌全局唯一, 且不混奇物
 	var pa: Array = st["per"][0]["pair"]
 	var pb: Array = st["per"][1]["pair"]
-	t.expect(str(pa) == str(pb), "双方同一主候选组(公平)")
-	t.expect((pa as Array).size() == 2, "二选一: 两张候选")
+	t.expect(str(pa) != str(pb), "双方候选组相互独立")
+	t.expect((pa as Array).size() == 2 and (pb as Array).size() == 2,
+			"二选一: 各两张候选")
+	var seen := {}
+	var dup := false
+	for c in pa + pb:
+		var cv: int = FightPvpGd.card_of(int(c))
+		if seen.has(cv):
+			dup = true
+		seen[cv] = true
+	t.expect(not dup, "共享牌库: 同一张牌不会发给双方")
+	t.expect(not FightPvpGd.is_sp(int(pa[0])) and not FightPvpGd.is_sp(int(pa[1])),
+			"候选组只出普通/稀有牌")
 	# 非法操作
 	t.expect(not bool(FightPvpGd.draft_pick(st, 2, pa[0], -1, rng)["ok"]),
 			"观战者选牌被拒")
@@ -51,8 +64,9 @@ func _test_pure_pvp(t: T) -> void:
 			"槽空不允许跳过")
 	t.expect(not bool(FightPvpGd.draft_pick(st, 0, 999, -1, rng)["ok"]),
 			"候选外选牌被拒")
-	# 甲选到编成完成(可能触发补抽链), 乙随后
-	var r: Dictionary = FightPvpGd.draft_pick(st, 0, pa[0], -1, rng)
+	# 甲选到编成完成, 乙随后(稀有 200+ 槽满也需传槽位)
+	var r: Dictionary = FightPvpGd.draft_pick(st, 0, pa[0],
+			0 if (st["per"][0]["slots"] as Array).size() >= 5 else -1, rng)
 	t.expect(bool(r["ok"]), "合法选牌通过")
 	var guard_a := 0
 	while str(st["phase"]) == "draft" and not bool(st["per"][0]["done"]) \
@@ -60,20 +74,23 @@ func _test_pure_pvp(t: T) -> void:
 		guard_a += 1
 		var pair_a: Array = st["per"][0]["pair"]
 		t.expect(not (pair_a as Array).is_empty(), "未完成的格斗者必有候选组")
-		r = FightPvpGd.draft_pick(st, 0, (pair_a as Array)[0], -1, rng)
+		r = FightPvpGd.draft_pick(st, 0, (pair_a as Array)[0],
+				0 if (st["per"][0]["slots"] as Array).size() >= 5 else -1, rng)
 	t.expect(bool(r["ok"]), "编成链通过")
 	t.expect(bool(st["per"][0]["done"]) or str(st["phase"]) == "draft",
 			"甲编成状态一致")
 	# 乙未动 → 仍是 draft 或已 battle(甲可能已完成但需等乙)
 	var r2: Dictionary = FightPvpGd.draft_pick(st, 1,
-			(st["per"][1]["pair"] as Array)[0], -1, rng)
+			(st["per"][1]["pair"] as Array)[0],
+			0 if (st["per"][1]["slots"] as Array).size() >= 5 else -1, rng)
 	var guard_b := 0
 	while not bool(st["per"][1]["done"]) and str(st["phase"]) == "draft" \
 			and guard_b < 20:
 		guard_b += 1
 		var pair_b: Array = st["per"][1]["pair"]
 		t.expect(not (pair_b as Array).is_empty(), "未完成的格斗者必有候选组")
-		r2 = FightPvpGd.draft_pick(st, 1, (pair_b as Array)[0], -1, rng)
+		r2 = FightPvpGd.draft_pick(st, 1, (pair_b as Array)[0],
+				0 if (st["per"][1]["slots"] as Array).size() >= 5 else -1, rng)
 	t.expect(bool(r2["ok"]), "乙选牌通过")
 	t.expect(str(st["phase"]) == "battle", "双方完成 → 对战")
 	t.expect(int(st["battle"]["hp"][0]) > 0, "对战新鲜生命(无怪, 玩家互殴)")
@@ -106,6 +123,83 @@ func _test_pure_pvp(t: T) -> void:
 	t.expect((v9["per"] as Dictionary).size() == 2, "观战可见双方进度")
 
 
+## ── v3 抽牌语义: 独立抽牌 / 奇物独立池 / 第三选项 / 锁环 / 稀有怒气 ──
+func _test_new_draft_semantics(t: T) -> void:
+	# 400 种子: 双方候选互不重复、候选组无奇物
+	var bad_dup := 0
+	var sp_in_pair := 0
+	for seed_i in 400:
+		var rng0 := RandomNumberGenerator.new()
+		rng0.seed = 3000 + seed_i
+		var st0 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+		FightPvpGd.open_round(st0, rng0)
+		var seen := {}
+		for seat in st0["fighters"]:
+			for c in (st0["per"][seat]["pair"] as Array):
+				var cv: int = FightPvpGd.card_of(int(c))
+				if seen.has(cv):
+					bad_dup += 1
+				seen[cv] = true
+				if FightPvpGd.is_sp(int(c)):
+					sp_in_pair += 1
+	t.expect(bad_dup == 0, "400 种子双方候选无重复牌")
+	t.expect(sp_in_pair == 0, "400 种子候选组不混奇物")
+	# 奇物独立池: 双方可装同一款奇物
+	var rng2 := RandomNumberGenerator.new()
+	rng2.seed = 9
+	var st2 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+	FightPvpGd.open_round(st2, rng2)
+	st2["per"][0]["specials_left"] = [5]
+	st2["per"][1]["specials_left"] = [5]
+	st2["per"][0]["bonus_relic"] = 105
+	st2["per"][1]["bonus_relic"] = 105
+	t.expect(bool(FightPvpGd.draft_pick(st2, 0, 105, -1, rng2)["ok"]),
+			"甲拾取奇物5")
+	t.expect(bool(FightPvpGd.draft_pick(st2, 1, 105, -1, rng2)["ok"]),
+			"乙拾取同款奇物5(独立池)")
+	t.expect((st2["per"][0]["specials"] as Array) == [5]
+			and (st2["per"][1]["specials"] as Array) == [5], "双方奇物可相同")
+	# 第三选项: 拾取不消耗卡牌选择, 拾取后清空, 重复拾取被拒
+	var rng3 := RandomNumberGenerator.new()
+	rng3.seed = 11
+	var st3 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+	FightPvpGd.open_round(st3, rng3)
+	st3["per"][0]["bonus_relic"] = 103
+	var pair30: Array = (st3["per"][0]["pair"] as Array).duplicate()
+	t.expect(bool(FightPvpGd.draft_pick(st3, 0, 103, -1, rng3)["ok"]),
+			"拾取奇物通过")
+	t.expect(int(st3["per"][0]["bonus_relic"]) == -1, "拾取后第三选项清空")
+	t.expect((st3["per"][0]["pair"] as Array) == pair30
+			and str(st3["phase"]) == "draft", "拾取奇物不消耗卡牌选择")
+	t.expect(not bool(FightPvpGd.draft_pick(st3, 0, 103, -1, rng3)["ok"]),
+			"同一奇物不可重复拾取")
+	t.expect((st3["per"][0]["slots"] as Array).is_empty(), "拾取奇物不占装备槽")
+	# 奇物上限 2: 满员后拾取被拒
+	st3["per"][0]["specials"] = [0, 1]
+	st3["per"][0]["bonus_relic"] = 102
+	t.expect(str(FightPvpGd.draft_pick(st3, 0, 102, -1, rng3)["error"]) == "relic_full",
+			"奇物满 2 拒绝再拾取")
+	# 锁环: 持奇物1 → 选牌后未选中的候选保留到下回合
+	var st4 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+	var rng4 := RandomNumberGenerator.new()
+	rng4.seed = 21
+	FightPvpGd.open_round(st4, rng4)
+	st4["per"][0]["specials"] = [1]
+	var p40: Array = st4["per"][0]["pair"]
+	t.expect(bool(FightPvpGd.draft_pick(st4, 0, int(p40[0]), -1, rng4)["ok"]),
+			"锁环组选牌通过")
+	t.expect(int(st4["per"][0]["locked"]) == int(p40[1]), "未选中候选被锁定")
+	# 稀有牌怒气携带: 选金框稀有牌 → 怒气携带 +20, 开战时转入并清零
+	var st5 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+	var rng5 := RandomNumberGenerator.new()
+	rng5.seed = 31
+	FightPvpGd.open_round(st5, rng5)
+	st5["per"][0]["pair"] = [205, 6]
+	t.expect(bool(FightPvpGd.draft_pick(st5, 0, 205, -1, rng5)["ok"]),
+			"稀有牌选牌通过")
+	t.expect(int(st5["per"][0]["fury_carry"]) == 20, "稀有牌怒气 +20")
+
+
 ## ── 全局模拟: 五回合内必出胜负, 每回合装备恰好推进 ──
 func _test_full_match_sim(t: T) -> void:
 	var rng := RandomNumberGenerator.new()
@@ -123,7 +217,7 @@ func _test_full_match_sim(t: T) -> void:
 					if not bool(per["done"]):
 						var cand: int = (per["pair"] as Array)[0]
 						var slot := -1
-						if cand < 100 and (per["slots"] as Array).size() >= 5:
+						if (per["slots"] as Array).size() >= 5:
 							slot = 0
 						FightPvpGd.draft_pick(st, int(seat), cand, slot, rng)
 			"battle":
@@ -207,7 +301,7 @@ func _test_manager_integration(t: T) -> void:
 			if not bool(per["done"]) and not (per["pair"] as Array).is_empty():
 				var cand: int = per["pair"][0]
 				var slot := -1
-				if cand < 100 and (per["slots"] as Array).size() >= 5:
+				if (per["slots"] as Array).size() >= 5:
 					slot = 0
 				var peer := 100 if int(seat) == 0 else 200
 				out = m.fight_pick(peer, {"cand": cand, "slot": slot})
@@ -280,7 +374,7 @@ func _test_fury(t) -> void:
 			if not bool(per["done"]):
 				var cand: int = (per["pair"] as Array)[0]
 				var slot := -1
-				if cand < 100 and (per["slots"] as Array).size() >= 5:
+				if (per["slots"] as Array).size() >= 5:
 					slot = 0
 				FightPvpGd.draft_pick(st, int(seat), cand, slot, rng)
 	t.expect(str(st["phase"]) == "battle", "编成完成进入对战")

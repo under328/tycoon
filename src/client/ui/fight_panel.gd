@@ -428,7 +428,8 @@ func _update_transform() -> void:
 		return
 	if _bg != null and fm.group < GROUP_TINTS.size():
 		_bg.color = Color("191934").lerp(GROUP_TINTS[fm.group], 0.6)
-	var on := _transformed()
+	var on := _transformed() \
+			and str(fm.phase) not in ["round_end", "over"]
 	_aura.visible = on
 	# 光环对齐角色中心: _player_home 是角色控件左上角锚点,
 	# 旧代码以它为光环中心 → 光环整体偏向角色左上 70px

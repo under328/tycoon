@@ -97,10 +97,11 @@ func _on_room_state(state: Dictionary) -> void:
 		if not bool(p.get("empty", true)) and not bool(p.get("is_bot", false)):
 			humans += 1
 	var host: bool = int(state.get("host_seat", -1)) == int(net.my_seat)
-	if role == "host" and host and humans >= 2 and not started:
+	if humans >= 2 and not started:
 		started = true
-		print("[fp2] 双方到齐, 开局")
-		net.start_game()
+		if role == "host" and host:
+			print("[fp2] 双方到齐, 开局")
+			net.start_game()
 	if started and saw_over and not done:
 		done = true
 		print("[fp2] FIGHT2_OK —— 双真人格斗对局完整打完(回房) role=", role)
@@ -126,7 +127,7 @@ func _on_fight_state(view: Dictionary) -> void:
 				return
 			var cand: int = int(pair[0])
 			var slot := -1
-			if cand < 100 and ((my.get("slots", []) as Array).size() >= 5):
+			if (my.get("slots", []) as Array).size() >= 5:
 				slot = 0
 			net.send_fight_pick(cand, slot)
 	elif phase == "battle":

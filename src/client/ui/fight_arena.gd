@@ -1,12 +1,15 @@
-## 联机格斗对战竞技场 v2(回合制): 每回合『二选一』抽牌 → 玩家之间对战(无怪)。
-## 先胜 3 回合获胜。渲染服务器下发的 s_fight_state 视图, 本页不驱动任何规则。
-## 观战者全程可见但无操作按钮。特殊牌/补抽/替换机制与本地格斗试炼同源。
+## 联机格斗对战竞技场 v3: 左侧 = 本地样式完整格斗面板(精修像素头像 +
+## 变身光环 / 生命·怒气条 / 装备槽 5 + 奇物槽 2 / 牌型·属性 / 编成进度),
+## 右侧 = 对手面板 RTL 镜像对称。底部 = 二选一抽牌(2 张候选 + 奇物第三
+## 选项)或对战行动行。渲染服务器下发的 s_fight_state, 本页不驱动任何规则。
+## 观战者全程可见但无操作按钮。
 extends Control
 
 signal finished  # 离开竞技场 → 返回大厅
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const FightModeGd = preload("res://src/rules/fight/fight_mode.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
@@ -29,7 +32,7 @@ var leave_btn: Button
 var log_lbl: Label
 var bottom_box: Control        # 底部操作区(每次状态变化重建)
 var floaters: Control
-var _side: Array = []          # 双方面板(下标0/1 = fighters[0]/[1])
+var _side: Array = []          # 面板(0=左/我方视角, 1=右/对手镜像)
 var _vs_lbl: Label
 
 
@@ -44,11 +47,11 @@ func _ready() -> void:
 	add_child(bg)
 
 	var header = preload("res://src/client/ui/p5_header.gd").new()
-	header.text = "格斗对战"
+	header.text = "格斗试炼 · 双人对战"
 	header.icon = "card"
 	header.position = Vector2(36, 22)
-	header.custom_minimum_size = Vector2(360, 54)
-	header.size = Vector2(360, 54)
+	header.custom_minimum_size = Vector2(400, 54)
+	header.size = Vector2(400, 54)
 	add_child(header)
 
 	phase_lbl = AppTheme.make_label(18, AppTheme.GOLD)
@@ -91,7 +94,7 @@ func _ready() -> void:
 			_apply(net.latest_fight, [])
 	Responsive.watch(self, _relayout)
 	_relayout.call_deferred()
-	Audio.play_bgm("table")
+	Audio.play_bgm("fight")
 
 
 ## ── 服务器视图驱动 ──
@@ -144,93 +147,187 @@ func _apply(v: Dictionary, events: Array) -> void:
 	if phase == "round_end" and prev_phase != "round_end":
 		var rw := int(v.get("round_winner", -1))
 		var my_seat := int(v.get("my_seat", -1))
-		var won: bool = rw == my_seat
-		_floater("回合胜利!" if won else "回合落败",
-				size.x * 0.5, size.y * 0.32,
+		var won: bool = rw == _seat_at(0) and not bool(v.get("spectator", true))
+		_floater(tr("回合胜利!") if won else tr("回合落败"),
+				size.x * 0.5, size.y * 0.30,
 				Color("7dd87d") if won else Color("ff8866"))
 	if phase == "over" and not _rewarded:
 		_rewarded = true
 		_show_result()
 
 
-func _refresh_sides() -> void:
+## 座位 → 展示位: 我方(格斗者)永远在左 0 号位; 观战者按 1/2 号位左右排
+func _seat_at(idx: int) -> int:
 	var fighters: Array = view.get("fighters", [])
+	if fighters.is_empty():
+		return -1
+	if bool(view.get("spectator", true)):
+		return int(fighters[idx]) if idx < fighters.size() else -1
+	var my_seat := int(view.get("my_seat", -1))
+	if idx == 0:
+		return my_seat
+	return int(fighters[0]) if int(fighters[1]) == my_seat else int(fighters[1])
+
+
+func _side_of_seat(seat: int) -> int:
+	return 0 if int(seat) == _seat_at(0) else 1
+
+
+func _refresh_sides() -> void:
+	var phase := str(view.get("phase", ""))
+	var per_all: Dictionary = view.get("per", {})
+	var sc: Dictionary = view.get("score", {})
 	for i in 2:
-		if i >= fighters.size():
+		var seat := _seat_at(i)
+		if seat < 0:
 			continue
-		var seat := int(fighters[i])
 		var p: Dictionary = _side[i]
+		var mine: bool = seat == int(view.get("my_seat", -1)) \
+				and not bool(view.get("spectator", true))
 		(p["name"] as Label).text = str((view.get("names", {}) as Dictionary)
 				.get(seat, "玩家"))
-		(p["you"] as Label).visible = seat == int(view.get("my_seat", -1))
+		(p["you"] as Label).visible = mine
 		if net != null:
 			(p["avatar"] as Control).skin_id = net.skin_of_seat(seat)
-		# 回合分
-		var sc: Dictionary = view.get("score", {})
 		(p["score"] as Label).text = tr("回合胜 %d") % int(sc.get(seat, 0))
-		# 编成进度(奇物/装备数) — draft 阶段唯一可见信息
-		var per: Dictionary = (view.get("per", {}) as Dictionary).get(seat, {})
-		(p["prog"] as Label).text = tr("装备 %d/5 · 奇物 %d") % [
+		var per: Dictionary = (per_all as Dictionary).get(seat, {})
+		(p["prog"] as Label).text = tr("装备 %d/5 · 奇物 %d/2") % [
 				int(per.get("slots_count", 0)), int(per.get("specials_count", 0))]
-		(p["done"] as Label).visible = str(view.get("phase", "")) == "draft"
-		(p["done"] as Label).text = "已编成" if bool(per.get("done", false)) \
-				else "选牌中…"
+		var done_lb: Label = p["done"]
+		done_lb.visible = phase == "draft"
+		done_lb.text = tr("已编成 ✓") if bool(per.get("done", false)) \
+				else tr("选牌中…")
 		# 当前回合高亮
 		var is_turn: bool = int(view.get("turn", -1)) == seat \
-				and str(view.get("phase", "")) == "battle"
+				and phase == "battle"
 		(p["turn_chip"] as Label).visible = is_turn
 		var sb: StyleBoxFlat = p["sb"]
 		sb.border_color = AppTheme.GOLD if is_turn else Color(1, 1, 1, 0.18)
 		sb.set_border_width_all(3 if is_turn else 1)
-		# 战斗阶段: 血条/牌型/装备公开
-		var combos: Dictionary = view.get("combo", {})
-		if (combos as Dictionary).has(seat):
-			var c: Dictionary = combos[seat]
-			(p["combo"] as Label).text = "牌型 %s · %s" % [c["name"], c["desc"]]
-			(p["hand"] as HBoxContainer).visible = true
-			_fill_hand(i, seat)
-			var br: Dictionary = (view.get("stats_brief", {}) as Dictionary)[seat]
-			var kinds := {"fire": "🔥火球", "frost": "❄冰霜", "light": "✟圣光"}
-			(p["stats"] as Label).text = "⚔%d  🛡%d  ✟%d  %s" % [
-				int(br["atk"]), int(br["def"]), int(br["skill"]),
-				str(kinds.get(str((view.get("skill_kind", {}) as Dictionary)
-						.get(seat, "fire")), ""))]
-			var hp: int = int((view.get("hp", {}) as Dictionary).get(seat, 0))
-			var mh: int = maxi(int((view.get("max_hp", {}) as Dictionary)
-					.get(seat, 1)), 1)
-			var frac := float(clampi(hp, 0, mh)) / float(mh)
-			var fg: ColorRect = p["hp_fg"]
-			fg.size = Vector2(maxi(fg.get_parent().size.x * frac - 4.0, 2.0), 16)
-			fg.color = Color("58c858") if frac > 0.5 \
-					else (Color("ffb14e") if frac > 0.25 else Color("d05050"))
-			(p["hp_txt"] as Label).text = "HP %d / %d" % [maxi(hp, 0), mh]
-			var sh: int = int((view.get("shield", {}) as Dictionary).get(seat, 0))
-			(p["shield_txt"] as Label).text = "🔮%d" % sh if sh > 0 else ""
-		else:
-			(p["combo"] as Label).text = "编成中…"
-			(p["hand"] as HBoxContainer).visible = false
-			(p["stats"] as Label).text = ""
-			(p["hp_txt"] as Label).text = ""
-			(p["shield_txt"] as Label).text = ""
+		_refresh_slots(i, seat, mine)
+		_refresh_relics(i, seat, per)
+		_refresh_bars(i, seat)
+		# 变身光环: 集满 5 张且处于编成/对战阶段(过场与终局自动消失)
+		var on: bool = bool(per.get("transformed", false))
+		var aura: Control = p["aura"]
+		aura.visible = on
+		if on:
+			aura.queue_redraw()
 
 
-func _fill_hand(idx: int, seat: int) -> void:
+## 装备槽行: 我方显示真实卡面(可点替换); 对手开战后披露, 编成中只给暗格
+func _refresh_slots(idx: int, seat: int, mine: bool) -> void:
+	var p: Dictionary = _side[idx]
+	# 我方优先用自己的编成; 双方开战后都由 hands 披露
+	var revealed: Array = []
+	if mine:
+		revealed = (((view.get("my", {}) as Dictionary)
+				.get("slots", [])) as Array).duplicate()
 	var hands: Dictionary = view.get("hands", {})
-	if not (hands as Dictionary).has(seat):
+	if (hands as Dictionary).has(seat):
+		revealed = (hands[seat] as Array).duplicate()
+	var per: Dictionary = (view.get("per", {}) as Dictionary).get(seat, {})
+	var count: int = (revealed as Array).size() \
+			if not (revealed as Array).is_empty() \
+			else int(per.get("slots_count", 0))
+	var replace_mode: bool = mine and _pending_cand >= 0
+	for s in 5:
+		var ui: Dictionary = p["slots_ui"][s]
+		var wrap: PanelContainer = ui["wrap"]
+		var sb: StyleBoxFlat = ui["sb"]
+		for c in (ui["card_box"] as Control).get_children():
+			c.queue_free()
+		var has_card: bool = s < (revealed as Array).size()
+		var ghost: bool = not has_card and s < count
+		if has_card:
+			var cv: Control = CardViewScript.new(int(revealed[s]))
+			cv.custom_minimum_size = Vector2(40, 56)
+			cv.size = Vector2(40, 56)
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			(ui["card_box"] as Control).add_child(cv)
+		elif ghost:
+			var ph := _label(15, Color(1, 1, 1, 0.35))
+			ph.text = "▣"
+			(ui["card_box"] as Control).add_child(ph)
+		if replace_mode and mine:
+			sb.border_color = AppTheme.GOLD if s < count else Color(1, 1, 1, 0.25)
+			sb.set_border_width_all(3 if s < count else 1)
+			wrap.tooltip_text = "点击替换此槽位"
+		else:
+			sb.border_color = AppTheme.GOLD if has_card else Color(1, 1, 1, 0.25)
+			sb.set_border_width_all(2 if has_card else 1)
+			wrap.tooltip_text = ""
+
+
+## 奇物槽行(2 格, 紫色): 我方实时, 对手开战后披露
+func _refresh_relics(idx: int, seat: int, per: Dictionary) -> void:
+	var p: Dictionary = _side[idx]
+	var relics: Array = (per.get("relics", []) as Array).duplicate()
+	var total: int = maxi((relics as Array).size(),
+			int(per.get("specials_count", 0)))
+	for r in 2:
+		var ui: Dictionary = p["relic_ui"][r]
+		var gl: Label = ui["glyph"]
+		var sb: StyleBoxFlat = ui["sb"]
+		var filled: bool = r < (relics as Array).size()
+		if filled:
+			gl.text = str(FightModeGd.sp_meta(int(relics[r]))["icon"])
+		else:
+			gl.text = "◇"
+		sb.border_color = Color("b070e0") if filled else Color("b070e0", 0.45)
+		sb.set_border_width_all(2 if filled else 1)
+
+
+func _refresh_bars(idx: int, seat: int) -> void:
+	var p: Dictionary = _side[idx]
+	var hp: int = int((view.get("hp", {}) as Dictionary).get(seat, 0))
+	var mh: int = maxi(int((view.get("max_hp", {}) as Dictionary).get(seat, 0)), 0)
+	var has_battle: bool = (view.get("hp", {}) as Dictionary).has(seat)
+	if not has_battle:
+		(p["hp_fg"] as ColorRect).size = Vector2(0, 16)
+		(p["fury_fg"] as ColorRect).size = Vector2(0, 8)
+		(p["hp_txt"] as Label).text = ""
+		(p["fury_txt"] as Label).text = ""
+		(p["shield_txt"] as Label).text = ""
+		(p["stats"] as Label).text = ""
+		(p["combo"] as Label).text = tr("编成中 — 集卡触发牌型协同")
 		return
-	var want: Array = hands[seat]
-	var row: HBoxContainer = _side[idx]["hand"]
-	if int(row.get_meta("ids", -1)) == hash(want):
-		return
-	row.set_meta("ids", hash(want))
-	for c in row.get_children():
-		c.queue_free()
-	for id in want:
-		var cv: Control = CardViewScript.new(int(id))
-		cv.custom_minimum_size = Vector2(52, 74)
-		cv.size = Vector2(52, 74)
-		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(cv)
+	var frac := float(clampi(hp, 0, mh)) / float(maxf(float(mh), 1.0))
+	var bg_w: float = (p["hp_bg"] as ColorRect).custom_minimum_size.x
+	var fg: ColorRect = p["hp_fg"]
+	var fsize := Vector2(maxf(bg_w * frac - 4.0, 2.0), 16)
+	fg.size = fsize
+	if idx == 1:   # 右侧镜像: 血条从右往左消
+		fg.position = Vector2(bg_w - fsize.x - 2.0, 2.0)
+	else:
+		fg.position = Vector2(2, 2)
+	fg.color = Color("58c858") if frac > 0.5 \
+			else (Color("ffb14e") if frac > 0.25 else Color("d05050"))
+	(p["hp_txt"] as Label).text = "HP %d / %d" % [maxi(hp, 0), mh]
+	var fury: int = int((view.get("fury", {}) as Dictionary).get(seat, 0))
+	var ffg: ColorRect = p["fury_fg"]
+	var fw := maxf(bg_w * clampf(float(fury) / 100.0, 0.0, 1.0) - 4.0, 0.0)
+	ffg.size = Vector2(fw, 8)
+	if idx == 1:
+		ffg.position = Vector2(bg_w - fw - 2.0, 2.0)
+	else:
+		ffg.position = Vector2(2, 2)
+	(p["fury_txt"] as Label).text = tr("怒气 %d") % fury
+	var sh: int = int((view.get("shield", {}) as Dictionary).get(seat, 0))
+	(p["shield_txt"] as Label).text = "🔮%d" % sh if sh > 0 else ""
+	var combos: Dictionary = view.get("combo", {})
+	if (combos as Dictionary).has(seat):
+		var c: Dictionary = combos[seat]
+		(p["combo"] as Label).text = "牌型 %s · %s" % [c["name"], c["desc"]]
+		var br: Dictionary = (view.get("stats_brief", {}) as Dictionary)[seat]
+		var kinds := {"fire": "🔥火球", "frost": "❄冰霜", "light": "✟圣光"}
+		(p["stats"] as Label).text = "⚔%d  🛡%d  ✟%d  %s%s" % [
+			int(br["atk"]), int(br["def"]), int(br["skill"]),
+			str(kinds.get(str((view.get("skill_kind", {}) as Dictionary)
+					.get(seat, "fire")), "")),
+			("  ⏱冷却%d" % int((view.get("skill_cd", {}) as Dictionary)
+					.get(seat, 0))) if int((view.get("skill_cd", {})
+					as Dictionary).get(seat, 0)) > 0 else ""]
 
 
 func _refresh_log() -> void:
@@ -245,12 +342,13 @@ func _rebuild_bottom() -> void:
 		c.queue_free()
 	_act_timer = null
 	var phase := str(view.get("phase", ""))
-	var my_seat := int(view.get("my_seat", -1))
 	var fighter: bool = not bool(view.get("spectator", true))
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 8)
 	bottom_box.add_child(box)
+	# 重建后立即定位(否则新子节点默认落 (0,0) 盖住侧面板); 构建完再算行数
+	_layout_bottom.call_deferred(box)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 14)
@@ -287,59 +385,50 @@ func _status_line(row: HBoxContainer, text: String) -> void:
 	row.add_child(lb)
 
 
+## 底部操作区定位: 内容多(标题+卡行+跳过)时抬高, 单行状态贴底
+func _layout_bottom(box: VBoxContainer) -> void:
+	if not is_instance_valid(box) or not box.is_inside_tree():
+		return
+	box.position = Vector2(0.0, size.y - 254.0 if box.get_child_count() > 2
+			else size.y - 84.0)
+	box.custom_minimum_size = Vector2(size.x, 244.0)
+	box.size = Vector2(size.x, 244.0)
+
+
+## ── 抽牌: 2 张候选 + 奇物第三选项 ──
 func _build_draft_ui(box: VBoxContainer) -> void:
 	var my: Dictionary = view.get("my", {})
+	var slots: Array = my.get("slots", [])
 	if _pending_cand >= 0:
 		var hint := AppTheme.make_label(15, AppTheme.GOLD)
-		hint.text = "装备槽已满 — 点上方要替换的槽位，或跳过"
+		hint.text = tr("装备槽已满 — 点击左侧要替换的槽位，或跳过")
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.custom_minimum_size = Vector2(size.x, 0)
 		box.add_child(hint)
 	var pair: Array = my.get("pair", [])
 	if (pair as Array).is_empty():
 		return
 	if _pending_cand < 0:
 		var title := AppTheme.make_label(15, AppTheme.GOLD)
-		title.text = (tr("🟣 奇物生效! 补抽一张普通牌") if bool(my.get("comp", false))
-				else tr("二选一 — 点选 1 张 (装备 %d/5%s)") % [
-				(my.get("slots", []) as Array).size(),
-				"，本回合有额外候选组!" if int(my.get("pairs_left", 1)) > 1 else ""])
+		title.text = tr("二选一 — 点选 1 张 (装备 %d/5%s)") % [
+				(slots as Array).size(),
+				tr("，本回合有额外候选组!") if int(my.get("pairs_left", 1)) > 1
+						else ""]
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.custom_minimum_size = Vector2(size.x, 0)
 		box.add_child(title)
 	var cards_row := HBoxContainer.new()
 	cards_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	cards_row.add_theme_constant_override("separation", 26)
 	box.add_child(cards_row)
 	for cand in pair:
-		if cand >= 100:
-			cards_row.add_child(_build_special_card(int(cand)))
-		else:
-			cards_row.add_child(_build_normal_card(int(cand), my))
-	# 我方槽位行(替换模式可点)
-	var slots_row := HBoxContainer.new()
-	slots_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	slots_row.add_theme_constant_override("separation", 6)
-	box.add_child(slots_row)
-	var slots: Array = my.get("slots", [])
-	for i in 5:
-		var chip := PanelContainer.new()
-		var hl: bool = _pending_cand >= 0 and i < slots.size()
-		var sb := AppTheme.flat(Color(0.06, 0.06, 0.14),
-				AppTheme.GOLD if _pending_cand >= 0 else Color(1, 1, 1, 0.2),
-				6, 3 if hl else 1)
-		chip.add_theme_stylebox_override("panel", sb)
-		chip.custom_minimum_size = Vector2(48, 66)
-		if i < slots.size():
-			var cv: Control = CardViewScript.new(int(slots[i]))
-			cv.custom_minimum_size = Vector2(44, 62)
-			cv.size = Vector2(44, 62)
-			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			chip.add_child(cv)
-		chip.mouse_filter = Control.MOUSE_FILTER_STOP
-		var idx := i
-		chip.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed \
-					and ev.button_index == MOUSE_BUTTON_LEFT:
-				_on_slot_clicked(idx))
-		slots_row.add_child(chip)
+		cards_row.add_child(_build_normal_card(int(cand), my))
+	# 附带奇物(金色第三选项): 拾取只入奇物槽, 不消耗卡牌选择
+	var bonus: int = int(my.get("bonus_relic", -1))
+	if bonus >= 0:
+		cards_row.add_child(_build_relic_card(bonus))
 	if _pending_cand >= 0:
+		var skip_wrap := CenterContainer.new()
 		var skip := AppTheme.make_button("跳过这组", Vector2(150, 40), 14)
 		skip.pressed.connect(func() -> void:
 			Audio.play("click")
@@ -347,31 +436,52 @@ func _build_draft_ui(box: VBoxContainer) -> void:
 			if net != null:
 				net.send_fight_pick(-1)
 			_rebuild_bottom())
-		box.add_child(skip)
+		skip_wrap.add_child(skip)
+		box.add_child(skip_wrap)
 
 
-func _ternary(cond: bool, a: int, b: int) -> int:
-	return a if cond else b
-
-
-func _on_slot_clicked(idx: int) -> void:
-	if _pending_cand < 0:
-		return
-	Audio.play("click")
-	var cand := _pending_cand
-	_pending_cand = -1
-	if cand >= 200:
-		Audio.say("f_rare")
-	elif cand >= 100:
-		Audio.say("f_relic")
-	if net != null:
-		net.send_fight_pick(cand, idx)
-	_rebuild_bottom()
-
-
-func _build_normal_card(card: int, my: Dictionary) -> Control:
+## 附带奇物选项卡: 拾取装入奇物槽(上限 2), 不影响装备牌
+func _build_relic_card(sp_cand: int) -> Control:
+	var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(sp_cand))
 	var wrap := PanelContainer.new()
-	var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 10, 1)
+	var sb := AppTheme.flat(Color(0.16, 0.09, 0.24), Color("e0a83c"), 10, 2)
+	wrap.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	wrap.add_child(box)
+	var cc := CenterContainer.new()
+	var glyph := _label(34, Color("ffd166"))
+	glyph.text = str(meta.get("icon", "?"))
+	cc.add_child(glyph)
+	box.add_child(cc)
+	var nm := _label(14, Color("ffe6a0"))
+	nm.text = tr("奇物·%s") % str(meta.get("name", ""))
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(nm)
+	var tip := _label(11, AppTheme.DIM)
+	tip.text = tr("拾取后装入奇物槽(不影响装备牌)")
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.custom_minimum_size = Vector2(116, 0)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tip)
+	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	wrap.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_on_candidate(sp_cand))
+	wrap.set_meta("sp_cand", sp_cand)
+	return wrap
+
+
+func _build_normal_card(cand: int, my: Dictionary) -> Control:
+	# 稀有普通牌(200+): 显示剥离后的卡面, 点击回传完整候选值
+	var rare := cand >= 200
+	var card := cand - 200 if rare else cand
+	var wrap := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.10, 0.10, 0.22),
+			Color("ffd166") if rare else Color(1, 1, 1, 0.2), 10,
+			2 if rare else 1)
 	wrap.add_theme_stylebox_override("panel", sb)
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
@@ -384,48 +494,20 @@ func _build_normal_card(card: int, my: Dictionary) -> Control:
 	cc.add_child(cv)
 	vbox.add_child(cc)
 	var slots: Array = my.get("slots", [])
-	var preview: Array = (slots as Array).slice(0, 4)
-	if slots.size() < 5:
-		preview = (slots as Array) + [card]
+	var preview: Array = (slots as Array).duplicate()
+	if (preview as Array).size() < 5:
+		preview.append(card)
 	else:
-		preview = (slots as Array).duplicate()
 		preview[0] = card   # 槽满默认预览替换 0 号位
 	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
-	hint.text = ("替换后 %s" if slots.size() >= 5 else "装备后 %s") \
-			% str(combo["name"])
+	var rare_txt := (tr("稀有! 怒气+20 ") + "\n") if rare else ""
+	hint.text = "%s%s: %s\n%s" % [rare_txt, CardsGd.SUIT_NAMES[CardsGd.suit(card)],
+			_card_effect_text(card),
+			(tr("替换后 %s") if (slots as Array).size() >= 5
+					else tr("装备后 %s")) % tr(str(combo["name"]))]
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(hint)
-	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
-	wrap.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed \
-				and ev.button_index == MOUSE_BUTTON_LEFT:
-			_on_candidate(card))
-	return wrap
-
-
-func _build_special_card(cand: int) -> Control:
-	var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
-	var wrap := PanelContainer.new()
-	var sb := AppTheme.flat(Color(0.16, 0.09, 0.24), Color("b070e0"), 10, 2)
-	wrap.add_theme_stylebox_override("panel", sb)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 2)
-	wrap.add_child(box)
-	var icon := _label(38, Color("e8d0ff"))
-	icon.text = str(meta["icon"])
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(icon)
-	var nm := AppTheme.make_label(15, Color("e8d0ff"))
-	nm.text = "【奇物】%s" % str(meta["name"])
-	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(nm)
-	var desc := _label(12, Color("c8a8e0"))
-	desc.text = str(meta["desc"])
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.custom_minimum_size = Vector2(170, 56)
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(desc)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrap.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed \
@@ -435,16 +517,59 @@ func _build_special_card(cand: int) -> Control:
 
 
 func _on_candidate(cand: int) -> void:
+	if Time.get_ticks_msec() < _pick_lock_ms:
+		return
 	var my: Dictionary = view.get("my", {})
 	var slots: Array = my.get("slots", [])
-	if cand < 100 and slots.size() >= 5:
+	# 奇物第三选项: 直接拾取(服务器决定入槽)
+	if cand >= 100 and cand < 200:
+		Audio.play("click")
+		_pick_lock_ms = Time.get_ticks_msec() + 400
+		if net != null:
+			net.send_fight_pick(cand)
+		_rebuild_bottom()
+		return
+	if (slots as Array).size() >= 5:
 		_pending_cand = cand
 		_rebuild_bottom()
 		return
 	Audio.play("click")
+	_pick_lock_ms = Time.get_ticks_msec() + 400
 	if net != null:
 		net.send_fight_pick(cand)
 	_rebuild_bottom()
+
+
+var _pick_lock_ms := 0   # 选牌防抖: 触屏连点/重渲染后的同位余点不生效
+
+
+func _on_slot_clicked(idx: int) -> void:
+	if _pending_cand < 0:
+		return
+	Audio.play("click")
+	var cand := _pending_cand
+	_pending_cand = -1
+	_pick_lock_ms = Time.get_ticks_msec() + 400
+	if cand >= 200:
+		Audio.say("f_rare")
+	if net != null:
+		net.send_fight_pick(cand, idx)
+	_rebuild_bottom()
+
+
+## 单卡小加成文案(抽牌预览) — 与本地格斗试炼同源
+func _card_effect_text(card: int) -> String:
+	var pw := maxi(CardsGd.value(card) - 2, 0)
+	match CardsGd.suit(card):
+		0:
+			return "物攻+4 · 暴击率+5%% · 点数+%d" % pw
+		1:
+			return "生命+5+3×点数(+%d) " % (pw * 3)
+		2:
+			return "护甲/魔抗+3 · 点数+%d" % pw
+		3:
+			return "技能+4 · 点数+%d" % pw
+	return ""
 
 
 func _build_act_row(row: HBoxContainer) -> void:
@@ -515,28 +640,28 @@ func _play_next() -> void:
 		return
 	var ev: Dictionary = _events_q.pop_front()
 	var x := _side_x(int(ev.get("target", int(ev.get("who", 0)))))
-	var y := size.y * 0.32
+	var y := size.y * 0.30
 	var kind := str(ev.get("kind", ""))
 	var v := int(ev.get("v", 0))
 	match kind:
 		"crit":
 			Audio.say("f_crit")
-			_floater("暴击 -%d" % v, x, y, Color("ffd166"))
+			_floater(tr("暴击 -%d") % v, x, y, Color("ffd166"))
 			_sfx("play_card")
 		"dmg":
 			_floater("-%d" % v, x, y, Color("ff8866"))
 			_sfx("play_card")
 		"skill":
-			_floater("技能 -%d" % v, x, y, Color("7ec8ff"))
+			_floater(tr("技能 -%d") % v, x, y, Color("7ec8ff"))
 			_sfx("exchange")
 		"heal":
 			_floater("+%d" % v, x, y, Color("7dd87d"))
 		"defend":
-			_floater("防御", x, y, Color("7ec8ff"))
+			_floater(tr("防御"), x, y, Color("7ec8ff"))
 		"chill":
-			_floater("❄ 被冻结", x, y, Color("9fd8ff"))
+			_floater("❄ " + tr("被冻结"), x, y, Color("9fd8ff"))
 		"thorns":
-			_floater("荆棘 -%d" % v, x, y, Color("7dd87d"))
+			_floater(tr("荆棘 -%d") % v, x, y, Color("7dd87d"))
 		"ult":
 			_floater(tr("奥义 -%d") % v, x, y, AppTheme.GOLD)
 	var tw := create_tween()
@@ -545,11 +670,7 @@ func _play_next() -> void:
 
 
 func _side_x(seat: int) -> float:
-	var fighters: Array = view.get("fighters", [])
-	var idx := 0
-	if fighters.size() > 1 and int(fighters[1]) == seat:
-		idx = 1
-	return size.x * (0.25 if idx == 0 else 0.75)
+	return size.x * (0.25 if _side_of_seat(seat) == 0 else 0.75)
 
 
 func _floater(text: String, x: float, y: float, col: Color) -> void:
@@ -661,6 +782,13 @@ func _reset_timer() -> void:
 
 
 func _process(delta: float) -> void:
+	# 光环旋转
+	for i in 2:
+		var p: Dictionary = _side[i]
+		var aura: Control = p.get("aura", null)
+		if aura != null and aura.visible:
+			p["aura_spin"] = float(p["aura_spin"]) + delta * 1.5
+			aura.queue_redraw()
 	if _turn_remain > 0.0:
 		_turn_remain -= delta
 		var cur := int(ceil(maxf(_turn_remain, 0.0)))
@@ -674,79 +802,199 @@ func _process(delta: float) -> void:
 
 
 ## ── 面板构建与布局 ──
-func _build_fighter_panel(_idx: int) -> Dictionary:
+func _build_fighter_panel(idx: int) -> Dictionary:
 	var panel := PanelContainer.new()
 	var sb := AppTheme.flat(Color(0.09, 0.07, 0.16, 0.92),
 			Color(1, 1, 1, 0.18), 12, 1)
 	panel.add_theme_stylebox_override("panel", sb)
 	add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 5)
+	box.add_theme_constant_override("separation", 4)
 	panel.add_child(box)
-	var turn_chip := AppTheme.make_label(14, AppTheme.GOLD)
-	turn_chip.text = "▶ 当前回合"
-	turn_chip.visible = false
-	box.add_child(turn_chip)
+	# ── 头像 + 变身光环 ──
+	var av_holder := Control.new()
+	av_holder.custom_minimum_size = Vector2(112, 112)
+	var aura := Control.new()
+	aura.size = Vector2(112, 112)
+	aura.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	aura.visible = false
+	aura.set_meta("side", idx)
+	aura.draw.connect(_draw_aura.bind(aura))
+	av_holder.add_child(aura)
 	var avatar: Control = AvatarScript.new()
-	avatar.custom_minimum_size = Vector2(100, 100)
-	avatar.size = Vector2(100, 100)
+	avatar.custom_minimum_size = Vector2(112, 112)
+	avatar.size = Vector2(112, 112)
+	avatar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	av_holder.add_child(avatar)
 	var av_wrap := CenterContainer.new()
-	av_wrap.add_child(avatar)
+	av_wrap.add_child(av_holder)
 	box.add_child(av_wrap)
+	# ── 名字行 ──
 	var name_row := HBoxContainer.new()
 	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	name_row.add_theme_constant_override("separation", 8)
 	box.add_child(name_row)
+	var turn_chip := AppTheme.make_label(14, AppTheme.GOLD)
+	turn_chip.text = "▶"
+	turn_chip.visible = false
+	name_row.add_child(turn_chip)
 	var nm := AppTheme.make_label(16, AppTheme.WHITE)
+	nm.text = "玩家"
 	name_row.add_child(nm)
 	var you := AppTheme.make_label(13, Color("7dd87d"))
-	you.text = "(你)"
+	you.text = tr("(你)")
 	you.visible = false
 	name_row.add_child(you)
 	var score := AppTheme.make_label(14, AppTheme.GOLD)
-	score.text = "回合胜 0"
+	score.text = tr("回合胜 0")
+	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(score)
-	var prog := AppTheme.make_label(13, Color("c9b06a"))
-	prog.text = "装备 0/5 · 奇物 0"
-	box.add_child(prog)
 	var done := AppTheme.make_label(13, Color("9fd8ff"))
 	done.visible = false
+	done.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(done)
-	var combo := AppTheme.make_label(13, AppTheme.GOLD)
-	combo.text = "编成中…"
-	combo.custom_minimum_size = Vector2(280, 20)
-	combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(combo)
+	var prog := AppTheme.make_label(13, Color("c9b06a"))
+	prog.text = tr("装备 0/5 · 奇物 0/2")
+	prog.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(prog)
+	# ── 生命条 ──
 	var hp_bg := ColorRect.new()
 	hp_bg.color = Color(0, 0, 0, 0.6)
-	hp_bg.custom_minimum_size = Vector2(276, 20)
+	hp_bg.custom_minimum_size = Vector2(292, 20)
 	var hp_fg := ColorRect.new()
 	hp_fg.color = Color("58c858")
 	hp_fg.position = Vector2(2, 2)
-	hp_fg.size = Vector2(272, 16)
+	hp_fg.size = Vector2(288, 16)
 	hp_bg.add_child(hp_fg)
 	var hp_center := CenterContainer.new()
 	hp_center.add_child(hp_bg)
 	box.add_child(hp_center)
 	var hp_txt := _label(12, AppTheme.WHITE)
-	hp_txt.text = ""
+	hp_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hp_txt)
+	# ── 怒气条 ──
+	var fury_bg := ColorRect.new()
+	fury_bg.color = Color(0, 0, 0, 0.6)
+	fury_bg.custom_minimum_size = Vector2(292, 12)
+	var fury_fg := ColorRect.new()
+	fury_fg.color = AppTheme.GOLD
+	fury_fg.position = Vector2(2, 2)
+	fury_fg.size = Vector2(0, 8)
+	fury_bg.add_child(fury_fg)
+	var fury_center := CenterContainer.new()
+	fury_center.add_child(fury_bg)
+	box.add_child(fury_center)
+	var fury_txt := _label(11, Color("ffd166"))
+	fury_txt.text = tr("怒气 0")
+	fury_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(fury_txt)
+	# ── 牌型/属性 ──
+	var combo := AppTheme.make_label(13, AppTheme.GOLD)
+	combo.text = tr("编成中 — 集卡触发牌型协同")
+	combo.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	combo.custom_minimum_size = Vector2(300, 34)
+	combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(combo)
 	var stats := AppTheme.make_label(13, Color("c9b06a"))
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.custom_minimum_size = Vector2(280, 20)
+	stats.custom_minimum_size = Vector2(300, 20)
 	box.add_child(stats)
-	var hand := HBoxContainer.new()
-	hand.alignment = BoxContainer.ALIGNMENT_CENTER
-	hand.add_theme_constant_override("separation", 4)
-	hand.visible = false
-	box.add_child(hand)
+	# ── 装备槽 5 + 奇物槽 2 ──
+	var slots_row := HBoxContainer.new()
+	slots_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	slots_row.add_theme_constant_override("separation", 4)
+	box.add_child(slots_row)
+	var slots_ui: Array = []
+	for s in 5:
+		var wrap := PanelContainer.new()
+		var ssb := AppTheme.flat(Color(0.06, 0.06, 0.14),
+				Color(1, 1, 1, 0.25), 6, 1)
+		ssb.content_margin_left = 3
+		ssb.content_margin_right = 3
+		ssb.content_margin_top = 3
+		ssb.content_margin_bottom = 3
+		wrap.add_theme_stylebox_override("panel", ssb)
+		wrap.custom_minimum_size = Vector2(46, 62)
+		wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+		var card_box := CenterContainer.new()
+		wrap.add_child(card_box)
+		slots_row.add_child(wrap)
+		var slot_idx := s
+		wrap.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed \
+					and ev.button_index == MOUSE_BUTTON_LEFT:
+				_on_slot_clicked(slot_idx))
+		slots_ui.append({"wrap": wrap, "sb": ssb, "card_box": card_box})
+	var relic_gap := Control.new()
+	relic_gap.custom_minimum_size = Vector2(8, 0)
+	slots_row.add_child(relic_gap)
+	var relic_ui: Array = []
+	for r in 2:
+		var rwrap := PanelContainer.new()
+		var rsb := AppTheme.flat(Color(0.16, 0.09, 0.24),
+				Color("b070e0", 0.45), 6, 1)
+		rwrap.add_theme_stylebox_override("panel", rsb)
+		rwrap.custom_minimum_size = Vector2(46, 62)
+		rwrap.tooltip_text = "奇物槽 — 拾取奇物自动装入(最多 2 个)"
+		var rcc := CenterContainer.new()
+		var rglyph := AppTheme.make_label(22, Color("c89ae8"))
+		rglyph.text = "◇"
+		rcc.add_child(rglyph)
+		rwrap.add_child(rcc)
+		slots_row.add_child(rwrap)
+		relic_ui.append({"wrap": rwrap, "sb": rsb, "glyph": rglyph})
+	# ── 护盾/状态 ──
 	var shield_txt := _label(12, Color("6ad0e8"))
+	shield_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(shield_txt)
-	return {"panel": panel, "sb": sb, "avatar": avatar, "name": nm,
-			"you": you, "combo": combo, "hp_fg": hp_fg, "hp_txt": hp_txt,
-			"stats": stats, "hand": hand, "turn_chip": turn_chip,
-			"score": score, "prog": prog, "done": done,
-			"shield_txt": shield_txt}
+	if idx == 1:
+		box.layout_direction = Control.LAYOUT_DIRECTION_RTL   # 右侧镜像对称
+	return {"panel": panel, "sb": sb, "avatar": avatar, "aura": aura,
+			"aura_spin": 0.0, "name": nm, "you": you, "combo": combo,
+			"hp_fg": hp_fg, "hp_bg": hp_bg, "hp_txt": hp_txt,
+			"fury_fg": fury_fg, "fury_txt": fury_txt,
+			"stats": stats, "turn_chip": turn_chip, "score": score,
+			"prog": prog, "done": done, "shield_txt": shield_txt,
+			"slots_ui": slots_ui, "relic_ui": relic_ui}
+
+
+## 变身光环(主花色变色): 旋转外环 + 辉光内环 + 8 向射线
+func _draw_aura(aura: Control) -> void:
+	if not aura.visible:
+		return
+	var idx: int = int(aura.get_meta("side", 0))
+	var seat := _seat_at(idx)
+	var col := _suit_color(seat)
+	var c := aura.size / 2.0
+	var spin: float = float(_side[idx].get("aura_spin", 0.0))
+	aura.draw_arc(c, 50.0, 0, TAU, 40, Color(col, 0.8), 3.0, true)
+	aura.draw_arc(c, 43.0, 0, TAU, 40, Color(col, 0.35), 7.0, true)
+	for i in 8:
+		var a := TAU * i / 8.0 + spin
+		aura.draw_line(c + Vector2.from_angle(a) * 55.0,
+				c + Vector2.from_angle(a) * 63.0, Color(col, 0.85), 2.5, true)
+
+
+func _suit_color(seat: int) -> Color:
+	var suits: Dictionary = view.get("suit", {})
+	if (suits as Dictionary).has(seat):
+		var su: int = int(suits[seat])
+		return [Color("ff7050"), Color("7dd87d"), Color("ffd166"),
+				Color("7ec8ff")][su]
+	# 编成阶段对手未披露: 我方按自己装备算, 对手用金色
+	if seat == _seat_at(0) and not bool(view.get("spectator", true)):
+		var slots: Array = (view.get("my", {}) as Dictionary).get("slots", [])
+		if (slots as Array).size() >= 5:
+			var cnt := [0, 0, 0, 0]
+			var best := 0
+			for c in slots:
+				var su := CardsGd.suit(int(c))
+				cnt[su] += 1
+				if cnt[su] > cnt[best]:
+					best = su
+			return [Color("ff7050"), Color("7dd87d"), Color("ffd166"),
+					Color("7ec8ff")][best]
+	return AppTheme.GOLD
 
 
 func _relayout() -> void:
@@ -755,28 +1003,28 @@ func _relayout() -> void:
 	if w < 100.0 or h < 100.0:
 		return
 	leave_btn.position = Vector2(w - 130.0, 26)
-	phase_lbl.position = Vector2(w / 2.0 - 130.0, 36)
-	score_lbl.position = Vector2(w / 2.0 - 20.0, 64)
-	spec_lbl.position = Vector2(w / 2.0 - 140.0, 92)
-	_vs_lbl.position = Vector2(w / 2.0 - 22.0, h * 0.36)
-	log_lbl.position = Vector2(w / 2.0 - 200.0, h * 0.52)
-	log_lbl.custom_minimum_size = Vector2(400.0, h * 0.18)
-	var pw := minf(300.0, w * 0.27)
-	var ph := h * 0.60
+	phase_lbl.position = Vector2(w / 2.0 - 150.0, 36)
+	score_lbl.position = Vector2(w / 2.0 - 20.0, 66)
+	spec_lbl.position = Vector2(w / 2.0 - 140.0, 94)
+	_vs_lbl.position = Vector2(w / 2.0 - 22.0, h * 0.30)
+	log_lbl.position = Vector2(w / 2.0 - 200.0, h * 0.56)
+	log_lbl.custom_minimum_size = Vector2(400.0, h * 0.16)
+	var pw := minf(340.0, w * 0.30)
+	var ph := h * 0.72
 	for i in 2:
 		var panel: PanelContainer = _side[i]["panel"]
 		panel.size = Vector2(pw, ph)
 		panel.position = Vector2(
-				w * 0.05 if i == 0 else w - w * 0.05 - pw, h * 0.13)
+				w * 0.03 if i == 0 else w - w * 0.03 - pw, h * 0.12)
 	bottom_box.position = Vector2.ZERO
 	bottom_box.size = Vector2(w, h)
 	for c in bottom_box.get_children():
 		if c is VBoxContainer:
 			var vb := c as VBoxContainer
-			vb.position = Vector2(0.0, h - 250.0 if vb.get_child_count() > 2
-					else h - 76.0)
-			vb.custom_minimum_size = Vector2(w, 240.0)
-			vb.size = Vector2(w, 240.0)
+			vb.position = Vector2(0.0, h - 254.0 if vb.get_child_count() > 2
+					else h - 84.0)
+			vb.custom_minimum_size = Vector2(w, 244.0)
+			vb.size = Vector2(w, 244.0)
 
 
 func _label(size_num: int, color: Color) -> Label:

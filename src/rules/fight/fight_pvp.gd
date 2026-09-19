@@ -1,6 +1,12 @@
-## 联机格斗对战纯规则 v2(回合制): 5 回合, 每回合『二选一』抽牌 → 玩家之间
-## 对战(无怪)。先胜 3 回合者获胜。特殊牌(奇物)机制与本地格斗试炼同源
-## (复用 FightMode 的属性推导/牌型判定/SPECIALS 目录)。
+## 联机格斗对战纯规则 v3(回合制): 5 回合, 每回合双方各自『二选一』抽牌 →
+## 玩家之间对战(无怪), 先胜 3 回合获胜。
+## 抽牌与本地格斗试炼同源并满足联机语义:
+## - 双方从同一副 52 张牌中各自独立抽取 — 一张牌被抽走即从牌库移除,
+##   对方永远不会抽到同一张(稀有金框 200+ 编码在落牌时剥离);
+## - 奇物池每人独立一份(8 种), 双方可以抽到相同奇物;
+## - 候选组只出普通/稀有牌, 奇物以 22% 概率作为"第三选项"附带出现,
+##   拾取只入奇物槽(上限 2), 不消耗卡牌选择;
+## - 锁环(奇物1): 选牌后保留本组未选中的候选到下回合。
 ## 与网络/渲染完全解耦, 服务器权威, 可零依赖单测。
 class_name FightPvp
 extends RefCounted
@@ -12,36 +18,42 @@ const ROUNDS := 5
 const WIN_SCORE := 3          # 先胜 3 回合获胜(5 回合两日决胜)
 const TURN_SECONDS := 20
 const PICK_SECONDS := 30
+const SPECIAL_RATE := 0.22    # 每回合附带奇物第三选项概率(与本地一致)
+const RARE_RATE := 0.12       # 稀有普通牌(金框, 200+ 编码)
 
 
 static func is_sp(cand: int) -> bool:
-	return cand >= 100
+	return cand >= 100 and cand < 200
+
+
+static func is_rare(cand: int) -> bool:
+	return cand >= 200
+
+
+static func card_of(cand: int) -> int:
+	return cand - 200 if cand >= 200 else cand
 
 
 static func sp_of(cand: int) -> int:
 	return cand - 100
 
 
-## 候选抽取(服务器 rng): 25% 特殊牌(未耗尽时), 否则普通牌
-static func roll_candidate(st: Dictionary, normal_only: bool,
-		rng: RandomNumberGenerator) -> int:
-	var left: Array = st["specials_left"]
-	if not normal_only and not left.is_empty() and rng.randf() < 0.25:
-		var sp: int = left.pop_at(rng.randi() % left.size())
-		return 100 + sp
+## 从共享牌库抽一张普通牌(每张牌全局只出现一次); 12% 金框稀有
+static func _roll_card(st: Dictionary, rng: RandomNumberGenerator) -> int:
 	var deck: Array = st["deck"]
-	if deck.is_empty():
+	if deck.is_empty():   # 理论不会发生(52 张远大于 5 回合消耗)
 		return rng.randi_range(0, 51)
-	return deck.pop_at(rng.randi() % deck.size())
+	var card: int = deck.pop_at(rng.randi() % deck.size())
+	return 200 + card if rng.randf() < RARE_RATE else card
 
 
 static func new_state(fighters: Array, names: Dictionary) -> Dictionary:
 	var per := {}
 	for seat in fighters:
 		per[seat] = {
-			"slots": [], "specials": [], "pair": [], "pairs_left": 1,
-			"comp": false, "locked": -1, "done": true,
-			"pending_main": [], "need_comp": false,
+			"slots": [], "specials": [], "specials_left": [0, 1, 2, 3, 4, 5, 6, 7],
+			"pair": [], "bonus_relic": -1, "pairs_left": 1,
+			"locked": -1, "fury_carry": 0, "done": true,
 		}
 	var deck := []
 	for i in 52:
@@ -52,7 +64,6 @@ static func new_state(fighters: Array, names: Dictionary) -> Dictionary:
 		"fighters": (fighters as Array).duplicate(),
 		"names": names.duplicate(true),
 		"deck": deck,
-		"specials_left": [0, 1, 2, 3, 4, 5, 6, 7],
 		"per": per,
 		"battle": {},
 		"score": {},
@@ -77,51 +88,47 @@ static func _log(st: Dictionary, text: String) -> void:
 		(st["log"] as Array).pop_front()
 
 
-## ── 回合开启: 掷双方共同主候选组, 重置各格斗者回合状态 ──
+## ── 回合开启: 双方各自发独立候选组(共享一副牌), 重置回合状态 ──
 static func open_round(st: Dictionary, rng: RandomNumberGenerator) -> void:
 	st["phase"] = "draft"
 	st["round_winner"] = -1
-	var main := [roll_candidate(st, false, rng), roll_candidate(st, false, rng)]
 	for seat in st["fighters"]:
 		var per: Dictionary = st["per"][seat]
 		per["done"] = false
-		per["comp"] = false
-		per["need_comp"] = false
 		per["pair"] = []
-		per["pending_main"] = main.duplicate()
+		per["bonus_relic"] = -1
 		per["pairs_left"] = 1 + (1 if (per["specials"] as Array).has(0) else 0)
 	for seat in st["fighters"]:
 		_deal_pair(st, int(seat), rng)
 	_log(st, TranslationServer.translate("第 %d 回合 — 二选一编成") % int(st["round_num"]))
 
 
-## 把该格斗者的下一候选组发到手上:
-## 1 主组(合并锁环保留牌) → 2 特殊牌补抽(普通限定, 槽满跳过) → 3 增援令剩余组
+## 发该格斗者的下一候选组: 组耗尽 → done。
+## 每组 = 两张普通牌(独立抽取) + 可能附带的奇物第三选项
 static func _deal_pair(st: Dictionary, seat: int,
 		rng: RandomNumberGenerator) -> void:
 	var per: Dictionary = st["per"][seat]
-	if not (per["pending_main"] as Array).is_empty():
-		per["pair"] = (per["pending_main"] as Array).duplicate()
-		per["pending_main"] = []
-		per["comp"] = false
-		if int(per["locked"]) >= 0:
-			(per["pair"] as Array)[1] = int(per["locked"])
-			per["locked"] = -1
+	per["bonus_relic"] = -1
+	if int(per["pairs_left"]) <= 0:
+		per["pair"] = []
+		per["done"] = true
 		return
-	if bool(per["need_comp"]) and (per["slots"] as Array).size() < 5:
-		per["need_comp"] = false
-		per["pair"] = [roll_candidate(st, true, rng),
-				roll_candidate(st, true, rng)]
-		per["comp"] = true
-		return
-	per["need_comp"] = false
-	if int(per["pairs_left"]) > 0:
-		per["pair"] = [roll_candidate(st, false, rng),
-				roll_candidate(st, false, rng)]
-		per["comp"] = false
-		return
-	per["pair"] = []
-	per["done"] = true
+	var pair := [_roll_card(st, rng), _roll_card(st, rng)]
+	if int(per["locked"]) >= 0:
+		# 锁环保留值与新 roll 撞车 → 重抽(最多 8 次; 牌库每张只 pop 一次)
+		for _attempt in 8:
+			if int(pair[1]) != int(per["locked"]):
+				break
+			pair[1] = _roll_card(st, rng)
+		pair[1] = int(per["locked"])
+		per["locked"] = -1
+	per["pair"] = pair
+	# 附带奇物(每人独立池, 双方可抽到相同奇物; 装备 2 个后不再出现)
+	if (per["specials"] as Array).size() < 2 \
+			and not (per["specials_left"] as Array).is_empty() \
+			and rng.randf() < SPECIAL_RATE:
+		var pool: Array = per["specials_left"]
+		per["bonus_relic"] = 100 + int(pool.pop_at(rng.randi() % pool.size()))
 
 
 static func _take_special(st: Dictionary, seat: int, sp_id: int) -> void:
@@ -160,53 +167,58 @@ static func draft_pick(st: Dictionary, seat: int, cand: int, slot: int,
 	var per: Dictionary = st["per"][seat]
 	if bool(per["done"]):
 		return {"ok": false, "error": "already_done"}
+	# 奇物第三选项: 只入奇物槽(上限 2), 不消耗卡牌选择 — 候选组原样保留
+	if cand >= 100 and cand == int(per["bonus_relic"]):
+		if (per["specials"] as Array).size() >= 2:
+			return {"ok": false, "error": "relic_full"}
+		_take_special(st, seat, sp_of(cand))
+		per["bonus_relic"] = -1   # 立即清空: 不可重复拾取
+		return {"ok": true, "error": ""}
 	if cand != -1 and not (per["pair"] as Array).has(cand):
 		return {"ok": false, "error": "bad_candidate"}
 	var slots: Array = per["slots"]
 	if cand == -1:
 		if slots.size() < 5:
 			return {"ok": false, "error": "cannot_skip"}
-	elif is_sp(cand):
-		_take_special(st, seat, sp_of(cand))
-		if (per["specials"] as Array).has(1) and not bool(per["comp"]):
-			for c in per["pair"]:
-				if int(c) != cand:
-					per["locked"] = int(c)
-	else:
+	elif is_rare(cand):
+		per["fury_carry"] = mini(int(per["fury_carry"]) + 20, 100)
+		_log(st, TranslationServer.translate("%s 装备稀有牌! (怒气 +20)") % st["names"][seat])
+	elif cand >= 0:
 		if slots.size() >= 5:
 			if slot < 0 or slot >= 5:
 				return {"ok": false, "error": "need_slot"}
-			slots[slot] = cand
+			slots[slot] = card_of(cand)
 		else:
-			slots.append(cand)
+			slots.append(card_of(cand))
+		_log_pick(st, seat, cand)
+	# 锁环(奇物1): 保留本组未选中的候选到下回合
+	if cand >= 0 and (per["specials"] as Array).has(1) \
+			and not is_sp(cand) and (per["pair"] as Array).size() >= 2:
+		for c in per["pair"]:
+			if int(c) != cand:
+				per["locked"] = int(c)
 	# 本组解析完 → 下一组或完成
-	if not bool(per["done"]):
-		if is_sp(cand):
-			per["need_comp"] = true
-		if not bool(per["comp"]):   # 补抽组不消耗组数
-			per["pairs_left"] = int(per["pairs_left"]) - 1
-		per["pair"] = []
-		_deal_pair(st, seat, rng)
-	_log_pick(st, seat, cand)
+	per["pairs_left"] = int(per["pairs_left"]) - 1
+	per["pair"] = []
+	_deal_pair(st, seat, rng)
 	if bool(per["done"]):
 		var all_done := true
 		for s in st["fighters"]:
 			if not bool((st["per"][s] as Dictionary)["done"]):
 				all_done = false
 		if all_done:
-			_begin_round_battle(st, rng)
+			_begin_round_battle(st)
 	return {"ok": true, "error": ""}
 
 
 static func _log_pick(st: Dictionary, seat: int, cand: int) -> void:
-	if cand < 0 or is_sp(cand):
-		return
-	_log(st, TranslationServer.translate("%s 装备 %s(%d/5)") % [st["names"][seat], CardsGd.label(cand),
+	_log(st, TranslationServer.translate("%s 装备 %s(%d/5)") % [st["names"][seat],
+			CardsGd.label(card_of(cand)),
 			(st["per"][seat]["slots"] as Array).size()])
 
 
 ## ── 本回合对战(新鲜生命, 按当前编成派生) ──
-static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> void:
+static func _begin_round_battle(st: Dictionary) -> void:
 	st["phase"] = "battle"
 	var b := {
 		"hp": {}, "max_hp": {}, "shield": {}, "stats": {}, "combo": {},
@@ -228,7 +240,9 @@ static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> v
 		b["chilled"][seat] = false
 		b["skill_cd"][seat] = 0
 		b["first_used"][seat] = false
-		b["fury"][seat] = 0
+		# 稀有牌积攒的怒气带入本场, 用后清零
+		b["fury"][seat] = mini(int(per["fury_carry"]), 100)
+		per["fury_carry"] = 0
 	var fa: int = st["fighters"][0]
 	var fb: int = st["fighters"][1]
 	var ra: int = FightGd.TIER_RANK.find(str(b["combo"][fa]["tier"]))
@@ -238,7 +252,7 @@ static func _begin_round_battle(st: Dictionary, rng: RandomNumberGenerator) -> v
 	_log(st, TranslationServer.translate("对战开始 — %s 先攻") % st["names"][int(b["turn"])])
 
 
-## 行动: attack/skill/defend。返回 {ok, error, events}。
+## 行动: attack/skill/defend/ult。返回 {ok, error, events}。
 static func apply_action(st: Dictionary, seat: int, action: String,
 		rng: RandomNumberGenerator) -> Dictionary:
 	var b: Dictionary = st.get("battle", {})
@@ -279,7 +293,7 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 	var f: Dictionary = b["stats"][foe]
 	if action != "skill" and int(b["skill_cd"][actor]) > 0:
 		b["skill_cd"][actor] = int(b["skill_cd"][actor]) - 1
-	# 受击积怒气(泉涌处理前统一放在命中结算后)
+	# 泉涌回血(受击积怒气统一放命中结算后)
 	if bool(a.get("regen", false)):
 		var hp_now: int = int(b["hp"][actor])
 		var mh: int = int(b["max_hp"][actor])
@@ -363,7 +377,7 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 	return evs
 
 
-## 落伤: 护盾 → 冰冻 → 格挡 → 固定减免, 下限 1
+## 落伤: 冰冻 → 格挡 → 固定减免, 下限 1
 ## 百分比减伤系数: def 越高减免越多但永不完全免疫
 static func _mitigate(def: int) -> float:
 	return 80.0 / (80.0 + float(def))
@@ -440,8 +454,9 @@ static func advance_round(st: Dictionary, rng: RandomNumberGenerator) -> bool:
 ## ── 按座位裁剪视图 ──
 static func view(st: Dictionary, my_seat: int) -> Dictionary:
 	var fighters: Array = st["fighters"]
+	var phase := str(st["phase"])
 	var v := {
-		"phase": st["phase"],
+		"phase": phase,
 		"my_seat": my_seat,
 		"fighters": (fighters as Array).duplicate(),
 		"spectator": not (fighters as Array).has(my_seat),
@@ -453,7 +468,7 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 		"round_winner": int(st["round_winner"]),
 		"winner": int(st["winner"]),
 		"log": (st["log"] as Array).duplicate(),
-		"turn": int(st["battle"].get("turn", -1)) if str(st["phase"]) == "battle" else -1,
+		"turn": int(st["battle"].get("turn", -1)) if phase == "battle" else -1,
 		"turn_seconds": TURN_SECONDS,
 		"pick_seconds": PICK_SECONDS,
 		"my": {},
@@ -466,29 +481,38 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 			"slots": (mine["slots"] as Array).duplicate(),
 			"specials": (mine["specials"] as Array).duplicate(),
 			"pair": (mine["pair"] as Array).duplicate(),
-			"comp": bool(mine["comp"]),
+			"bonus_relic": int(mine["bonus_relic"]),
 			"done": bool(mine["done"]),
 			"pairs_left": int(mine["pairs_left"]),
 		}
 	for seat in fighters:
 		var per: Dictionary = st["per"][seat]
-		v["per"][seat] = {
+		# 变身: 集满 5 张装备(光环只在编成/对战阶段显示, 过场与终局隐藏)。
+		# 对手的具体奇物/装备只在开战后披露 — 编成阶段只给数量。
+		var info := {
 			"slots_count": (per["slots"] as Array).size(),
 			"specials_count": (per["specials"] as Array).size(),
 			"done": bool(per["done"]),
+			"transformed": (per["slots"] as Array).size() >= 5 \
+					and phase in ["draft", "battle"],
+			"relics": [],
 		}
-	if str(st["phase"]) in ["battle", "round_end", "over"]:
+		if phase in ["battle", "round_end", "over"] or int(seat) == my_seat:
+			info["relics"] = (per["specials"] as Array).duplicate()
+		v["per"][seat] = info
+	if phase in ["battle", "round_end", "over"]:
 		var b: Dictionary = st["battle"]
 		v["hp"] = (b["hp"] as Dictionary).duplicate()
 		v["max_hp"] = (b["max_hp"] as Dictionary).duplicate()
 		v["shield"] = (b["shield"] as Dictionary).duplicate()
 		v["fury"] = (b["fury"] as Dictionary).duplicate()
 		v["skill_cd"] = (b["skill_cd"] as Dictionary).duplicate()
-		v["my_turn"] = int(b["turn"]) == my_seat and str(st["phase"]) == "battle"
+		v["my_turn"] = int(b["turn"]) == my_seat and phase == "battle"
 		v["hands"] = {}
 		v["combo"] = {}
 		v["skill_kind"] = {}
 		v["stats_brief"] = {}
+		v["suit"] = {}
 		for seat in fighters:
 			var per: Dictionary = st["per"][seat]
 			v["hands"][seat] = (per["slots"] as Array).duplicate()
@@ -499,6 +523,15 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 			v["skill_kind"][seat] = str(s.get("skill_kind", "fire"))
 			v["stats_brief"][seat] = {"atk": int(s["atk"]), "def": int(s["def"]),
 					"mres": int(s["mres"]), "skill": int(s["skill"])}
+			# 主花色(变身光环颜色)
+			var cnt := [0, 0, 0, 0]
+			var best := 0
+			for c in per["slots"]:
+				var su := CardsGd.suit(int(c))
+				cnt[su] += 1
+				if cnt[su] > cnt[best]:
+					best = su
+			v["suit"][seat] = best
 	else:
 		v["my_turn"] = false
 		# draft 阶段不泄露对手候选; 展示双方编成进度即可

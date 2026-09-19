@@ -5,6 +5,7 @@ class_name FightMatch
 extends RefCounted
 
 const FightPvpGd = preload("res://src/rules/fight/fight_pvp.gd")
+const FightGd = preload("res://src/rules/fight/fight_mode.gd")
 
 var kind := "fight"
 var state: Dictionary
@@ -104,24 +105,51 @@ func view_for(seat: int) -> Dictionary:
 	return FightPvpGd.view(state, seat)
 
 
-## AI/超时托管选牌: 有槽就装, 满槽替换 0 号位; 能拿特殊牌优先
+## AI/超时托管选牌: 先拾取奇物第三选项(不消耗卡牌选择);
+## 再选使牌型更强的普通牌, 满槽替换最弱槽位; 无从选则跳过
 func _auto_pick(seat: int) -> void:
 	var per: Dictionary = state["per"][seat]
-	if (per["pair"] as Array).is_empty():
+	if int(per["bonus_relic"]) >= 0 \
+			and (per["specials"] as Array).size() < 2:
+		FightPvpGd.draft_pick(state, int(seat), int(per["bonus_relic"]), -1, _rng)
+		return
+	var pair: Array = per["pair"]
+	if (pair as Array).is_empty():
 		FightPvpGd.draft_pick(state, int(seat), -1, -1, _rng)
 		return
 	var best: int = -1
-	var best_score := -1
-	for c in per["pair"]:
-		var score := 1 if c < 100 else 2   # 特殊牌优先
-		score += int(c) % 13
-		if score > best_score:
-			best_score = score
+	var best_rank := -1
+	var best_slot := 0
+	for c in pair:
+		var slots: Array = (per["slots"] as Array).duplicate()
+		var slot := 0
+		var card_v: int = FightPvpGd.card_of(int(c))
+		if slots.size() >= 5:
+			slot = _weakest_slot(slots)
+			slots[slot] = card_v
+		else:
+			slots.append(card_v)
+		var rk: int = FightGd.TIER_RANK.find(
+				str(FightGd.evaluate_combo(slots)["tier"]))
+		if rk > best_rank:
+			best_rank = rk
 			best = int(c)
-	var slot := -1
-	if best < 100 and (per["slots"] as Array).size() >= 5:
-		slot = 0
-	FightPvpGd.draft_pick(state, int(seat), best, slot, _rng)
+			best_slot = slot
+	if best >= 0:
+		FightPvpGd.draft_pick(state, int(seat), best, best_slot, _rng)
+	else:
+		FightPvpGd.draft_pick(state, int(seat), -1, -1, _rng)
+
+
+static func _weakest_slot(slots: Array) -> int:
+	var best := 0
+	var best_v := 99
+	for i in slots.size():
+		var v: int = FightPvpGd.card_of(int(slots[i]))
+		if v < best_v:
+			best_v = v
+			best = i
+	return best
 
 
 ## AI 行动启发式: 技能好了一般放; 残血三成概率防御; 否则普攻
