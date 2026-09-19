@@ -9,6 +9,9 @@ var group := 0: set = _setv_group
 var kind := "mob": set = _setv_kind
 var variant := 0: set = _setv_variant
 
+var _t := 0.0
+var _frame := 0
+
 func _setv_group(v: int) -> void:
 	group = clampi(v, 0, 4)
 	queue_redraw()
@@ -30,8 +33,18 @@ func _init() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
+func _process(delta: float) -> void:
+	if not is_visible_in_tree():
+		return
+	_t += delta
+	var nf := int(_t / 0.55) % 2   # 两帧待机呼吸(0.55s 一帧)
+	if nf != _frame:
+		_frame = nf
+		queue_redraw()
+
+
 func _draw() -> void:
 	if size.x < 8:
 		return
-	var art: Dictionary = MonsterArt.build(group, kind, variant)
+	var art: Dictionary = MonsterArt.build(group, kind, variant, _frame)
 	draw_texture_rect(art["tex"], Rect2(Vector2.ZERO, size), false)

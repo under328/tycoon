@@ -54,6 +54,7 @@ var draft_panel: PanelContainer
 var _aura: Control            # 变身光环(五张集满显示, 随主花色变色)
 var _aura_spin := 0.0
 var _transform_floor := -1    # 已播变身演出的层(每层首次集满五张触发)
+var _bgm_boss := false        # BOSS 战专属 BGM 状态(进入/离开 boss 战切换)
 var _bg: ColorRect            # 战斗背景(随怪群主题变色)
 # 每怪群背景色调: 翡翠森林/回声洞穴/熔火之心/冰封雪原/幽暗墓地
 const GROUP_TINTS := [Color("16281a"), Color("221a38"), Color("341a12"),
@@ -325,6 +326,12 @@ func _render() -> void:
 	_update_hits()
 	var is_battle: bool = fm.phase == "battle"
 	var is_draft: bool = fm.phase == "draft"
+	# BOSS 战切入专属 BGM, 离开(胜利过场/下一层)切回
+	var want_boss_bgm: bool = is_battle \
+			and str(fm.enemy.get("kind", "mob")) == "boss"
+	if want_boss_bgm != _bgm_boss:
+		_bgm_boss = want_boss_bgm
+		Audio.play_bgm("boss" if want_boss_bgm else "fight")
 	battle_box.visible = is_battle or is_draft
 	# 怪物未生成(draft)时隐藏敌方区, 避免显示占位形象
 	var enemy_ready: bool = is_battle and not fm.enemy.is_empty()

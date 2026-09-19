@@ -35,8 +35,9 @@ static var _cache := {}
 
 
 ## 生成(带缓存): theme 0..4, kind "mob"/"elite"/"boss", variant 0/1 换色
-static func build(theme: int, kind: String, variant: int) -> Dictionary:
-	var key := "%d_%s_%d" % [clampi(theme, 0, 4), kind, clampi(variant, 0, 1)]
+static func build(theme: int, kind: String, variant: int, frame: int = 0) -> Dictionary:
+	var key := "%d_%s_%d_%d" % [clampi(theme, 0, 4), kind, clampi(variant, 0, 1),
+			clampi(frame, 0, 1)]
 	if _cache.has(key):
 		return _cache[key]
 	var pal: Dictionary = THEMES[clampi(theme, 0, 4)].duplicate()
@@ -56,6 +57,8 @@ static func build(theme: int, kind: String, variant: int) -> Dictionary:
 			_elite(cells, pal, theme)
 		"boss":
 			_boss(cells, pal, theme)
+	if frame == 1:
+		_breathe(cells)   # 待机第二帧: 全轮廓下沉 1px 呼吸感
 	_shade(cells)
 	_outline(cells)
 	_paint(img, cells, pal)
@@ -200,6 +203,15 @@ static func _eyes(cells: PackedInt32Array, cx: float, y: float, half: float) -> 
 		_px(cells, rx + dx, iy + 1, 5)
 	_px(cells, lx, iy, 4)
 	_px(cells, rx + 1, iy, 4)   # 高光
+
+
+## 待机第二帧: 整体下沉 1px(呼吸感), 首行清空
+static func _breathe(cells: PackedInt32Array) -> void:
+	for y in range(GRID - 1, 0, -1):
+		for x in GRID:
+			cells[y * GRID + x] = cells[(y - 1) * GRID + x]
+	for x in GRID:
+		cells[x] = -1
 
 
 ## ── 明暗: 顶左受光 → light; 底右 → dark ──
