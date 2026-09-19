@@ -14,3 +14,4 @@ builds/
 
 *.tmp
 __pycache__/
+uncovered_strings.txt

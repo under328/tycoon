@@ -25,6 +25,7 @@ var _pick_lock_ms := 0       # 选牌防抖: 成功选牌后 400ms 内忽略再�
 var _voice_phase := ""       # 语音: 已播报的引擎阶段(切换时播报)
 var _banner: Label = null
 var _slot_ui: Array = []     # {wrap, sb, card} 装备槽
+var _relic_ui: Array = []    # 奇物槽 UI(2 格)
 var _sp_row: HBoxContainer = null
 var _combo_lbl: Label = null
 
@@ -147,6 +148,28 @@ func _ready() -> void:
 				_on_slot_clicked(idx))
 		slots_row.add_child(wrap)
 		_slot_ui.append({"wrap": wrap, "sb": sb, "card": -1})
+	# 奇物槽(2): 与装备槽同行同尺寸, 紫色边框区分; 拾取奇物自动装入
+	var relic_gap := Control.new()
+	relic_gap.custom_minimum_size = Vector2(14, 0)
+	slots_row.add_child(relic_gap)
+	for i in 2:
+		var rwrap := PanelContainer.new()
+		var rsb := AppTheme.flat(Color(0.16, 0.09, 0.24),
+				Color("b070e0"), 6, 1)
+		rsb.content_margin_left = 4
+		rsb.content_margin_right = 4
+		rsb.content_margin_top = 4
+		rsb.content_margin_bottom = 4
+		rwrap.add_theme_stylebox_override("panel", rsb)
+		rwrap.custom_minimum_size = Vector2(56, 78)
+		rwrap.tooltip_text = "奇物槽 — 拾取奇物自动装入(最多 2 个)"
+		var rcc := CenterContainer.new()
+		var rglyph := AppTheme.make_label(26, Color("c89ae8"))
+		rglyph.text = "◇"
+		rcc.add_child(rglyph)
+		rwrap.add_child(rcc)
+		slots_row.add_child(rwrap)
+		_relic_ui.append({"wrap": rwrap, "sb": rsb, "glyph": rglyph})
 	var sp_row2 := HBoxContainer.new()
 	sp_row2.add_theme_constant_override("separation", 4)
 	slots_box.add_child(sp_row2)
@@ -533,6 +556,16 @@ func _refresh_slots() -> void:
 			sb.set_border_width_all(2 if card >= 0 else 1)
 	for c in _sp_row.get_children():
 		c.queue_free()
+	for i in _relic_ui.size():
+		var gl: Label = _relic_ui[i]["glyph"]
+		var rsb: StyleBoxFlat = _relic_ui[i]["sb"]
+		var filled := i < (fm.specials as Array).size()
+		if filled:
+			gl.text = str(FightModeGd.sp_meta(int(fm.specials[i]))["icon"])
+		else:
+			gl.text = "◇"
+		rsb.border_color = Color("b070e0") if filled else Color("b070e0", 0.45)
+		rsb.set_border_width_all(2 if filled else 1)
 	for sp_id in fm.specials:
 		var meta: Dictionary = FightModeGd.sp_meta(sp_id)
 		var chip := AppTheme.make_label(13, Color("c89ae8"))
@@ -583,11 +616,11 @@ func _render_draft() -> void:
 		draft_title.text = tr("第 %d 回合 — 二选一 (装备 %d/5)%s") % [fm.round_num,
 				fm.slots.size(),
 				"，额外候选组!" if fm.pairs_left > 1 else ""]
-	for cand in fm.pair:
-		if cand >= 100:
-			cand_row.add_child(_build_special_card(int(cand)))
-		else:
-			cand_row.add_child(_build_normal_card(int(cand)))
+	for cand in fm.pair:   # 候选组只出普通/稀有牌 — 奇物走下方金色第三选项
+		cand_row.add_child(_build_normal_card(int(cand)))
+	# 附带奇物(金色第三选项): 拾取即装入奇物槽, 不消耗卡牌选择
+	if fm.bonus_relic >= 0:
+		cand_row.add_child(_build_relic_card(int(fm.bonus_relic)))
 	if _replace_mode():
 		draft_title.text = "装备槽已满 — 点击左上要替换的槽位，或跳过"
 		var skip := AppTheme.make_button("跳过这组", Vector2(150, 40), 14)
@@ -598,6 +631,40 @@ func _render_draft() -> void:
 			if bool(r["ok"]):
 				_render())
 		draft_ops.add_child(skip)
+
+
+## 附带奇物选项卡(金色, 独立于装备牌): 拾取装入奇物槽
+func _build_relic_card(sp_cand: int) -> Control:
+	var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(sp_cand))
+	var wrap := PanelContainer.new()
+	var sb := AppTheme.flat(Color(0.16, 0.09, 0.24), Color("b070e0"), 10, 2)
+	wrap.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	wrap.add_child(box)
+	var cc := CenterContainer.new()
+	var glyph := _label(34, Color("e8d0ff"))
+	glyph.text = str(meta.get("icon", "?"))
+	cc.add_child(glyph)
+	box.add_child(cc)
+	var nm := _label(14, Color("e8d0ff"))
+	nm.text = tr("奇物·%s") % str(meta.get("name", ""))
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(nm)
+	var tip := _label(11, AppTheme.DIM)
+	tip.text = tr("拾取后装入奇物槽(不影响装备牌)")
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.custom_minimum_size = Vector2(116, 0)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(tip)
+	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	wrap.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed \
+				and ev.button_index == MOUSE_BUTTON_LEFT:
+			_on_candidate(sp_cand))   # 统一走防抖/音效/浮字路由
+	wrap.set_meta("sp_cand", sp_cand)
+	return wrap
 
 
 func _build_normal_card(cand: int) -> Control:
@@ -633,40 +700,6 @@ func _build_normal_card(cand: int) -> Control:
 			(tr("替换后 %s") if fm.slots.size() >= 5 else tr("装备后 %s"))
 					% tr(str(combo["name"]))]
 	box.add_child(hint)
-	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
-	wrap.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed \
-				and ev.button_index == MOUSE_BUTTON_LEFT:
-			_on_candidate(cand))
-	return wrap
-
-
-func _build_special_card(cand: int) -> Control:
-	var meta: Dictionary = FightModeGd.sp_meta(FightModeGd.sp_of(cand))
-	var wrap := PanelContainer.new()
-	var sb := AppTheme.flat(Color(0.16, 0.09, 0.24), Color("b070e0"), 10, 2)
-	wrap.add_theme_stylebox_override("panel", sb)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 2)
-	wrap.add_child(box)
-	var icon := _label(40, Color("e8d0ff"))
-	icon.text = str(meta["icon"])
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(icon)
-	var nm := AppTheme.make_label(16, Color("e8d0ff"))
-	nm.text = "【奇物】%s" % str(meta["name"])
-	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(nm)
-	var desc := _label(12, Color("c8a8e0"))
-	desc.text = str(meta["desc"])
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.custom_minimum_size = Vector2(180, 60)
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(desc)
-	var tag := _label(11, Color("a888c0"))
-	tag.text = "不占装备槽" if fm.slots.size() < 5 else "槽满: 立即生效"
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(tag)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrap.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed \

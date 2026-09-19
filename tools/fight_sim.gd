@@ -26,6 +26,7 @@ func _initialize() -> void:
 	for seed_i in RUNS:
 		var fm = FightGd.new(seed_i * 7919 + 13)
 		var rounds_guard := 0
+		var boss_counted := false
 		while rounds_guard < 400:
 			rounds_guard += 1
 			if str(fm.phase) == "draft":
@@ -33,22 +34,23 @@ func _initialize() -> void:
 				for c in fm.pair:
 					if c >= 100 and c < 200:
 						relics_seen[FightGd.sp_of(int(c))] = true
+				if fm.bonus_relic >= 0:
+					relics_seen[FightGd.sp_of(int(fm.bonus_relic))] = true
 				var uniq := {}
 				for c in fm.pair:
 					uniq[int(c)] = true
 				if uniq.size() < (fm.pair as Array).size():
 					draft_pair_dup += 1
-				# 选牌: 特殊牌优先; 否则选使牌型更强的普通牌
+				# 选牌: 奇物(独立第三选项)先拾取 — 不消耗卡牌选择;
+				# 再选使牌型更强的普通牌
+				if fm.bonus_relic >= 0 and (fm.specials as Array).size() < 2:
+					fm.draft_pick(int(fm.bonus_relic))
 				var best_cand: int = -1
 				var best_rank := -1
 				var best_slot := 0
 				for c in fm.pair:
 					if c < 0:
 						continue
-					if c >= 100 and c < 200:
-						best_cand = int(c)
-						best_rank = 999   # 奇物优先
-						break
 					var slots: Array = (fm.slots as Array).duplicate()
 					var slot := 0
 					var card_v: int = FightGd.card_of(int(c))
@@ -67,6 +69,9 @@ func _initialize() -> void:
 				else:
 					fm.draft_pick(-1)   # 跳过(仅槽满)
 			elif str(fm.phase) == "battle":
+				if int(fm.round_num) == FightGd.ROUNDS and not boss_counted:
+					boss_reached += 1
+					boss_counted = true
 				var act := _battle_act(fm)
 				fm.step(act)
 			elif str(fm.phase) == "round_end":

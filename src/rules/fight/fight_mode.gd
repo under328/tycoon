@@ -46,8 +46,8 @@ const SPECIALS := [
 	{"id": 9, "key": "sp_sand", "name": "时之沙漏", "icon": "⏳",
 		"desc": "技能冷却缩短为 1 回合"},
 ]
-## 候选抽到特殊牌的概率(普通牌用尽时回落普通)
-const SPECIAL_RATE := 0.12
+## 每回合附带奇物第三选项的概率(约对齐旧版逐候选 12% 的实际频率)
+const SPECIAL_RATE := 0.22
 
 ## ── 回合计划: 5 回合固定日程(数值 ±12% 随机) ──
 const ROUND_PLAN := [
@@ -96,6 +96,7 @@ var specials: Array = []   # 已获特殊牌 id
 var pair: Array = []       # 当前候选(2~3 个: 牌 id 或 100+sp_id)
 var pairs_left := 1        # 本回合剩余候选组(主组 + 增援令额外组)
 var locked := -1           # 锁环保留的候选(下回合重新出现)
+var bonus_relic := -1      # 本轮二选一附带的奇物候选(100+sp_id, -1 = 无)
 var comp := false          # 当前候选组是否为补抽(普通限定)
 
 var hp := 0
@@ -182,12 +183,8 @@ static func sp_meta(sp_id: int) -> Dictionary:
 	return SPECIALS[clampi(sp_id, 0, SPECIALS.size() - 1)]
 
 
-## 抽一个候选: 25% 特殊牌(未耗尽时), 否则普通牌
-func _roll_candidate(normal_only: bool) -> int:
-	if not normal_only and not specials_left.is_empty() \
-			and rng.randf() < SPECIAL_RATE:
-		var sp: int = specials_left.pop_at(rng.randi() % specials_left.size())
-		return 100 + sp
+## 抽一个候选普通牌。奇物不进候选组 — 经 bonus_relic 第三选项独立出现
+func _roll_candidate() -> int:
 	if deck.is_empty():  # 理论不会发生(52 张远大于消耗)
 		return rng.randi_range(0, 51)
 	var card: int = deck.pop_at(rng.randi() % deck.size())
@@ -199,21 +196,27 @@ func _roll_candidate(normal_only: bool) -> int:
 ## 开启本回合候选组
 func _open_pair() -> void:
 	comp = false
-	var cands := [_roll_candidate(false)]
+	var cands := [_roll_candidate()]
 	if locked >= 0:
-		# 锁环保留值跨层幸存而奇物池/牌库每层重置 → 可能与新 roll 撞出
-		# 两份同一奇物/同一牌。撞车则降级为普通牌重抽(最多 8 次, 撞车概率
-		# 指数衰减; 重抽后同牌不可能再现 — 单副牌每张只 pop 一次)。
+		# 锁环保留值跨层幸存而牌库每层重置 → 可能与新 roll 撞出
+		# 两份同一牌。撞车则重抽(最多 8 次; 重抽后同牌不可能再现 —
+		# 单副牌每张只 pop 一次)。
 		if cands[0] == locked:
 			for _attempt in 8:
-				cands[0] = _roll_candidate(true)
+				cands[0] = _roll_candidate()
 				if cands[0] != locked:
 					break
 		cands.append(locked)   # 锁环: 上轮未选中的牌保留出现
 		locked = -1
 	else:
-		cands.append(_roll_candidate(false))
+		cands.append(_roll_candidate())
 	pair = cands
+	# 附带奇物: 每回合 12% 概率出现一个(池内扣除, 装备后不再出现);
+	# 与装备牌分离 — 选奇物不消耗卡牌选择, 选卡牌也仍可再拿奇物
+	bonus_relic = -1
+	if specials.size() < 2 and not specials_left.is_empty() \
+			and rng.randf() < SPECIAL_RATE:
+		bonus_relic = 100 + specials_left.pop_at(rng.randi() % specials_left.size())
 
 
 ## 回合开启: 计算候选组数(增援令 +1)并进入 draft
@@ -231,7 +234,7 @@ func _after_pair_resolved() -> void:
 		return
 	if slots.is_empty():
 		# 保底: 首回合把两组全跳过(理论不可能, 槽空不允许跳过) — 防御
-		pair = [_roll_candidate(true), _roll_candidate(true)]
+		pair = [_roll_candidate(), _roll_candidate()]
 		comp = true
 		return
 	_start_battle()
@@ -243,6 +246,14 @@ func _after_pair_resolved() -> void:
 func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 	if phase != "draft":
 		return {"ok": false, "error": "not_draft"}
+	# 奇物候选: 装备到奇物槽(最多 2 个; 已装备的不会再次抽到 — 出池即扣)
+	if cand == bonus_relic and cand >= 100:
+		if specials.size() >= 2:
+			return {"ok": false, "error": "relic_full"}
+		_take_special(sp_of(cand))
+		bonus_relic = -1   # 立即清空: 不可重复拾取, UI 同步撤下第三选项
+		_log(tr("装入奇物槽: %s(%d/2)") % [str(sp_meta(sp_of(cand))["name"]), specials.size()])
+		return {"ok": true, "error": ""}
 	if cand != -1 and not (pair as Array).has(cand):
 		return {"ok": false, "error": "bad_candidate"}
 	if cand == -1:
@@ -251,22 +262,6 @@ func draft_pick(cand: int, slot: int = -1) -> Dictionary:
 			return {"ok": false, "error": "cannot_skip"}
 		_after_pair_resolved()
 		return {"ok": true, "error": ""}
-	if is_sp(cand):
-		_take_special(sp_of(cand))
-		# 未选中的候选: 持有锁环时保留
-		if specials.has(1):
-			for c in pair:
-				if int(c) != cand:
-					locked = int(c)
-		if slots.size() < 5:
-			# 补抽一组普通牌 — 保证 Boss 战前集齐 5 张装备
-			_log(tr("奇物【%s】生效 — 补抽一张普通牌") % str(sp_meta(sp_of(cand))["name"]))
-			pair = [_roll_candidate(true), _roll_candidate(true)]
-			comp = true
-			return {"ok": true, "error": ""}
-		else:
-			_after_pair_resolved()
-			return {"ok": true, "error": ""}
 	# 普通牌(稀有牌剥离金框标记后入槽)
 	if slots.size() >= 5:
 		if slot < 0 or slot >= 5:

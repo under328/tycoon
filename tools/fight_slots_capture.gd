@@ -19,10 +19,8 @@ func _process(_delta: float) -> bool:
 	if frames == 5:
 		print("[cap] phase=", panel.fm.phase, " pair=", str(panel.fm.pair),
 				" slots_before=", str(panel.fm.slots))
-		# 走真实选牌路径(非特殊牌, 未满 5 槽 → 直接装备)
+		# 走真实选牌路径(候选组只出普通/稀有牌, 未满 5 槽 → 直接装备)
 		var cand: int = int(panel.fm.pair[0])
-		if cand >= 100:
-			cand = int(panel.fm.pair[1])   # 首候选是奇物则选另一张
 		panel._on_candidate(cand)
 		print("[cap] picked=", cand, " slots_after=", str(panel.fm.slots))
 	elif frames == 25:

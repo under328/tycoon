@@ -85,17 +85,29 @@ func _draft_flow(t) -> void:
 	# 非法候选
 	t.expect(not bool(fm.draft_pick(999)["ok"]), "候选外选牌被拒")
 	t.expect(not bool(fm.draft_pick(-1)["ok"]), "槽空不允许跳过")
-	# 选第一张 → 组耗尽 → 开战(或补抽)
+	# 附带奇物(独立第三选项): 拾取入奇物槽, 不消耗卡牌选择, 不可重复拾取
+	var relic_hits := 0
+	for seed_i in 300:
+		var fmR = FightGd.new(5000 + seed_i)
+		var cand_r := int(fmR.bonus_relic)
+		if cand_r < 0:
+			continue
+		relic_hits += 1
+		t.expect(not (fmR.pair as Array).has(cand_r), "奇物不在卡牌候选组内(独立通道)")
+		t.expect(bool(fmR.draft_pick(cand_r)["ok"]), "拾取奇物通过")
+		t.expect((fmR.specials as Array).size() == 1, "奇物入槽(1/2)")
+		t.expect(int(fmR.bonus_relic) == -1, "拾取后奇物候选清空")
+		t.expect(not bool(fmR.draft_pick(cand_r)["ok"]), "同一奇物不可重复拾取")
+		t.expect((fmR.slots as Array).is_empty(), "拾取奇物不占装备槽")
+		t.expect(str(fmR.phase) == "draft" and (fmR.pair as Array).size() == 2,
+				"拾取奇物不消耗卡牌选择")
+		break
+	t.expect(relic_hits > 0, "300 种子内能遇到附带奇物")
+	# 选第一张 → 组耗尽 → 开战
 	var c0: int = fm.pair[0]
+	t.expect(not FightGd.is_sp(c0), "候选组只出普通/稀有牌")
 	var r: Dictionary = fm.draft_pick(c0)
 	t.expect(bool(r["ok"]), "合法选牌通过")
-	if str(fm.phase) == "draft":
-		# 抽到特殊牌 → 补抽组(普通限定)
-		t.expect(FightGd.is_sp(c0), "选特殊牌进入补抽")
-		for c in fm.pair:
-			t.expect(not FightGd.is_sp(int(c)), "补抽组全是普通牌")
-		r = fm.draft_pick(fm.pair[0])
-		t.expect(bool(r["ok"]), "补抽选牌通过")
 	t.expect(str(fm.phase) == "battle", "候选组耗尽进入战斗")
 	t.expect((fm.slots as Array).size() >= 1, "至少装备 1 张")
 	t.expect(str(fm.enemy["kind"]) == "mob", "第 1 回合是小怪")
@@ -105,7 +117,9 @@ func _draft_flow(t) -> void:
 func _slot_guarantee(t) -> void:
 	var fm = FightGd.new(777)
 	var guard := 0
-	while str(fm.phase) != "over" and not (bool(fm.run_won) and str(fm.phase) == "round_end") 			and guard < 4000:
+	while str(fm.phase) != "over" \
+			and not (bool(fm.run_won) and str(fm.phase) == "round_end") \
+			and guard < 4000:
 		guard += 1
 		match str(fm.phase):
 			"draft":
@@ -225,21 +239,26 @@ func _draft_specials(t) -> void:
 	fm._open_round()
 	t.expect((fm.pair as Array).has(card(11, 0)), "锁定的牌下回合重新出现")
 	t.expect(int(fm.locked) == -1, "锁定已消费")
-	# 锁环保留值跨层幸存 + 奇物池每层重置 → 组内不得出现两份同一奇物
-	# (回归: 曾撞车出 [105, 105])
+	# 奇物与卡牌分离(回归: 候选组曾混入奇物/撞出两份同一奇物):
+	# 持锁环 + 池内剩奇物时, 组内也不得出现奇物, 且锁环保留值不与重抽撞车
+	var sp_in_pair := 0
 	var dup_hits := 0
 	for seed_i in 400:
 		var fmL = FightGd.new(1000 + seed_i)
 		fmL.specials = [1]          # 持有锁环
-		fmL.specials_left = [5]     # 池内仅剩奇物5 → sp roll 必得 105
-		fmL.locked = 105            # 上层锁环保留的也是奇物5
+		fmL.specials_left = [5]     # 池内剩奇物 → 仅 bonus_relic 通道可出
+		fmL.locked = 31             # 锁环保留一张普通牌
 		fmL._open_pair()
+		for c in fmL.pair:
+			if FightGd.is_sp(int(c)):
+				sp_in_pair += 1
 		var uniq := {}
 		for c in fmL.pair:
 			uniq[int(c)] = true
 		if uniq.size() < (fmL.pair as Array).size():
 			dup_hits += 1
-	t.expect(dup_hits == 0, "锁环保留值与新 roll 撞车时组内不重复(400 种子)")
+	t.expect(sp_in_pair == 0, "候选组不再混入奇物(400 种子)")
+	t.expect(dup_hits == 0, "锁环保留值与新 roll 不重复(400 种子)")
 	# 增援令: 下回合起每组回合多一组
 	var fm2 = FightGd.new(12)
 	fm2._take_special(0)
@@ -430,7 +449,7 @@ func _deep_combat(t) -> void:
 	var ehp3: int = int(fm.enemy["hp"])
 	fm.step("attack")
 	var dealt_normal: int = ehp3 - int(fm.enemy["hp"])
-	t.expect(dealt_charge > dealt_normal, "蓄力承伤 +50%(%d vs %d)" % [dealt_charge, dealt_normal])
+	t.expect(dealt_charge > dealt_normal, "蓄力承伤 +50%%(%d vs %d)" % [dealt_charge, dealt_normal])
 	# BOSS 狂暴
 	fm.enemy["kind"] = "boss"
 	fm.enemy["max_hp"] = 1000
