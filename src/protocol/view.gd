@@ -37,6 +37,8 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"rogue_mod": str(st["cfg"].get("rogue_mod", "")),
 		"rogue_choices": (st.get("rogue_choices", []) as Array).duplicate(),
 		"rogue_rar": _rogue_rar(st),
+		"rogue_picker": int(st.get("rogue_picker", -1)),   # 本局命运卡天选者座位
+		"names": (st["names"] as Array).duplicate(true),   # 座位昵称(等待提示用)
 	}
 
 

@@ -362,10 +362,16 @@ func rogue_pick(peer: int, idx: int) -> Array:
 		return out
 	if str(room.match_ctl.state.get("phase", "")) != "draft":
 		return out
+	var seat: int = room.seat_of_peer(peer)
 	var r: Dictionary = room.match_ctl.human_apply(
-			{"t": "rogue_pick", "idx": idx}, Time.get_ticks_msec())
-	if bool(r["changed"]):
-		_after_state_change(out, room, r)
+			{"t": "rogue_pick", "idx": idx, "seat": seat}, Time.get_ticks_msec())
+	if not bool(r["changed"]):
+		# 非天选者的迟到选择: 明确回执, 避免该客户端卡在等待
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": str(r.get("error", "invalid")),
+						"msg": "本轮命运卡不由你选择"}})
+		return out
+	_after_state_change(out, room, r)
 	return out
 
 

@@ -45,11 +45,15 @@ func tick(now_ms: int) -> Dictionary:
 		return {"changed": false, "events": []}
 	match str(state["phase"]):
 		"draft":
-			# 命运二选一(联机): 先到先得。人类在场时留 5 秒自选窗口,
-			# 超时(或全 AI 房)由服务器代选一张 —— 否则整局死锁在 draft。
-			if now_ms >= _next_act_ms:
+			# 命运二选一(联机): 每局由『天选者』一人代全桌选卡。
+			# 天选者为人类 → 留 5 秒自选窗口, 超时服务器代选;
+			# 天选者为 AI → 按 AI 节奏选。
+			var picker: int = int(state.get("rogue_picker", -1))
+			var picker_bot: bool = picker < 0 or is_bot_seat(picker)
+			if now_ms >= _next_act_ms and picker_bot:
 				var n: int = maxi((state.get("rogue_choices", []) as Array).size(), 1)
-				return _step({"t": "rogue_pick", "idx": randi() % n}, now_ms)
+				return _step({"t": "rogue_pick", "idx": randi() % n,
+						"seat": picker}, now_ms)
 		"play":
 			if is_bot_seat(int(state["turn"])):
 				if now_ms >= _next_act_ms:
@@ -132,13 +136,10 @@ func _step(action: Dictionary, now_ms: int) -> Dictionary:
 func _arm(now_ms: int) -> void:
 	match str(state["phase"]):
 		"draft":
-			# 全 AI 房: 按 AI 节奏选; 有人类: 留 5 秒优先自选窗口
-			var any_human := false
-			for s in 4:
-				if int(seat_peer[s]) >= 0 and bool(seat_online[s]):
-					any_human = true
-					break
-			_next_act_ms = now_ms + (5000 if any_human else ai_delay_ms)
+			# 优先窗口只给本局的『天选者』: 人类 5 秒, AI 按 AI 节奏
+			var pk: int = int(state.get("rogue_picker", -1))
+			var picker_human: bool = pk >= 0 and not is_bot_seat(pk)
+			_next_act_ms = now_ms + (5000 if picker_human else ai_delay_ms)
 		"play":
 			_next_act_ms = now_ms + ai_delay_ms
 			_turn_deadline_ms = now_ms + int(state["cfg"]["turn_seconds"]) * 1000

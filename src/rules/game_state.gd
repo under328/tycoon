@@ -120,6 +120,7 @@ static func new_match(cfg: Dictionary, seed_v: int = -1) -> Dictionary:
 		st["rogue_choices"] = _roll_choices(st, 0)
 		st["cfg"]["rogue_mod"] = str(st["rogue_choices"][0])
 		st["phase"] = "draft"
+		st["rogue_picker"] = _roll_rogue_picker(st, 0)
 		return st
 	_deal_round(st, 0)
 	if _rogue_mod_id(st) == "revolution_start":
@@ -156,7 +157,8 @@ static func apply(state: Dictionary, action: Dictionary) -> Dictionary:
 		"next_round":
 			return _do_next_round(st)
 		"rogue_pick":
-			return _do_rogue_pick(st, int(action.get("idx", 0)))
+			return _do_rogue_pick(st, int(action.get("idx", 0)),
+					int(action.get("seat", -1)))
 		_:
 			return _fail(st, "unknown_action")
 
@@ -269,10 +271,11 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 	st["last_player"] = -1
 	st["must_include"] = -1
 	if bool(st["cfg"].get("rogue", false)):
-		# 肉鸽: 出『命运二选一』, 玩家选定后才发牌开局
+		# 肉鸽: 出『命运二选一』, 由本局的『天选者』代全桌选卡后才发牌开局
 		st["rogue_choices"] = _roll_choices(st, next_round)
 		st["cfg"]["rogue_mod"] = str(st["rogue_choices"][0])
 		st["phase"] = "draft"
+		st["rogue_picker"] = _roll_rogue_picker(st, next_round)
 		return _ok(st)
 	_deal_round(st, next_round)
 	# 强制交换（上一局身份）：大贫民→大富豪 2 张，贫民→富豪 1 张
@@ -296,6 +299,27 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 	return _ok(st)
 
 
+## 抽取本局命运卡的『天选者』(代全桌选卡的人):
+## 首局每人均等 25%; 此后按上一局身份加权 —
+## 大富豪 40% / 富豪 30% / 贫民 20% / 大贫民 10% (种子确定性, 可回放)
+static func _roll_rogue_picker(st: Dictionary, round_idx: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(str(st["seed"], ":picker:", round_idx))
+	if round_idx == 0:
+		return rng.randi() % 4
+	var ids: Array = st.get("identities", [0, 0, 0, 0])
+	var weights := [40, 30, 20, 10]   # 对应身份 0大富豪 1富豪 2贫民 3大贫民
+	var total := 0
+	for s in 4:
+		total += weights[int(ids[s]) % 4]
+	var roll := rng.randi() % total
+	for s in 4:
+		roll -= weights[int(ids[s]) % 4]
+		if roll < 0:
+			return s
+	return 0
+
+
 ## 命运骰: draft 阶段重抽二选一候选(消耗由 UI/钱包扣)
 static func rogue_reroll_choices(st: Dictionary) -> Array:
 	if str(st["phase"]) != "draft":
@@ -311,9 +335,13 @@ static func rogue_reroll_choices(st: Dictionary) -> Array:
 
 ## 肉鸽: 玩家在二选一中选定命运卡 → 应用效果并发牌开局
 ## (发牌类/规则类/触发类效果由此即刻生效; 结算类在收尾时生效)
-static func _do_rogue_pick(st: Dictionary, idx: int) -> Dictionary:
+static func _do_rogue_pick(st: Dictionary, idx: int, seat: int = -1) -> Dictionary:
 	if st["phase"] != "draft":
 		return _fail(st, "not_draft")
+	# 仅本局的『天选者』可选(seat<0 = 旧调用方, 兼容不校验)
+	var picker: int = int(st.get("rogue_picker", -1))
+	if seat >= 0 and picker >= 0 and seat != picker:
+		return _fail(st, "not_picker")
 	var choices: Array = st.get("rogue_choices", [])
 	if idx < 0 or idx >= choices.size():
 		return _fail(st, "unknown_action")

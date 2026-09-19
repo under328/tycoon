@@ -309,7 +309,7 @@ T.update({
 # ── v1.2.1 批量补全 3: 肉鸽/普通帮助 ──
 T.update({
     "肉鸽模式 · 玩法": "Rogue Mode — How It Plays",
-    "规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。\n命运卡来自固定图鉴(共 [color=#ffd166]11 种[/color], 见后几页), 抽到哪张全凭运气——随机性与可玩性由此而来。\n每张命运卡还有 [color=#b070e0]稀有度[/color]: 普通(白) < 史诗(紫) < 传说(金), 越稀有越强!": "The core rules are [color=#e0a83c]identical[/color] to Classic (card swap/Revolution/8-cut/ranked rounds).\nOne difference: [color=#7dd87d]each match draws a random Fate Card[/color], active for the whole match.\nFate Cards come from a fixed codex ([color=#ffd166]11 total[/color], see next pages) — which one you draw is pure luck: that is where the fun lives.\nEach card also has [color=#b070e0]rarity[/color]: Common(white) < Epic(purple) < Legendary(gold) — rarer is stronger!",
+    "规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n区别只有一条: 每局开局由[color=#7dd87d]『天选者』[/color]代全桌抽选一张[color=#7dd87d]『命运卡』[/color], 全场统一生效。\n『天选者』判定: 首局每人均等 25% 概率; 此后按上一局身份加权 — [color=#e0a83c]大富豪[/color] 40% / [color=#e0a83c]富豪[/color] 30% / [color=#e0a83c]贫民[/color] 20% / [color=#e0a83c]大贫民[/color] 10%。\n命运卡共 [color=#b070e0]11 种[/color](见后几页), 分普通/史诗/传说三档稀有度。": "The core rules are [color=#e0a83c]identical[/color] to Classic (card swap/Revolution/8-cut/ranked rounds).\nOne difference: at the start of each match a [color=#7dd87d]Fate Card[/color] is drawn by the round's [color=#ffd166]Chosen One[/color] on behalf of the whole table, applied to everyone.\nWho becomes the Chosen One: round 1 gives everyone an equal 25% chance; later rounds weight it by last round's rank — Magnate 40% / Rich 30% / Commoner 20% / Big Beggar 10%.\n11 Fate Cards in total (see next pages), in Common/Epic/Legendary rarities.",
     "命运卡图鉴 · 发牌与规则": "Fate Codex — Dealing & Rules",
     "发牌类与规则类命运卡:": "Dealing-type and Rules-type Fate Cards:",
     "命运卡图鉴 · 触发与结算": "Fate Codex — Triggers & Payout",
@@ -337,7 +337,6 @@ T.update({
     "命运卡 · 第 %d 局 · %s类效果": "Fate Card · Match %d · %s",
     "命运卡来自固定图鉴(共 [color=#ffd166]11 种[/color], 见后几页), 抽到哪张全凭运气——随机性与可玩性由此而来。\n每张命运卡还有 [color=#b070e0]稀有度[/color]: 普通(白) < 史诗(紫) < 传说(金), 越稀有越强!": "Fate Cards come from a fixed codex ([color=#ffd166]11 total[/color], see next pages) — which one you draw is pure luck: that is where the fun lives.\nEach card also has [color=#b070e0]rarity[/color]: Common(white) < Epic(purple) < Legendary(gold) — rarer is stronger!",
     "区别只有一条: [color=#7dd87d]每局开始随机抽一张『命运卡』[/color], 本局内生效。": "One difference: [color=#7dd87d]each match draws a random Fate Card[/color], active for the whole match.",
-    "规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。": "The core rules are [color=#e0a83c]identical[/color] to Classic (card swap/Revolution/8-cut/ranked rounds).",
     "触发类在对局中实时播报; 结算奖励与普通模式完全一致": "Trigger cards announce in real time; payouts are identical to Classic",
     "发牌类改牌堆构成; 规则类改当局长打法": "Dealing cards change the deck; rule cards change how the match plays",
     "收集进度 %d/%d — 见齐全部命运卡解锁隐藏成就": "Collection %d/%d — see every Fate Card to unlock a hidden achievement",

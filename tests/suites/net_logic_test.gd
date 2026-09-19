@@ -277,17 +277,25 @@ func _turn_timeout(t) -> void:
 	var now := 0
 	var view: Dictionary = {}
 	# 推进到轮到人类（座位0）为止
+	# (exchange_seconds 上调至 30s 后, 预算需 > 30s/5ms = 6000 步)
 	var guard := 0
-	while guard < 5000:
+	while guard < 12000:
 		guard += 1
 		var out: Array = m.tick(now)
 		if not _views(out).is_empty():
 			view = _views(out)[0]["data"]["view"]
-		if not view.is_empty() and int(view["turn"]) == 0 \
-				and str(view["phase"]) == "play":
+		# 直查对局状态: 轮到人类座位0的 play 回合即视为到达
+		var reached := false
+		for c in m.rooms:
+			var rm = m.rooms[c]
+			if rm.match_ctl != null \
+					and str(rm.match_ctl.state.get("phase", "")) == "play" \
+					and int(rm.match_ctl.state.get("turn", -1)) == 0:
+				reached = true
+		if reached:
 			break
 		now += 5
-	t.expect(guard < 5000, "推进到人类回合")
+	t.expect(guard < 12000, "advance to human turn")
 	# 静置超过 turn_seconds(5s) → 托管接管（能压则出牌，压不过则 Pass）
 	now += 6000
 	var out2: Array = m.tick(now)

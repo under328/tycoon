@@ -402,10 +402,31 @@ func _advance() -> void:
 					_show_rogue_choice()
 					break
 		elif phase == "draft":
+			# 命运二选一: 由本局『天选者』选卡 — 天选者=玩家→弹卡;
+			# 天选者=AI(或玩家托管)→自动选一张
 			_advance_gen += 1
-			advancing = false
-			_show_rogue_choice()
-			break
+			var gen_d := _advance_gen
+			var picker: int = int(state.get("rogue_picker", 0))
+			if picker == 0 and not auto_pilot:
+				advancing = false
+				_show_rogue_choice()
+				break
+			_refresh()
+			await get_tree().create_timer(AI_THINK_SEC + 0.5).timeout
+			if gen_d != _advance_gen or not is_inside_tree():
+				return
+			if str(state["phase"]) != "draft":
+				continue
+			var n3: int = maxi((state.get("rogue_choices", []) as Array).size(), 1)
+			var pick3 := randi() % n3
+			var r3 := GameStateGd.apply(state, {"t": "rogue_pick",
+					"idx": pick3, "seat": picker})
+			if bool(r3["ok"]):
+				if _recording:
+					_rec_actions.append({"t": "rogue_pick", "idx": pick3,
+							"seat": picker})
+				state = r3["state"]
+			continue
 		elif phase == "game_end":
 			break  # 等按钮
 	_refresh()
@@ -682,86 +703,98 @@ func _show_rogue_flow() -> void:
 func _show_rogue_choice() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		return   # 已在选卡(联机每次视图广播都会触发, 勿重建)
-	Audio.say("rogue_choice")   # 命运二选一登场
 	var v := _current_view()
-	var dlg := Control.new()
-	dlg.mouse_filter = Control.MOUSE_FILTER_STOP
-	dlg.theme = AppTheme.build_theme()
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dlg.add_child(dim)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dlg.add_child(center)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 18)
-	center.add_child(box)
-	var cap := AppTheme.make_label(26, AppTheme.GOLD)
-	cap.text = "命运二选一 · 第 %d 层" % (int(v.get("round", 0)) + 1)
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(cap)
+	var picker: int = int(v.get("rogue_picker", -1))
+	var my := int(v.get("my_seat", 0))
+	var choices: Array = v.get("rogue_choices", [])
+	Audio.say("rogue_choice")   # 天选者揭晓
+	var online_pick: bool = mode == "online" and picker != my
+	# 出牌区上方的横条: 选定者可点卡, 其余玩家看到等待提示;
+	# 不再使用全屏遮罩, 避免与顶部玩家信息框重叠
+	var strip := PanelContainer.new()
+	var sb := AppTheme.flat(AppTheme.PANEL, Color(AppTheme.GOLD, 0.85), 12, 2)
+	sb.content_margin_left = 20
+	sb.content_margin_right = 20
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 12
+	strip.add_theme_stylebox_override("panel", sb)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
-	box.add_child(row)
-	var choices: Array = v.get("rogue_choices", [])
-	for c in choices:
-		Wallet.note_rogue_mod(str(c), false)   # 图鉴: 出现计数
-	for i in choices.size():
-		var meta := {}
-		for m in GameStateGd.ROGUE_MODS:
-			if str(m["id"]) == str(choices[i]):
-				meta = m
-				break
-		var idx := i
-		var rar := str(meta.get("rar", "common"))
-		var rar_col: Color = Color("ffd166") if rar == "legend" 				else (Color("b070e0") if rar == "epic" else Color.WHITE)
-		var rar_tag: String = str({"legend": "★ 传说", "epic": "◆ 史诗",
-				"common": ""}.get(rar, ""))
-		var pick := AppTheme.make_button(
-				"%s【%s】%s
+	row.add_theme_constant_override("separation", 16)
+	strip.add_child(row)
+	var cap := AppTheme.make_label(18, AppTheme.GOLD)
+	cap.text = "命运二选一
+第 %d 层" % (int(v.get("round", 0)) + 1)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(cap)
+	if online_pick:
+		var wait := AppTheme.make_label(15, AppTheme.DIM)
+		wait.text = "等待 %s
+选择命运卡…" % _seat_name(v, picker)
+		wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(wait)
+	else:
+		for c in choices:
+			Wallet.note_rogue_mod(str(c), false)   # 图鉴: 出现计数
+		for i in choices.size():
+			var meta := {}
+			for m in GameStateGd.ROGUE_MODS:
+				if str(m["id"]) == str(choices[i]):
+					meta = m
+					break
+			var idx := i
+			var rar := str(meta.get("rar", "common"))
+			var rar_col: Color = Color("ffd166") if rar == "legend" 				else (Color("b070e0") if rar == "epic" else Color.WHITE)
+			var rar_tag: String = str({"legend": "★ 传说", "epic": "◆ 史诗",
+					"common": ""}.get(rar, ""))
+			var pick := AppTheme.make_button(
+					"%s【%s】%s
 %s" % [rar_tag, meta.get("glyph", "?"), meta.get("name", ""),
-				meta.get("desc", "")], Vector2(330, 130), 16)
-		pick.add_theme_color_override("font_color", rar_col)
-		pick.pressed.connect(func() -> void:
-			Audio.play("win")
-			if mode == "online" and net != null:
-				net.send_rogue_pick(idx)
-			else:
-				var r := GameStateGd.apply(state,
-						{"t": "rogue_pick", "idx": idx})
-				if bool(r["ok"]):
-					state = r["state"]
-					if _recording:
-						_rec_actions.append({"t": "rogue_pick", "idx": idx})
-			_show_rogue_reveal(idx))
-		row.add_child(pick)
-	var dice_row := HBoxContainer.new()
-	dice_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	dice_row.add_theme_constant_override("separation", 10)
-	box.add_child(dice_row)
-	# 命运骰重抽仅本地局(联机重抽需服务器裁决, 暂不开放)
-	if mode != "online" and Wallet.item_count("item_fate_dice") > 0:
-		var dice := AppTheme.make_button(
-				"🎲 掷命运骰重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
-				Vector2(320, 44), 15)
-		dice.pressed.connect(func() -> void:
-			Audio.play("click")
-			if Wallet.consume_item("item_fate_dice"):
-				var rr := GameStateGd.rogue_reroll_choices(state)
-				state["rogue_choices"] = rr
-				_close_rogue_reveal()
-				_show_rogue_choice())
-		dice_row.add_child(dice)
-	var hint := AppTheme.make_label(14, AppTheme.DIM)
-	hint.text = "选定的命运卡在本层生效"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(hint)
-	_rogue_dlg = dlg
-	add_child(dlg)
-	dlg.position = Vector2.ZERO
-	dlg.size = size
+					meta.get("desc", "")], Vector2(250, 104), 14)
+			pick.add_theme_color_override("font_color", rar_col)
+			pick.pressed.connect(func() -> void:
+				Audio.play("win")
+				if mode == "online" and net != null:
+					net.send_rogue_pick(idx)
+				else:
+					var rr := GameStateGd.apply(state,
+							{"t": "rogue_pick", "idx": idx, "seat": 0})
+					if bool(rr["ok"]):
+						state = rr["state"]
+						if _recording:
+							_rec_actions.append({"t": "rogue_pick", "idx": idx,
+									"seat": 0})
+				_show_rogue_reveal(idx))
+			row.add_child(pick)
+		if mode != "online" and Wallet.item_count("item_fate_dice") > 0:
+			var dice := AppTheme.make_button(
+					"🎲 重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
+					Vector2(150, 104), 14)
+			dice.pressed.connect(func() -> void:
+				Audio.play("click")
+				if Wallet.consume_item("item_fate_dice"):
+					state["rogue_choices"] = GameStateGd.rogue_reroll_choices(state)
+					_rogue_dlg.queue_free()
+					_rogue_dlg = null
+					_show_rogue_choice())
+			row.add_child(dice)
+	_rogue_dlg = strip
+	add_child(strip)
+	_position_rogue_strip.call_deferred()
+
+
+## 命运二选一横条定位: 出牌区上方水平居中(顶栏之下, 不压座位信息)
+func _position_rogue_strip() -> void:
+	if _rogue_dlg == null or not is_instance_valid(_rogue_dlg):
+		return
+	_rogue_dlg.reset_size()
+	var sz: Vector2 = _rogue_dlg.size
+	var fx: float = field_panel.position.x
+	var fw: float = field_panel.size.x
+	var fy: float = maxf(field_panel.position.y - sz.y - 10.0, 62.0)
+	_rogue_dlg.position = Vector2(fx + (fw - sz.x) * 0.5, fy)
+
+
 
 
 ## 选定后的确认揭示(暗幕淡入 + 卡面弹出 + 开始对局)
@@ -1624,14 +1657,30 @@ func _relayout() -> void:
 		chat_btn.position.y -= _kbd_shift
 		if emoji_popup != null:
 			emoji_popup.position.y -= _kbd_shift
+	_position_rogue_strip.call_deferred()
+
+
+var _sel_round := -1      # 选牌状态归属的手局号(手局变化即清除, 防跨手残留)
+var _sel_phase := ""
+
+## 手局/相位变化 → 清除选牌高亮(联机此前会残留到下一手)
+func _clear_sel_on_hand_change(round_idx: int, phase: String) -> void:
+	if round_idx != _sel_round or phase != _sel_phase:
+		selected.clear()
+		_sel_round = round_idx
+		_sel_phase = phase
 
 
 func _refresh() -> void:
 	if mode == "online":
 		if net == null or (net.latest_view as Dictionary).is_empty():
 			return
+		_clear_sel_on_hand_change(int(net.latest_view.get("round", -1)),
+				str(net.latest_view.get("phase", "")))
 		_refresh_view(net.latest_view)
 	elif not state.is_empty():
+		_clear_sel_on_hand_change(int(state.get("round", -1)),
+				str(state.get("phase", "")))
 		_refresh_view(ViewGd.build(state, 0))
 
 
