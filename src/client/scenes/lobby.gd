@@ -22,7 +22,6 @@ var net: Node = null
 var fill_btn: Button
 var start_btn: Button
 var copy_btn: Button
-var save_settings_btn: Button
 var status_label: Label
 var chk_joker: CheckButton
 var chk_revolution: CheckButton
@@ -43,7 +42,6 @@ var _ts_apk_url := ""          # 运行时解析的 Android APK 直链(缓存)
 var rules_panel: PanelContainer   # 房间页: 规则设置卡片(金框容器整体包裹)
 var stakes_row: HBoxContainer
 var rounds_row: HBoxContainer
-var save_row: Control             # 保存按钮行(模式联动显隐)
 
 const TS_PKGS_URL := "https://pkgs.tailscale.com/stable/"
 var host_invite_ip := ""   # 本机开房对外地址(逗号分隔候选: 局域网优先+Tailscale)
@@ -431,9 +429,10 @@ func _refresh_invite(state: Dictionary) -> void:
 ## 房间内专属 UI 的显隐切换
 func _enter_room() -> void:
 	_apply_view("room")
-	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
+	for b: Button in [fill_btn, start_btn, copy_btn]:
 		b.disabled = false
 	_sync_rules_visibility()
+	_sync_rules_permission(false)   # 保守初值: 广播到达后按房主身份校正
 
 
 ## 规则设置按模式联动: 普通/肉鸽显示全部规则行,
@@ -443,9 +442,25 @@ func _sync_rules_visibility() -> void:
 		return
 	var fight: bool = mode_option.selected == 2
 	rules_lbl.visible = not fight
-	for w: Control in [chk_joker, chk_revolution, stakes_row, rounds_row,
-			save_row]:
+	for w: Control in [chk_joker, chk_revolution, stakes_row, rounds_row]:
 		w.visible = not fight
+
+
+## 规则/模式控件仅房主可改; 非房主禁用只读查看
+func _sync_rules_permission(host: bool) -> void:
+	if mode_option == null:
+		return
+	mode_option.disabled = not host
+	chk_joker.disabled = not host
+	chk_revolution.disabled = not host
+	stakes_option.disabled = not host
+	rounds_option.disabled = not host
+
+
+## 房主改规则即推送(服务端广播全员同步)
+func _push_room_settings() -> void:
+	_sync_rules_visibility()
+	net.set_settings(_gather_rules())
 
 
 ## 转让房主确认弹窗: 点击座位右上角 👑 后二次确认(成员 overlay, 可靠关闭)
@@ -614,9 +629,7 @@ func _build_ui() -> void:
 	mode_option.custom_minimum_size = Vector2(160, 36)
 	mode_option.item_selected.connect(func(_i: int) -> void:
 		Audio.play("click")
-		_sync_rules_visibility()
-		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
-		net.set_settings(_gather_rules()))
+		_push_room_settings())
 
 	# 发现新版本: 版本握手不匹配时显示, 点击打开下载页
 	update_btn = AppTheme.make_button("⬇ 发现新版本, 点击更新", Vector2(260, 46), 16)
@@ -768,10 +781,12 @@ func _build_ui() -> void:
 	for r: Array in [[3, "一回合"], [9, "三回合"], [15, "五回合"]]:
 		rounds_option.add_item(str(r[1]) + "（%d 局）" % r[0], r[0])
 	rounds_option.select(0)
-	save_settings_btn = AppTheme.make_button("保存设置", Vector2(140, 38), 15)
-	save_settings_btn.pressed.connect(func() -> void:
-		Audio.play("click")
-		net.set_settings(_gather_rules()))
+	# 规则/模式变更即推送: 服务端广播全员同步, 无需手动保存;
+	# 仅房主可改(非房主控件禁用, 见 _sync_rules_permission)
+	chk_joker.toggled.connect(func(_on: bool) -> void: _push_room_settings())
+	chk_revolution.toggled.connect(func(_on: bool) -> void: _push_room_settings())
+	stakes_option.item_selected.connect(func(_i: int) -> void: _push_room_settings())
+	rounds_option.item_selected.connect(func(_i: int) -> void: _push_room_settings())
 	rules_panel = PanelContainer.new()
 	var rp_sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 12, 2)
 	rp_sb.content_margin_left = 18
@@ -819,11 +834,7 @@ func _build_ui() -> void:
 	rounds_option.custom_minimum_size = Vector2(0, 34)
 	rounds_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rounds_row.add_child(rounds_option)
-	# 保存按钮(居中收尾)
-	var save_cc := CenterContainer.new()
-	save_cc.add_child(save_settings_btn)
-	rbox.add_child(save_cc)
-	save_row = save_cc
+
 
 	# 状态(联机准备条之下, 自动换行多行)
 	status_label = AppTheme.make_label(15, COLOR_DIM)
@@ -933,7 +944,7 @@ func _build_ui() -> void:
 	_reg_room(start_btn, Vector2(340, 290), "center")
 	_reg_room(rules_panel, Vector2(820, 20), "right")
 
-	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
+	for b: Button in [fill_btn, start_btn, copy_btn]:
 		b.disabled = true
 	paste_btn.disabled = false
 	_apply_view("entry")
@@ -1078,7 +1089,7 @@ func _rebuild_found_rows() -> void:
 				int(rec["cap"]), str(best["ip"])]
 		if not open:
 			txt += " · 游戏中"
-		var b := AppTheme.make_button(txt, Vector2(340, 42), 13)
+		var b := AppTheme.make_button(txt, Vector2(292, 42), 13)
 		b.disabled = not open
 		var rcode := str(code)
 		var alts: Array = addrs.duplicate(true)
@@ -1142,7 +1153,12 @@ func _bind_net() -> void:
 		if _auto_join_code != "":
 			var join_code := _auto_join_code
 			_auto_join_code = ""
-			net.join_room(join_code)  # 粘贴邀请码: 连上后自动进房
+			net.join_room(join_code)  # 粘贴邀请码/发现加入: 连上后自动进房
+			# 6s 未进房 → 明确提示(可能已满员/已开局/版本不一致)
+			get_tree().create_timer(6.0).timeout.connect(func() -> void:
+				if visible and not net.in_room:
+					_set_status("加入房间 %s 失败: 可能已满员、已开局或版本不一致"
+							% join_code, COLOR_RED))
 		if auto_create_room:
 			auto_create_room = false
 			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房
@@ -1229,6 +1245,7 @@ func _on_room_state(state: Dictionary) -> void:
 	_sync_rules_visibility()
 	var host_seat := int(state.get("host_seat", -1))
 	kick_btn.visible = net.in_room and host_seat == net.my_seat
+	_sync_rules_permission(host_seat == int(net.my_seat))
 	# 房间页标题 + 邀请行
 	room_title_lbl.text = "房间  %s" % (_last_room_code if _last_room_code != "" else "——")
 	var ip_txt := ""
