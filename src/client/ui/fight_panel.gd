@@ -362,6 +362,10 @@ func _fill_enemy_view() -> void:
 	# flash 才"显形" — 即"有时怪物未显示"。位置由 bob/布局接管, 不动。
 	monster.modulate = Color.WHITE
 	monster.rotation = 0.0
+	# BOSS 视觉放大 12% 强化威慑(缩放中心 = 控件中心)
+	var is_boss: bool = str(fm.enemy.get("kind", "mob")) == "boss"
+	monster.scale = Vector2(1.12, 1.12) if is_boss else Vector2.ONE
+	monster.pivot_offset = monster.size / 2.0
 	var kind_txt: String = {"mob": tr("小怪"), "elite": tr("精英怪"),
 			"boss": "BOSS"}.get(str(fm.enemy.get("kind", "mob")), "")
 	e_name.text = "%s · %s" % [str(fm.enemy.get("name", "")), kind_txt]
