@@ -386,8 +386,13 @@ func _fight_action(peer: int, kind: String, payload) -> Array:
 	else:
 		r = room.match_ctl.human_act(seat, str(payload), Time.get_ticks_msec())
 	if not bool(r["changed"]):
+		# 过期操作(客户端视图落后于服务器状态): 除错误外补发该座位当前视图,
+		# 否则客户端会拿旧 pair/旧回合无限重试, 永远无法重新同步(死锁)
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": str(r.get("error", "invalid")), "msg": "非法操作"}})
+		if seat >= 0 and room.match_ctl.state["per"].has(seat):
+			out.append({"peer": peer, "event": "s_fight_state",
+					"data": {"view": room.match_ctl.view_for(seat), "events": []}})
 		return out
 	_bcast_fight(out, room, r.get("events", []))
 	return out

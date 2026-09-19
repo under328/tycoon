@@ -242,10 +242,9 @@ func play_bgm(track: String = "lobby") -> void:
 	bgm_player.play()
 
 
-## 循环曲目播完重放(fight 登场短曲除外); 切曲走 stop() 不触发 finished
+## 循环曲目播完重放(含 fight 战斗短曲 — 否则格斗 1-4 回合长时间静音);
+## 切曲走 stop() 不触发 finished
 func _on_bgm_finished() -> void:
-	if _bgm_current == "fight":
-		return
 	if _bgm_tracks.has(_bgm_current):
 		bgm_player.play()
 
