@@ -406,14 +406,19 @@ func _enter_table() -> void:
 
 
 func _leave_table() -> void:
+	var left := true
 	if table != null:
+		left = bool(table.get("left_room"))
 		table.queue_free()
 		table = null
 	if lobby != null:
 		lobby.visible = true
 		_fit_safe_area(lobby)
-		if lobby.has_method("return_to_entry"):
-			lobby.return_to_entry()  # 联机桌退出: 大厅复位到入口页(防残留房间页)
+		if left:
+			lobby.return_to_entry()  # 主动退房: 大厅复位到入口页(防残留房间页)
+		else:
+			# 对局结束自动回房: 仍在线、仍在房间 — 保持房间页等下一局
+			lobby.return_to_room()
 	Audio.play_bgm("lobby")
 
 

@@ -328,6 +328,18 @@ func return_to_entry() -> void:
 	show_status("", COLOR_GOLD)
 
 
+## 对局结束自动回房: 仍在线、仍在房间 — 保持联机状态与房间页等下一局
+## (不重置到入口页; 连接若已断则退回入口页由既有重连流程接管)
+func return_to_room() -> void:
+	if net != null and net.in_room:
+		_enter_room()
+		if not net.last_room_state.is_empty():
+			_on_room_state(net.last_room_state)
+		show_status("对局已结束 — 房主可开局下一局", COLOR_GOLD)
+	else:
+		return_to_entry()
+
+
 ## 解析邀请码文本: 返回 {ips:[...], ip:首个, port, code} 或 {}(无效)。
 ## 地址段支持逗号分隔多候选(TC|局域网IP,TailscaleIP|端口|房码), 单地址向后兼容。
 static func parse_invite(text: String) -> Dictionary:

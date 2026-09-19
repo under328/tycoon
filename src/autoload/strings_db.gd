@@ -182,6 +182,7 @@ const DB := {
 		"🔁 再来一局": "🔁 Play Again",
 		"奇物图鉴": "Relic Codex",
 		"已获得 ×%d": "Owned ×%d",
+		"已重新连接": "Reconnected",
 		"格斗途中拾得的奇物会收录于此(每局最多带 2 件);\n本地面板与联机对战都可收集, 集齐全部 8 件:": "Relics picked up in runs are collected here (max 2 equipped per run);\ncollected in both local and online fights — gather all 8:",
 		"观战中": "Spectating",
 		"观战位": "Spectator Seat",

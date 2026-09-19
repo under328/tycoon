@@ -28,6 +28,7 @@ var _rewarded := false
 var phase_lbl: Label
 var score_lbl: Label
 var spec_lbl: Label
+var _conn_lbl: Label
 var leave_btn: Button
 var log_lbl: Label
 var bottom_box: Control        # 底部操作区(每次状态变化重建)
@@ -63,6 +64,20 @@ func _ready() -> void:
 	spec_lbl = AppTheme.make_label(15, Color("9fd8ff"))
 	spec_lbl.visible = false
 	add_child(spec_lbl)
+
+	# 连接状态提示: 竞技场盖住大厅, 断线/重连必须在本页可见
+	_conn_lbl = AppTheme.make_label(16, AppTheme.RED)
+	_conn_lbl.visible = false
+	add_child(_conn_lbl)
+	if net != null:
+		net.server_disconnected.connect(func() -> void:
+			_conn_lbl.visible = true
+			_conn_lbl.text = "⚠ 连接中断 — 自动重连中…")
+		net.connected_ok.connect(func() -> void:
+			if _conn_lbl.visible:
+				_conn_lbl.visible = false
+				_floater(tr("已重新连接"), size.x * 0.5, size.y * 0.18,
+						Color("7dd87d")))
 
 	leave_btn = AppTheme.make_button("离开", Vector2(110, 42), 15)
 	leave_btn.pressed.connect(_do_leave)
@@ -1021,6 +1036,7 @@ func _relayout() -> void:
 	phase_lbl.position = Vector2(w / 2.0 - 150.0, 36)
 	score_lbl.position = Vector2(w / 2.0 - 20.0, 66)
 	spec_lbl.position = Vector2(w / 2.0 - 140.0, 94)
+	_conn_lbl.position = Vector2(w / 2.0 - 150.0, 120)
 	_vs_lbl.position = Vector2(w / 2.0 - 22.0, h * 0.30)
 	log_lbl.position = Vector2(w / 2.0 - 200.0, h * 0.56)
 	log_lbl.custom_minimum_size = Vector2(400.0, h * 0.16)

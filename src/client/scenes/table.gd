@@ -43,6 +43,7 @@ var state: Dictionary = {}
 var selected: Array = []
 var advancing := false
 var auto_pilot := false       # 本地托管中: AI 代打玩家座位(返回菜单后继续)
+var left_room := false        # 联机: true=主动退房(回入口页); false=对局结束回房(保持房间页)
 var _advance_gen := 0         # 驱动循环代际: 重启循环时使旧协程失效
 var _at_game_end := false
 var _emoji_cd := 0.0
@@ -594,6 +595,7 @@ func _on_leave_pressed() -> void:
 
 
 func _do_leave() -> void:
+	left_room = true   # 主动退房: 大厅复位到入口页(对局结束回房则保持房间页)
 	if net != null:
 		net.leave_room()
 	# 本地模式中途返回菜单: 托管继续(牌桌保留), 重新进入可继续本局
