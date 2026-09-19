@@ -95,14 +95,8 @@ func _ready() -> void:
 	_nickname_edit = LineEdit.new()
 	_nickname_edit.max_length = 12
 	_nickname_edit.custom_minimum_size = Vector2(340, 38)
-	_nickname_edit.text_changed.connect(func(t: String) -> void:
-		var g := get_node_or_null("/root/GameSettings")
-		if g != null:
-			g.nickname = t.strip_edges()
-			if g.nickname == "":
-				g.nickname = "玩家"
-			g.save_settings()
-			nickname_changed.emit())
+	# 昵称草稿: 点「保存并关闭」时才提交(见 _save_all)
+	_nickname_edit.text_changed.connect(func(_t: String) -> void: pass)
 	box.add_child(_nickname_edit)
 
 	# ── 音量 ──
@@ -300,7 +294,10 @@ func _slider(box: VBoxContainer, text: String, on_change: Callable) -> HSlider:
 func _save_all() -> void:
 	var g := get_node_or_null("/root/GameSettings")
 	if g != null:
+		var nick := _nickname_edit.text.strip_edges()
+		g.nickname = nick if nick != "" else "玩家"
 		g.save_settings()
+		nickname_changed.emit()   # 首页玩家名即时同步
 
 
 func _load_settings() -> void:

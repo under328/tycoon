@@ -429,3 +429,5 @@ func _back_to_menu() -> void:
 		menu.visible = true
 		_fit_safe_area(menu)
 	Audio.play_bgm("lobby")  # 菜单 _ready 只跑一次, 回首页需手动切回首页音乐
+	if table == null or not table.visible:
+		Audio.stop_voice()   # 退出对局: 未播完的语音播报静默终止

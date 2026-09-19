@@ -159,6 +159,13 @@ func play(sfx_name: String) -> void:
 	p.play()
 
 
+## 终止当前语音播报并清空队列(退出对局时调用, 不让语音串场)
+func stop_voice() -> void:
+	_voice_q.clear()
+	if _voice_player.playing:
+		_voice_player.stop()
+
+
 ## 语音播报(欢乐斗地主式): key 为 assets/voice/<key>.mp3。
 ## pitch 做座位差异化变调(1.0 原声); interrupt=true 清队列立即播(革命/胜负
 ## 等关键时刻)。同 key 去重窗口内只播一次; 队列上限 2 旧让新; 走 SFX 总线

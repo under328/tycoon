@@ -590,7 +590,7 @@ func _build_ui() -> void:
 	# 核心联机三动作(主列, 大尺寸好按):
 	#   ① 本机开房(当主机, 随 create_room 带上当前所选模式)
 	host_btn = AppTheme.make_button("🏠 本机开房(当主机)", Vector2(360, 56), 18)
-	host_btn.position = Vector2(470, 96)
+	host_btn.position = Vector2(470, 150)
 	host_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
@@ -598,14 +598,14 @@ func _build_ui() -> void:
 	add_child(host_btn)
 	#   ② 搜索附近主机(同 WiFi 一键加入)
 	discover_btn = AppTheme.make_button("🔍 搜索附近主机", Vector2(360, 56), 18)
-	discover_btn.position = Vector2(470, 184)
+	discover_btn.position = Vector2(470, 244)
 	discover_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_scan_tick())
 	add_child(discover_btn)
 	#   ③ 粘贴邀请码(异地一键加入)
 	paste_btn = AppTheme.make_button("📋 粘贴邀请码, 一键加入", Vector2(360, 56), 18)
-	paste_btn.position = Vector2(470, 272)
+	paste_btn.position = Vector2(470, 338)
 	paste_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_save_nickname()
@@ -641,7 +641,7 @@ func _build_ui() -> void:
 
 	# 联机帮助(图文, 四页: 三步开房/朋友加入/主机须知/常见问题)
 	help_btn = AppTheme.make_button("? 联机帮助", Vector2(150, 36), 15)
-	help_btn.position = Vector2(990, 138)
+	help_btn.position = Vector2(1100, 22)
 	help_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		var help := LobbyHelpScript.new()
@@ -658,7 +658,7 @@ func _build_ui() -> void:
 	fp_sb.content_margin_bottom = 10
 	found_panel.add_theme_stylebox_override("panel", fp_sb)
 	# 左列状态区下方(紧凑档右列会被中列『本机开房』按钮侵入, 放左列永不重叠)
-	found_panel.position = Vector2(40, 356)
+	found_panel.position = Vector2(820, 66)
 	found_panel.custom_minimum_size = Vector2(368, 0)
 	found_panel.visible = false
 	add_child(found_panel)
@@ -1041,6 +1041,9 @@ func _addr_score(ip: String) -> int:
 
 
 func _rebuild_found_rows() -> void:
+	if _view != "entry":
+		found_panel.visible = false   # 房间页不显示附近主机模块
+		return
 	var now := Time.get_ticks_msec()
 	for ip in _found.keys():
 		if now - int(_found[ip]["seen"]) > LanDisc.TTL_MS:
