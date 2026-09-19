@@ -52,13 +52,15 @@ func first_free_seat() -> int:
 
 
 ## 返回加入者的座位；满员返回 -1。
-func sit(peer: int, name: String, client_id: String = "", skin_id: String = "skin_default") -> int:
+func sit(peer: int, name: String, client_id: String = "", skin_id: String = "skin_default",
+		card_id: String = "") -> int:
 	var s := first_free_seat()
 	if s < 0:
 		return -1
 	seats[s] = {
 		"peer": peer, "name": name, "token": _gen_token(),
 		"bot": false, "online": true, "client_id": client_id, "skin_id": skin_id,
+		"card_id": card_id, "offline_ms": 0,
 	}
 	return s
 
@@ -108,6 +110,7 @@ func state_for(seat: int) -> Dictionary:
 				"seat": s, "empty": false, "name": str(seat_data["name"]),
 				"is_bot": bool(seat_data["bot"]), "online": bool(seat_data["online"]),
 				"skin_id": str(seat_data.get("skin_id", "skin_default")),
+				"card_id": str(seat_data.get("card_id", "")),
 			})
 	var out := {
 		"room_code": code, "host_seat": host_seat, "players": players,

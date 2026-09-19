@@ -36,7 +36,8 @@ func _init() -> void:
 
 # ---------------------------------------------------------------- 连接与会话
 
-func hello(peer: int, ver: int, token: String, client_id: String = "", skin_id: String = "") -> Array:
+func hello(peer: int, ver: int, token: String, client_id: String = "",
+		skin_id: String = "", card_id: String = "") -> Array:
 	var out := []
 	# 有人回到房间而对局已结束(game_end) → 立即收尾该局:
 	# 否则重入者会收到上局 game_end 视图, 看到"上局结算界面"而非新局。
@@ -62,6 +63,9 @@ func hello(peer: int, ver: int, token: String, client_id: String = "", skin_id: 
 			if s0 >= 0:
 				var sd: Dictionary = known.seats[s0]
 				sd["online"] = true
+				sd["offline_ms"] = 0
+				if card_id != "":
+					sd["card_id"] = card_id
 				if known.match_ctl != null:
 					known.match_ctl.seat_online[s0] = true
 				out.append({"peer": peer, "event": "s_welcome",
@@ -81,8 +85,11 @@ func hello(peer: int, ver: int, token: String, client_id: String = "", skin_id: 
 			peer_room.erase(int(seat_data["peer"]))
 			seat_data["peer"] = peer
 			seat_data["online"] = true
+			seat_data["offline_ms"] = 0
 			if skin_id != "":
 				seat_data["skin_id"] = skin_id
+			if card_id != "":
+				seat_data["card_id"] = card_id
 			if room.match_ctl != null:
 				room.match_ctl.seat_peer[seat] = peer
 				room.match_ctl.seat_online[seat] = true
@@ -118,17 +125,18 @@ func peer_gone(peer: int) -> Array:
 		room.seats[seat]["online"] = false
 		room.match_ctl.seat_online[seat] = false
 	else:
-		room.remove_seat(seat)
-		if room.is_empty():
-			rooms.erase(code)
-		else:
-			_bcast_room_state(out, room)
+		# 房间内断线: 保留座位 30s 宽限(token 重连自动归位),
+		# 避免 WiFi 抖动/手机息屏就把玩家直接移出房间
+		room.seats[seat]["online"] = false
+		room.seats[seat]["offline_ms"] = int(Time.get_ticks_msec())
+		_bcast_room_state(out, room)
 	return out
 
 
 # ---------------------------------------------------------------- 房间操作
 
-func quick_match(peer: int, name: String, rules: Dictionary, client_id: String = "", skin_id: String = "") -> Array:
+func quick_match(peer: int, name: String, rules: Dictionary, client_id: String = "",
+		skin_id: String = "", card_id: String = "") -> Array:
 	var out := []
 	if client_id != "":
 		peer_client[peer] = client_id
@@ -138,10 +146,11 @@ func quick_match(peer: int, name: String, rules: Dictionary, client_id: String =
 		var room = rooms[code]
 		if room.match_ctl == null and room.first_free_seat() >= 0:
 			return join_room(peer, name, code, client_id, skin_id)
-	return create_room(peer, name, rules, client_id, skin_id)
+	return create_room(peer, name, rules, client_id, skin_id, card_id)
 
 
-func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "", skin_id: String = "") -> Array:
+func create_room(peer: int, name: String, rules: Dictionary, client_id: String = "",
+		skin_id: String = "", card_id: String = "") -> Array:
 	var out := []
 	if _in_live_match(peer):
 		out.append({"peer": peer, "event": "s_error",
@@ -162,14 +171,15 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 			cfg[k] = rules[k]
 	var room = RoomGd.new(_gen_code(), cfg, _rng)
 	rooms[room.code] = room
-	room.sit(peer, name, client_id, skin_id)
+	room.sit(peer, name, client_id, skin_id, card_id)
 	peer_room[peer] = room.code
 	out.append({"peer": peer, "event": "s_room_state",
 			"data": room.state_for(room.seat_of_peer(peer))})
 	return out
 
 
-func join_room(peer: int, name: String, code: String, client_id: String = "", skin_id: String = "") -> Array:
+func join_room(peer: int, name: String, code: String, client_id: String = "",
+		skin_id: String = "", card_id: String = "") -> Array:
 	var out := []
 	if _in_live_match(peer):
 		out.append({"peer": peer, "event": "s_error",
@@ -189,7 +199,7 @@ func join_room(peer: int, name: String, code: String, client_id: String = "", sk
 				"data": {"code": "in_game", "msg": "对局进行中"}})
 		return out
 	_leave_room(peer, out)
-	var seat: int = room.sit(peer, name, client_id, skin_id)
+	var seat: int = room.sit(peer, name, client_id, skin_id, card_id)
 	if seat < 0:
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": "full", "msg": "房间已满"}})
@@ -453,6 +463,23 @@ func _game_action(peer: int, action: Dictionary, now_ms: int) -> Array:
 
 func tick(now_ms: int) -> Array:
 	var out := []
+	# 大厅离线宽限扫描: 断线未归超过 30s 的座位移除(对局中由 match_ctl 处理)
+	for code in rooms.keys():
+		var room0 = rooms[code]
+		if room0.match_ctl == null:
+			var changed := false
+			for s in room0.seats.size():
+				var sd = room0.seats[s]
+				if sd != null and not bool(sd["online"]) \
+						and int(sd.get("offline_ms", 0)) > 0 \
+						and now_ms - int(sd["offline_ms"]) > 30000:
+					room0.remove_seat(s)
+					changed = true
+			if changed:
+				if room0.is_empty():
+					rooms.erase(code)
+				else:
+					_bcast_room_state(out, room0)
 	for code in rooms.keys():
 		var room = rooms[code]
 		if room.match_ctl == null:

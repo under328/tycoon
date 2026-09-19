@@ -4,6 +4,7 @@
 extends Control
 
 signal closed
+signal nickname_changed   # 昵称实时修改(首页玩家名即时同步)
 
 const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
@@ -100,7 +101,8 @@ func _ready() -> void:
 			g.nickname = t.strip_edges()
 			if g.nickname == "":
 				g.nickname = "玩家"
-			g.save_settings())
+			g.save_settings()
+			nickname_changed.emit())
 	box.add_child(_nickname_edit)
 
 	# ── 音量 ──

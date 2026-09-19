@@ -21,7 +21,6 @@ const COLOR_GREEN := Color("7dd87d")
 const COLOR_RED := Color("ff6b6b")
 
 var net: Node = null
-var nickname_edit: LineEdit
 var fill_btn: Button
 var start_btn: Button
 var copy_btn: Button
@@ -50,6 +49,7 @@ var host_invite_ip := ""   # 本机开房对外地址(逗号分隔候选: 局域
 var host_invite_ips: Array = []  # 同上, 数组形式(展示用)
 var auto_create_room := false # 开房后自动创建房间
 var _auto_join_code := ""     # 粘贴邀请码后待自动加入的房间码
+var _join_alts: Array = []    # 发现加入: 备选地址(连接失败自动切换)
 var _invite_code := ""        # 当前房间的完整邀请码
 # 局域网发现(同 WiFi 一键加入): 广播查询 → 主机回房间概览
 var _disc: PacketPeerUDP = null
@@ -67,7 +67,6 @@ var host_btn: Button
 var mode_lbl: Label
 var back_btn: Button
 var title_lbl: Label
-var nick_lbl: Label
 var rules_lbl: Label
 var stakes_lbl: Label
 var rounds_lbl: Label
@@ -235,7 +234,7 @@ func _relayout() -> void:
 
 	for i in 4:
 		var sp: Control = _seat_cards[i]["panel"]
-		_transfer_btns[i].position = sp.position + Vector2(sp.size.x - 44.0, 6.0)
+		_transfer_btns[i].position = sp.position + Vector2(sp.size.x - 36.0, 4.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -586,21 +585,7 @@ func _build_ui() -> void:
 	title_lbl.position = Vector2(150, 22)
 	add_child(title_lbl)
 
-	# 昵称
-	nick_lbl = AppTheme.make_label(15, COLOR_WHITE)
-	nick_lbl.text = "昵称"
-	nick_lbl.reset_size()  # 文本晚于创建 → 刷新尺寸
-	nick_lbl.position = Vector2(150, 70)
-	add_child(nick_lbl)
-	nickname_edit = LineEdit.new()
-	nickname_edit.position = Vector2(200, 66)
-	nickname_edit.custom_minimum_size = Vector2(220, 36)
-	nickname_edit.size = Vector2(220, 36)
-	var gs := get_node_or_null("/root/GameSettings")
-	if gs != null:
-		nickname_edit.text = str(gs.nickname)
-	nickname_edit.add_theme_font_size_override("font_size", 16)
-	add_child(nickname_edit)
+	# 昵称统一使用设置页内配置的昵称(入口页不再提供输入框)
 
 	# 核心联机三动作(主列, 大尺寸好按):
 	#   ① 本机开房(当主机, 随 create_room 带上当前所选模式)
@@ -626,7 +611,7 @@ func _build_ui() -> void:
 		_save_nickname()
 		_paste_join())
 	add_child(paste_btn)
-	# 对局模式(建房前选定, 房间内房主可随时改)
+	# 对局模式: 入口页不再展示 — 进房后在房间内由房主选择(见房间页右列)
 	mode_lbl = AppTheme.make_label(15, AppTheme.WHITE)
 	mode_lbl.text = "模式"
 	mode_lbl.position = Vector2(470, 356)
@@ -723,8 +708,15 @@ func _build_ui() -> void:
 
 	# 转让房主按钮(座位卡右上角 👑, 仅房主可见; 点击弹窗二次确认)
 	for i in 4:
-		var tb := AppTheme.make_button("👑", Vector2(40, 30), 17)
-		tb.position = Vector2(40 + i * 160 + 106, 122)
+		var tb := AppTheme.make_button("👑", Vector2(30, 24), 13)
+		tb.position = Vector2(40 + i * 160 + 114, 120)
+		var tb_sb := AppTheme.flat(Color(0.10, 0.09, 0.20, 0.95),
+				Color(AppTheme.GOLD, 0.55), 5, 1)
+		tb.add_theme_stylebox_override("normal", tb_sb)
+		var tb_sb_h: StyleBoxFlat = tb_sb.duplicate()
+		tb_sb_h.set_border_width_all(2)
+		tb.add_theme_stylebox_override("hover", tb_sb_h)
+		tb.add_theme_stylebox_override("pressed", tb_sb_h)
 		tb.visible = false
 		tb.tooltip_text = "将房主转让给该玩家"
 		var idx := i
@@ -902,13 +894,9 @@ func _build_ui() -> void:
 	_reg(host_panel, "left", 0.1)
 	_reg(status_label, "left", 0.1)
 	_reg(title_lbl, "center")
-	_reg(nick_lbl, "center")
-	_reg(nickname_edit, "center")
 	_reg(host_btn, "center")
 	_reg(discover_btn, "center")
 	_reg(paste_btn, "center")
-	_reg(mode_lbl, "center")
-	_reg(mode_option, "center")
 	_reg(found_panel, "left", 0.1)
 	_reg(help_btn, "right")
 
@@ -936,12 +924,7 @@ func _build_ui() -> void:
 	_reg_room(rounds_lbl, Vector2(832, 218), "right")
 	_reg_room(rounds_option, Vector2(880, 206), "right")
 	_reg_room(save_settings_btn, Vector2(832, 252), "right")
-	# 模式选择 双视图注册: 入口页(建房前选模式) + 房间页(房主随时改)
-	# (先设入口坐标注册 entry, 再设房间坐标注册 room — _reg 按注册时坐标记位)
-	mode_lbl.position = Vector2(830, 292)
-	mode_option.position = Vector2(880, 288)
-	_reg(mode_lbl, "right")
-	_reg(mode_option, "right")
+	# 模式选择: 仅房间页(进房后由房主选择)
 	mode_lbl.position = Vector2(832, 62)
 	mode_option.position = Vector2(880, 50)
 	_reg_room(mode_lbl, Vector2(832, 62), "right")
@@ -1044,7 +1027,19 @@ func _scan_read() -> void:
 				"seen": Time.get_ticks_msec()}
 
 
-## 重建附近主机列表(行数封顶 5, 过期条目清除; 全空则整卡隐藏)
+## 重建附近主机列表(行数封顶 5, 过期条目清除; 全空则整卡隐藏)。
+## 同一房间的多网卡地址合并为一行, 地址按可达性排序(局域网优先,
+## 回环/虚拟网卡殿后), 点击后自动逐个回退尝试。
+func _addr_score(ip: String) -> int:
+	if ip.begins_with("127."):
+		return 90   # 回环: 多半是主机本机, 仅作兜底
+	if ip.begins_with("192.168.") or ip.begins_with("10."):
+		return 0    # 局域网最优先
+	if ip.begins_with("100."):
+		return 10   # Tailscale
+	return 20        # 其余(172. 私有段等)
+
+
 func _rebuild_found_rows() -> void:
 	var now := Time.get_ticks_msec()
 	for ip in _found.keys():
@@ -1053,36 +1048,54 @@ func _rebuild_found_rows() -> void:
 	for r in _found_rows:
 		(r as Control).queue_free()
 	_found_rows.clear()
-	var shown := 0
+	# 按房间码合并多地址, 每房间选可达性最好的地址为首选
+	var by_code := {}
 	for ip in _found.keys():
-		if shown >= 5:
-			break
 		var e: Dictionary = _found[ip]
 		for room in e["rooms"]:
-			if shown >= 5:
-				break
-			var open := bool(room["open"])
-			var txt := "🏠 %s  %d/%d人  %s" % [room["code"], room["players"], room["cap"], ip]
-			if not open:
-				txt += " · 游戏中"
-			var b := AppTheme.make_button(txt, Vector2(340, 42), 13)
-			b.disabled = not open
-			var rip := str(ip)
-			var rport := int(e["port"])
-			var rcode := str(room["code"])
-			b.pressed.connect(func() -> void:
-				Audio.play("click")
-				_join_found(rip, rport, rcode))
-			found_box.add_child(b)
-			_found_rows.append(b)
-			shown += 1
+			var code := str(room["code"])
+			if not by_code.has(code):
+				by_code[code] = {"addrs": [], "open": bool(room["open"]),
+						"players": int(room["players"]), "cap": int(room["cap"])}
+			var rec: Dictionary = by_code[code]
+			rec["addrs"].append({"ip": str(ip), "port": int(e["port"]),
+					"score": _addr_score(str(ip))})
+			rec["open"] = rec["open"] or bool(room["open"])
+	var shown := 0
+	for code in by_code.keys():
+		if shown >= 5:
+			break
+		var rec: Dictionary = by_code[code]
+		var addrs: Array = rec["addrs"]
+		addrs.sort_custom(func(a, b): return int(a["score"]) < int(b["score"]))
+		var best: Dictionary = addrs[0]
+		var open := bool(rec["open"])
+		var txt := "🏠 %s  %d/%d人  %s" % [code, int(rec["players"]),
+				int(rec["cap"]), str(best["ip"])]
+		if not open:
+			txt += " · 游戏中"
+		var b := AppTheme.make_button(txt, Vector2(340, 42), 13)
+		b.disabled = not open
+		var rcode := str(code)
+		var alts: Array = addrs.duplicate(true)
+		b.pressed.connect(func() -> void:
+			Audio.play("click")
+			_join_found_best(str(best["ip"]), int(best["port"]), rcode,
+					alts.duplicate(true)))
+		found_box.add_child(b)
+		_found_rows.append(b)
+		shown += 1
 	found_panel.visible = shown > 0
 
 
-## 点击附近主机: 发现应答本身已证明可达, 直接发起 ENet 连接并自动进房
-func _join_found(ip: String, port: int, room_code: String) -> void:
+## 点击附近主机: 发现应答本身已证明可达, 直接发起 ENet 连接并自动进房。
+## 携带全部候选地址: 连接失败时自动切换下一地址(修复多网卡环境点击
+## 虚拟网卡地址导致"连接后不进房")。
+func _join_found_best(ip: String, port: int, room_code: String,
+		alts: Array = []) -> void:
 	_save_nickname()
 	_auto_join_code = room_code
+	_join_alts = alts.duplicate(true)
 	_conn_fails = 0
 	_loopback_hint = false
 	var g := get_node_or_null("/root/GameSettings")
@@ -1107,11 +1120,11 @@ func _kickable_seat() -> int:
 	return -1
 
 
+## 昵称统一在设置页配置; 这里只兜底确保非空并持久化
 func _save_nickname() -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
-		gs.nickname = nickname_edit.text.strip_edges()
-		if gs.nickname == "":
+		if str(gs.nickname).strip_edges() == "":
 			gs.nickname = "玩家"
 		gs.save_settings()
 
@@ -1132,6 +1145,15 @@ func _bind_net() -> void:
 	)
 	net.connection_failed.connect(func() -> void:
 		_conn_fails += 1
+		if _auto_join_code != "" and not _join_alts.is_empty():
+			var nxt: Dictionary = _join_alts.pop_front()
+			_set_status("地址不可达, 尝试备用地址 %s:%d…" % [
+					str(nxt["ip"]), int(nxt["port"])], COLOR_DIM)
+			net.disconnect_all()
+			net.auto_reconnect = true
+			_join_seq += 1
+			net.connect_to(str(nxt["ip"]), int(nxt["port"]))
+			return
 		# 手机连 127.0.0.1 = 连自己, 那里没有服务器; 停止无休止重试, 给出明确指引
 		# (本机开房流程不受影响: 它带 auto_create_room 标记且连的是内嵌服务器)
 		var loopback: bool = str(net.address) in ["127.0.0.1", "localhost", "::1"]

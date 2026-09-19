@@ -1026,7 +1026,7 @@ func _build_ui() -> void:
 	self_label.bbcode_enabled = true
 	self_label.scroll_active = false
 	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	self_label.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 52)
+	self_label.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 74)
 	# 触屏设备信息文字加大一档(手机 720p 逻辑画布物理密度高, 14/15px 偏小)
 	self_label.add_theme_font_size_override("normal_font_size",
 			18 if Responsive.is_touch() else 15)
@@ -1276,7 +1276,7 @@ func _build_ui() -> void:
 	# 文本聊天（仅联机模式）
 	chat_log = _make_label(14, AppTheme.WHITE)
 	chat_log.position = Vector2(16, 462)
-	chat_log.custom_minimum_size = Vector2(296, 84)
+	chat_log.custom_minimum_size = Vector2(232, 84)
 	chat_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(chat_log)
 	chat_edit = LineEdit.new()
@@ -1339,7 +1339,7 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 48)
+	lb.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 74)
 	lb.add_theme_font_size_override("normal_font_size",
 			16 if Responsive.is_touch() else 14)
 	row.add_child(lb)
@@ -1772,10 +1772,14 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 	var counts: Array = view["counts"]
 	for i in 3:
 		var box: Control = _opp_hands[i]
-		var n := int(counts[(my + i + 1) % 4])
-		if int(box.get_meta("count", -1)) == n:
-			continue  # 数量未变不重建(消除每手 AI 动作的节点抖动)
+		var seat := (my + i + 1) % 4
+		var n := int(counts[seat])
+		# 卡面面貌: 该座位玩家自己装备的卡牌皮肤(联机从房间状态读取)
+		var pal_id: String = net.card_of_seat(seat) if mode == "online" else ""
+		if int(box.get_meta("count", -1)) == n and str(box.get_meta("pal", "")) == pal_id:
+			continue  # 数量与卡面未变不重建(消除每手 AI 动作的节点抖动)
 		box.set_meta("count", n)
+		box.set_meta("pal", pal_id)
 		var vert: bool = bool(box.get_meta("vert"))
 		while box.get_child_count() > n:
 			var dead: Control = box.get_child(box.get_child_count() - 1)
@@ -1785,6 +1789,8 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 			var k := box.get_child_count()
 			var cv := CardViewScript.new(-1)
 			cv.face_down = true
+			if pal_id != "":
+				cv.palette_id = pal_id
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			cv.custom_minimum_size = Vector2(40, 56)
 			cv.size = Vector2(40, 56)
@@ -1811,9 +1817,10 @@ func _seat_info_text(view: Dictionary, seat: int) -> String:
 		ident = "[color=#%s]【%s】[/color]" % [id_colors[idn], ScoringGd.IDENTITY_NAMES[idn]]
 	var sc := int(view["scores"][seat]) if (view["scores"] as Array).size() == 4 else 0
 	var sc_col := green if sc > 0 else (red if sc < 0 else white)
-	return "%s%s[color=#%s]%s[/color]\n[color=#%s]剩 %d 张 ·[/color] [color=#%s]积分 %+d[/color]" % [
+	# 三行排布: ① [身份]昵称 ② 积分(在上) ③ 剩余牌数
+	return "%s%s[color=#%s]%s[/color]\n[color=#%s]积分 %+d[/color]\n[color=#%s]剩 %d 张[/color]" % [
 		turn_mark, ident, white, _seat_name(view, seat),
-		dim, int(view["counts"][seat]), sc_col, sc,
+		sc_col, sc, dim, int(view["counts"][seat]),
 	]
 
 

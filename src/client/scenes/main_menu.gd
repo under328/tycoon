@@ -757,6 +757,8 @@ func _build_settings() -> void:
 	_settings = SettingsPanelScript.new()
 	_settings.name = "Settings"
 	add_child(_settings)
+	_settings.nickname_changed.connect(func() -> void:
+		_refresh_profile())   # 昵称修改即时同步首页玩家名
 
 
 func _label(size: int, color: Color) -> Label:

@@ -278,11 +278,12 @@ func _on_peer_disconnected(peer: int) -> void:
 # ================================================================ C → S
 
 @rpc("any_peer", "call_remote", "reliable")
-func c_hello(ver: int, token: String, client_id: String, skin_id: String = "") -> void:
+func c_hello(ver: int, token: String, client_id: String, skin_id: String = "",
+		card_id: String = "") -> void:
 	if not is_server:
 		return
 	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token),
-			str(client_id), str(skin_id)))
+			str(client_id), str(skin_id), str(card_id)))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -290,7 +291,8 @@ func c_room_quick(data: Dictionary) -> void:
 	if not is_server:
 		return
 	_flush(manager.quick_match(_sender(), str(data.get("name", "玩家")),
-			data.get("rules", {}), str(data.get("client_id", ""))))
+			data.get("rules", {}), str(data.get("client_id", "")),
+			str(data.get("skin_id", "")), str(data.get("card_id", ""))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -298,7 +300,8 @@ func c_room_create(data: Dictionary) -> void:
 	if not is_server:
 		return
 	_flush(manager.create_room(_sender(), str(data.get("name", "玩家")),
-			data.get("rules", {}), str(data.get("client_id", ""))))
+			data.get("rules", {}), str(data.get("client_id", "")),
+			str(data.get("skin_id", "")), str(data.get("card_id", ""))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -306,7 +309,8 @@ func c_room_join(data: Dictionary) -> void:
 	if not is_server:
 		return
 	_flush(manager.join_room(_sender(), str(data.get("name", "玩家")),
-			str(data.get("code", "")), str(data.get("client_id", ""))))
+			str(data.get("code", "")), str(data.get("client_id", "")),
+			str(data.get("skin_id", "")), str(data.get("card_id", ""))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -629,15 +633,18 @@ func disconnect_all() -> void:
 
 
 func quick_match(rules: Dictionary = {}) -> void:
-	_c_send("c_room_quick", {"name": _name(), "rules": rules})
+	_c_send("c_room_quick", {"name": _name(), "rules": rules,
+			"skin_id": _client_skin(), "card_id": _client_card()})
 
 
 func create_room(rules: Dictionary = {}) -> void:
-	_c_send("c_room_create", {"name": _name(), "rules": rules})
+	_c_send("c_room_create", {"name": _name(), "rules": rules,
+			"skin_id": _client_skin(), "card_id": _client_card()})
 
 
 func join_room(code: String) -> void:
-	_c_send("c_room_join", {"name": _name(), "code": code})
+	_c_send("c_room_join", {"name": _name(), "code": code,
+			"skin_id": _client_skin(), "card_id": _client_card()})
 
 
 func fill_bots() -> void:
@@ -754,7 +761,8 @@ func _c_send(event: String, data: Dictionary) -> void:
 		errored.emit("not_connected", "未连接服务器")
 		return
 	if event == "c_hello":
-		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id(), _client_skin())
+		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id(),
+				_client_skin(), _client_card())
 		return
 	# 握手(welcome)完成前, 房间操作排队——服务器必须先知道座位归属
 	if not _welcomed:
@@ -769,6 +777,16 @@ func _flush_pending() -> void:
 	for op in _pending_ops:
 		rpc_id(1, op[0], op[1])
 	_pending_ops.clear()
+
+
+## 查询某座位当前卡面面貌（联机），无数据返回空串
+func card_of_seat(seat: int) -> String:
+	if last_room_state.is_empty():
+		return ""
+	for p in last_room_state.get("players", []):
+		if int(p.get("seat", -1)) == seat:
+			return str(p.get("card_id", ""))
+	return ""
 
 
 ## 查询某座位当前皮肤（联机），无数据返回空串
@@ -786,6 +804,13 @@ func _client_skin() -> String:
 	if w != null:
 		return str(w.equipped_skin)
 	return "skin_default"
+
+
+func _client_card() -> String:
+	var w := get_node_or_null("/root/Wallet")
+	if w != null:
+		return str(w.equipped_card)
+	return ""
 
 
 func _client_id() -> String:
