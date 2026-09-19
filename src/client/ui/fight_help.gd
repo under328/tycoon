@@ -52,14 +52,14 @@ func _ready() -> void:
 	_body = RichTextLabel.new()
 	_body.bbcode_enabled = true
 	_body.scroll_active = false
-	_body.position = Vector2(160, 120)
+	_body.position = Vector2(160, 104)
 	_body.custom_minimum_size = Vector2(960, 130)
 	_body.size = Vector2(960, 130)
 	_body.add_theme_font_size_override("normal_font_size", 18)
 	add_child(_body)
 
 	_fig = Control.new()
-	_fig.position = Vector2(160, 290)
+	_fig.position = Vector2(160, 252)
 	_fig.custom_minimum_size = Vector2(960, 290)
 	add_child(_fig)
 
@@ -110,9 +110,9 @@ func _relayout() -> void:
 	var sq := h < 660.0
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
+	_body.position = Vector2(cx, (60.0 if sq else 104.0) + dy)
 	_body.size = Vector2(960, 130)
-	_fig.position = Vector2(cx, (226.0 if sq else 290.0) + dy)
+	_fig.position = Vector2(cx, (190.0 if sq else 252.0) + dy)
 	_fig.size = Vector2(960, (260.0 if sq else 290.0))
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
@@ -129,6 +129,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
+	_prev_btn.disabled = p <= 0
+	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = tr(PAGES[p][0])
 	_body.text = tr(PAGES[p][1])
 	for i in _dots.size():
@@ -201,7 +203,7 @@ func _build_fig(kind: int) -> void:
 			_suit_card(Vector2(740, 16), "♣", "梅花 · 法术",
 					"数值合计 = 技能强度; 张数决定技能流派", Color("8ae88a"))
 			_text("数值越大属性越强 · 空手保底: 攻击 15 / 生命 100",
-					Vector2(240, 270), AppTheme.GOLD, 15)
+					Vector2(240, 232), AppTheme.GOLD, 15)
 		1:  # 牌型协同
 			var tiers := ["straight_flush", "quad", "flush", "full_house",
 					"straight", "trips", "two_pair", "pair"]
@@ -209,7 +211,7 @@ func _build_fig(kind: int) -> void:
 				var meta: Dictionary = FightModeGd.TIERS[str(tiers[i])]
 				_text("%d. %s — %s" % [i + 1, meta["name"], meta["desc"]],
 						Vector2(200, 16 + i * 32), AppTheme.WHITE, 15)
-			_text("牌型在选牌与战斗界面实时显示", Vector2(280, 278),
+			_text("牌型在选牌与战斗界面实时显示", Vector2(280, 240),
 					AppTheme.GOLD, 15)
 		2:  # 回合流程
 			var steps := [
@@ -274,7 +276,7 @@ func _build_fig(kind: int) -> void:
 				nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 				hbb.add_child(nm)
 			_text("变身: 全属性 +5% · 冲刺更远 · 下一层重新集满再变身",
-					Vector2(140, 240), AppTheme.GOLD, 16)
+					Vector2(140, 202), AppTheme.GOLD, 16)
 		5:  # 稀有卡与无尽
 			var rows := [
 				["金框稀有卡", "候选 12% 出现, 装备后生命上限永久 +8% + 奖励怒气"],

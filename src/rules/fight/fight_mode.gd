@@ -100,7 +100,10 @@ var comp := false          # 当前候选组是否为补抽(普通限定)
 
 var hp := 0
 var hits := 0              # 连击数(连续进攻; 防御清零)
-var cleared := 0          # 已通关回合数(奖励/最佳依据)
+var cleared := 0          # 本层已通关回合数
+var total_cleared := 0    # 全程累计通关回合数(跨层累加, 结算奖励依据)
+var total_bosses := 0     # 全程累计击破 BOSS 数(跨层累加)
+var cleared_ever := false # 本次试炼是否击破过 BOSS(中途阵亡仍算有战果)
 var last_rank := ""        # 上回合评级 S/A/B
 var _combo_crit_next := false   # 连击 5 层里程碑: 下一击必暴
 var _round_dmg_taken := 0       # 本场战斗受到的伤害(评级用)
@@ -628,6 +631,7 @@ func _vamp_heal(evs: Array, dmg: int) -> void:
 func _win_round() -> void:
 	phase = "round_end"
 	cleared += 1
+	total_cleared += 1
 	fury = mini(fury + 30, 100)
 	var heal := int(int(stats["max_hp"]) * 0.25)
 	hp = mini(hp + heal, int(stats["max_hp"]))
@@ -642,6 +646,8 @@ func _win_round() -> void:
 		last_rank = "B"
 	if round_num >= ROUNDS:
 		run_won = true
+		total_bosses += 1
+		cleared_ever = true
 		_log(tr("BOSS 击破! 可继续下一层!"))
 	else:
 		_log(tr("%s 被击破! 回复 %d 生命") % [str(enemy["name"]), heal])

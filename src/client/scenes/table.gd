@@ -87,7 +87,9 @@ var replay_data: Dictionary = {} # 回放数据(非空 = 只读回放模式)
 var _replay_actions: Array = [] # 回放待应用的动作序列
 var _replay_idx := 0            # 回放已应用动作数
 var _replay_wait := 0.0         # 回放节奏计时
-var emoji_popup: PanelContainer = null  # 表情/快捷回复向上弹出面板
+var emoji_popup: PanelContainer = null  # 表情/快捷回复/表情包向上弹出面板
+var _tab_sticker_btn: Button = null
+var sticker_grid: GridContainer = null
 var emoji_grid: GridContainer = null
 var phrase_grid: GridContainer = null
 var _tab_emoji_btn: Button = null
@@ -172,6 +174,7 @@ func _process(delta: float) -> void:
 			var r := GameStateGd.apply(state, act)
 			if bool(r["ok"]):
 				state = r["state"]
+				_detect_local_eight_cut(act, r["state"])   # 回放也补记 8 切计数
 			_refresh()
 			if str(state.get("phase", "")) == "game_end":
 				var done_tw := get_tree().create_timer(2.0)
@@ -924,6 +927,7 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 		if int(data.get("seat", -1)) == int(net.latest_view.get("my_seat", -1)) 				and (data.get("combo", {}) as Dictionary).get("cards", []).size() == 4:
 			Wallet.note_mission("m_quad")
 		if bool(data.get("eight_cut", false)):
+			_counter_note_played((data.get("combo", {}) as Dictionary).get("cards", []))
 			_spawn_fx("eight_cut")
 			if rogue and _rogue_mod_id_safe() == "eight_gift":
 				var gift_tw := get_tree().create_timer(0.9)
@@ -1026,7 +1030,7 @@ func _build_ui() -> void:
 	self_label.bbcode_enabled = true
 	self_label.scroll_active = false
 	self_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	self_label.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 74)
+	self_label.custom_minimum_size = Vector2(140 if Responsive.is_touch() else 112, 74)
 	# 触屏设备信息文字加大一档(手机 720p 逻辑画布物理密度高, 14/15px 偏小)
 	self_label.add_theme_font_size_override("normal_font_size",
 			18 if Responsive.is_touch() else 15)
@@ -1237,6 +1241,42 @@ func _build_ui() -> void:
 			_emoji_open = false   # 发送后弹框自动关闭
 			_update_emoji_vis())
 		emoji_grid.add_child(eb)
+	# 表情包页(4 列贴纸: 斗地主主题像素表情包, 点击发送大图动画)
+	_tab_sticker_btn = AppTheme.make_button("表情包", Vector2(104, 36), 15)
+	_tab_sticker_btn.toggle_mode = true
+	_tab_sticker_btn.pressed.connect(func() -> void: _set_emoji_tab("sticker"))
+	ep_tabs.add_child(_tab_sticker_btn)
+	for b: Button in [_tab_emoji_btn, _tab_phrase_btn]:
+		b.custom_minimum_size = Vector2(112, 36)
+	sticker_grid = GridContainer.new()
+	sticker_grid.columns = 4
+	sticker_grid.add_theme_constant_override("h_separation", 8)
+	sticker_grid.add_theme_constant_override("v_separation", 8)
+	sticker_grid.visible = false
+	ep_box.add_child(sticker_grid)
+	var StickerArt = load("res://src/client/ui/sticker_art.gd")
+	for i in 8:
+		var sid := i
+		var art: Dictionary = StickerArt.build(i)
+		var sb := Button.new()
+		sb.icon = art["tex"]
+		sb.expand_icon = true
+		sb.custom_minimum_size = Vector2(72, 64)
+		sb.tooltip_text = str(art["name"])
+		sb.pressed.connect(func() -> void:
+			if _emoji_cd > 0.0:
+				_flash_error("表情发太快了")
+				return
+			_emoji_cd = 1.0
+			_sfx("pop")
+			if mode == "online" and net != null:
+				net.send_emoji(100 + sid)
+			else:
+				_show_sticker(0, sid)
+			_emoji_open = false
+			_update_emoji_vis())
+		sticker_grid.add_child(sb)
+
 	# 快捷回复页(2 列, 发完整语句; 本地=气泡+AI回应, 联机=聊天广播)
 	phrase_grid = GridContainer.new()
 	phrase_grid.columns = 2
@@ -1339,7 +1379,7 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.custom_minimum_size = Vector2(170 if Responsive.is_touch() else 140, 74)
+	lb.custom_minimum_size = Vector2(140 if Responsive.is_touch() else 112, 74)
 	lb.add_theme_font_size_override("normal_font_size",
 			16 if Responsive.is_touch() else 14)
 	row.add_child(lb)
@@ -1393,14 +1433,17 @@ func _update_emoji_vis() -> void:
 
 func _set_emoji_tab(tab: String) -> void:
 	_emoji_tab = tab
-	if emoji_grid == null or phrase_grid == null:
+	if emoji_grid == null or phrase_grid == null or sticker_grid == null:
 		return
 	emoji_grid.visible = tab == "emoji"
 	phrase_grid.visible = tab == "phrase"
+	sticker_grid.visible = tab == "sticker"
 	if _tab_emoji_btn != null:
 		_tab_emoji_btn.set_pressed_no_signal(tab == "emoji")
 	if _tab_phrase_btn != null:
 		_tab_phrase_btn.set_pressed_no_signal(tab == "phrase")
+	if _tab_sticker_btn != null:
+		_tab_sticker_btn.set_pressed_no_signal(tab == "sticker")
 
 
 func _flash_error(msg: String) -> void:
@@ -1430,6 +1473,11 @@ func _error_text(code: String) -> String:
 
 # ---------------------------------------------------------------- 表情
 
+## 本地模式贴纸: 复用表情展示通道(id≥100 = 表情包)
+func _show_sticker(seat: int, idx: int) -> void:
+	_show_emoji(seat, 100 + idx)
+
+
 func _show_emoji(seat: int, id: int) -> void:
 	var view: Dictionary = {}
 	if mode == "online" and net != null:
@@ -1444,6 +1492,23 @@ func _show_emoji(seat: int, id: int) -> void:
 			pos = sp.position + Vector2(sp.size.x * 0.5, -64.0)
 			if pos.y < 12.0:  # 对家面板贴顶 → 表情放面板下方
 				pos.y = sp.position.y + sp.size.y + 12.0
+	if id >= 100:   # 表情包贴纸: 大尺寸弹出动画
+		var StickerArt = load("res://src/client/ui/sticker_art.gd")
+		var art: Dictionary = StickerArt.build(id - 100)
+		var tr := TextureRect.new()
+		tr.texture = art["tex"]
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.custom_minimum_size = Vector2(96, 96)
+		tr.size = Vector2(96, 96)
+		tr.position = pos
+		tr.pivot_offset = Vector2(48, 48)
+		fx_layer.add_child(tr)
+		var tw2 := create_tween()
+		tw2.tween_property(tr, "scale", Vector2(1.25, 1.25), 0.18) 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw2.tween_property(tr, "position:y", pos.y - 40.0, 1.4)
+		tw2.parallel().tween_property(tr, "modulate:a", 0.0, 1.2).set_delay(0.5)
+		tw2.tween_callback(tr.queue_free)
+		return
 	var lb := Label.new()
 	lb.text = EMOJIS[clampi(id, 0, EMOJIS.size() - 1)]
 	lb.add_theme_font_size_override("font_size", 42)
@@ -1475,18 +1540,22 @@ func _relayout() -> void:
 		field_h = 236.0 if touch else 232.0
 	var ops_h := 52.0 if touch else 44.0
 	var ops_w := 494.0 if touch else 414.0   # 操作行满编宽度(4 钮 + 间距)
-	# 顶部
+	# 顶部: 记牌/规则/设置 三钮贴右缘窄排(总宽 ~200), 回合文字限宽避让
+	var top_w := 64.0 if touch else 72.0
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
-	settings_btn.position = Vector2(w - 204, 10)
-	rules_btn.position = Vector2(w - 308, 10)
-	counter_toggle.position = Vector2(w - 412, 10)  # 96宽钮步进 104, 两两留 8px
+	settings_btn.position = Vector2(w - top_w - 10, 12)
+	rules_btn.position = Vector2(w - top_w * 2 - 18, 12)
+	counter_toggle.position = Vector2(w - top_w * 3 - 26, 12)
+	settings_btn.size = Vector2(top_w, 36)
+	rules_btn.size = Vector2(top_w, 36)
+	counter_toggle.size = Vector2(top_w, 36)
 	if counter_lbl != null:
 		counter_lbl.position = Vector2(20, field_panel.size.y - 30.0)
 		counter_lbl.size = Vector2(field_panel.size.x - 40.0, 22.0)
 	if rogue_lbl != null:
-		rogue_lbl.position = Vector2(w / 2.0 - 330.0, 12.0)
-		rogue_lbl.custom_minimum_size = Vector2(660.0, 0)
+		rogue_lbl.position = Vector2((w - 500.0) / 2.0, 14.0)
+		rogue_lbl.custom_minimum_size = Vector2(500.0, 0)
 		rogue_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# 对家(上中) + 其牌背扇
 	_seat_panels[1].position = Vector2(w / 2.0 - 230, 8)
@@ -1817,8 +1886,8 @@ func _seat_info_text(view: Dictionary, seat: int) -> String:
 		ident = "[color=#%s]【%s】[/color]" % [id_colors[idn], ScoringGd.IDENTITY_NAMES[idn]]
 	var sc := int(view["scores"][seat]) if (view["scores"] as Array).size() == 4 else 0
 	var sc_col := green if sc > 0 else (red if sc < 0 else white)
-	# 三行排布: ① [身份]昵称 ② 积分(在上) ③ 剩余牌数
-	return "%s%s[color=#%s]%s[/color]\n[color=#%s]积分 %+d[/color]\n[color=#%s]剩 %d 张[/color]" % [
+	# 三行排布(居中): ① [身份]昵称 ② 积分(在上) ③ 剩余牌数
+	return "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]积分 %+d[/color]\n[color=#%s]剩 %d 张[/color][/center]" % [
 		turn_mark, ident, white, _seat_name(view, seat),
 		sc_col, sc, dim, int(view["counts"][seat]),
 	]
@@ -1884,7 +1953,8 @@ func _update_counter(view: Dictionary) -> void:
 		if left > 0:
 			parts.append("%s×%d" % [CardsGd.rank_value_label(v), left])
 	var jokers := int(_counter_totals.get(16, 0)) - int(_counter_played.get(16, 0)) \
-			- int(hand_cnt.get(16, 0))
+			- int(hand_cnt.get(16, 0)) \
+			- (int(dead[13]) if dead.size() > 13 else 0)   # 未发的王也在死牌里
 	if _counter_totals.get(16, 0) > 0 and jokers > 0:
 		parts.append("王×%d" % jokers)
 	counter_lbl.text = "  ".join(PackedStringArray(parts)) \
@@ -2238,6 +2308,13 @@ func _spawn_fx(fx_type: String) -> void:
 
 
 ## 本地对局: 出牌动作后检测 8 切(含8的牌清空了桌面)
+## 记牌器补记一手已出的牌(供 8 切等"不出现在牌场增量"的情形使用)
+func _counter_note_played(cards: Array) -> void:
+	for c in cards:
+		var v := CardsGd.value(int(c))
+		_counter_played[v] = int(_counter_played.get(v, 0)) + 1
+
+
 func _detect_local_eight_cut(action: Dictionary, st_after: Dictionary) -> void:
 	if str(action.get("t", "")) != "play":
 		return
@@ -2245,6 +2322,9 @@ func _detect_local_eight_cut(action: Dictionary, st_after: Dictionary) -> void:
 	var lead_empty: bool = (st_after["lead"] as Dictionary).is_empty()
 	if not (field_empty and lead_empty):
 		return
+	# 8 切在服务端同一事务内"打出+清桌" → 客户端只见空场, 增量计数分支
+	# (牌场增长)永不执行 → 8 的已出张数漏记, 记牌器数量虚高。此处补记本手。
+	_counter_note_played(action.get("cards", []))
 	for c in action.get("cards", []):
 		if CardsGd.value(int(c)) == 8:
 			_spawn_fx("eight_cut")

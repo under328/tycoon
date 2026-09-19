@@ -569,13 +569,20 @@ func _build_mode_card(m: Array) -> Button:
 	# 点击方块主体 → 进入模式(子级 ? 钮自吸收点击, 不误触)
 	var mmode := str(m[3])
 	var msig := str(m[2])
-	if msig == "fight_daily" and Wallet.daily_played_today():
-		card.disabled = true   # 每日挑战每日一次: 已参与当日置灰
-		desc.text = str(m[1]) + "
-今日已参与, 明天再来 — 格斗试炼奖励不受限"
 	if msig == "fight_daily" and not Wallet.daily_played_today():
-		desc.text = str(m[1]) + "
-每日一次, 奖励为格斗试炼的两倍"
+		# 拼接文本须逐段 tr(): 整串查表匹配不上, 拼接后不会再被翻译
+		desc.text = tr(str(m[1])) + "\n" + tr("每日一次 · 奖励×2")
+	if msig == "fight_daily" and Wallet.daily_played_today():
+		# 每日挑战每日一次: 已参与当日置灰 — 不再加解释文字(避免溢出),
+		# 禁用态沿用金色边框(覆盖引擎默认灰样式)
+		card.disabled = true
+		var dis: StyleBoxFlat = AppTheme.flat(AppTheme.PANEL, Color(AppTheme.GOLD, 0.45), 8, 1)
+		dis.content_margin_left = 14
+		dis.content_margin_right = 14
+		dis.content_margin_top = 8
+		dis.content_margin_bottom = 8
+		card.add_theme_stylebox_override("disabled", dis)
+		card.add_theme_color_override("font_disabled_color", AppTheme.DIM)
 	card.pressed.connect(func() -> void:
 		Audio.play("click")
 		_close_mode_select()

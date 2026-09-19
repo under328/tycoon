@@ -21,6 +21,7 @@ var phase := "run"           # run(试炼中) / over(已结束)
 var _run_diamonds := 0
 var _busy := false
 var _pending_cand := -1      # 槽满替换: 待放入的候选
+var _pick_lock_ms := 0       # 选牌防抖: 成功选牌后 400ms 内忽略再点
 var _voice_phase := ""       # 语音: 已播报的引擎阶段(切换时播报)
 var _banner: Label = null
 var _slot_ui: Array = []     # {wrap, sb, card} 装备槽
@@ -599,10 +600,11 @@ func _render_draft() -> void:
 		draft_ops.add_child(skip)
 
 
-func _build_normal_card(card: int) -> Control:
-	var rare := card >= 200
-	if rare:
-		card = card - 200   # 稀有普通牌: 显示剥离后的卡面
+func _build_normal_card(cand: int) -> Control:
+	# 稀有普通牌(200+): 显示剥离后的卡面, 点击回传完整候选值
+	# (引擎 pair 里存的是 200+ 原值, 剥离后匹配不上会"点不动/选错牌")
+	var rare := cand >= 200
+	var card := cand - 200 if rare else cand
 	var wrap := PanelContainer.new()
 	var sb := AppTheme.flat(Color(0.10, 0.10, 0.22), Color(1, 1, 1, 0.2), 10, 1)
 	wrap.add_theme_stylebox_override("panel", sb)
@@ -625,10 +627,8 @@ func _build_normal_card(card: int) -> Control:
 	var combo: Dictionary = FightModeGd.evaluate_combo(preview)
 	var hint := _label(11, Color("c9b06a"))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var rare_txt := (tr("稀有!") + "
-") if rare else ""
-	hint.text = "此牌 %s: %s
-%s%s" % [CardsGd.SUIT_NAMES[CardsGd.suit(card)],
+	var rare_txt := (tr("稀有!") + "\n") if rare else ""
+	hint.text = "此牌 %s: %s\n%s%s" % [CardsGd.SUIT_NAMES[CardsGd.suit(card)],
 			_card_effect_text(card), rare_txt,
 			(tr("替换后 %s") if fm.slots.size() >= 5 else tr("装备后 %s"))
 					% tr(str(combo["name"]))]
@@ -637,7 +637,7 @@ func _build_normal_card(card: int) -> Control:
 	wrap.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed \
 				and ev.button_index == MOUSE_BUTTON_LEFT:
-			_on_candidate(card))
+			_on_candidate(cand))
 	return wrap
 
 
@@ -678,6 +678,10 @@ func _build_special_card(cand: int) -> Control:
 func _on_candidate(cand: int) -> void:
 	if _busy or fm.phase != "draft":
 		return
+	# 防抖: 触屏连点/重渲染后的同位余点不生效 —
+	# 选奇物后候选组原位刷新, 余点会误选新组里的牌
+	if Time.get_ticks_msec() < _pick_lock_ms:
+		return
 	Audio.play("click")
 	# 槽满 + 普通牌(引擎要求槽位) → 进入替换模式
 	if not FightModeGd.is_sp(cand) and fm.slots.size() >= 5:   # 普通/稀有均走替换
@@ -687,6 +691,7 @@ func _on_candidate(cand: int) -> void:
 	var r: Dictionary = fm.draft_pick(cand)
 	if not bool(r["ok"]):
 		return
+	_pick_lock_ms = Time.get_ticks_msec() + 400
 	if cand >= 200:
 		Audio.say("f_rare")   # 稀有卡
 		_floater(tr("稀有卡! 生命上限 +8%"), _px(0.5), _py(0.30),
@@ -726,7 +731,7 @@ func _intent_text() -> String:
 			return "🔥 法术(魔抗可减!)"
 		"charge":
 			var sn: String = str(fm.enemy.get("special", "必杀技"))
-			return "⚡ 蓄力: %s(此回合承伤+50%!)" % sn
+			return "⚡ 蓄力: %s(此回合承伤+50%%!)" % sn
 	return "⚔ 攻击"
 
 
@@ -1084,10 +1089,13 @@ func _finish_run() -> void:
 	if phase == "over":
 		return
 	phase = "over"
-	Audio.say("victory" if fm.run_won else "defeat", 1.0, true)   # 结算播报
-	var cleared: int = fm.cleared
+	# 结算口径: 全程累计(前几层通过的回合/击破的 BOSS 照常计入奖励,
+	# 继续无尽挑战后阵亡不没收已获得的战果, 也不再扣失败惩罚)
+	var won: bool = fm.cleared_ever
+	Audio.say("victory" if won else "defeat", 1.0, true)   # 结算播报
+	var cleared: int = fm.total_cleared
 	var r: Dictionary = Wallet.grant_fight_reward(cleared,
-			1 if fm.run_won else 0, daily, fm.run_won)   # 通关击破 BOSS; 失败扣金
+			fm.total_bosses, daily, won)   # 通关计击破 BOSS 数; 失败扣金
 	_run_diamonds += int(r["diamonds"])
 	var run_gold := int(r["gold"])
 	Wallet.note_mission("m_fight")
@@ -1096,8 +1104,8 @@ func _finish_run() -> void:
 		"mode": "格斗", "floor": cleared, "rank": 0, "points": 0,
 		"gold": run_gold, "diamonds": _run_diamonds,
 	})
-	var title := (tr("每日挑战通关!") if fm.run_won else tr("每日挑战结束")) \
-			if daily else (tr("试炼通关!") if fm.run_won else tr("试炼结束"))
+	var title := (tr("每日挑战通关!") if won else tr("每日挑战结束")) \
+			if daily else (tr("试炼通关!") if won else tr("试炼结束"))
 	var body: String
 	if fm.run_won:
 		body = tr("通过 %d/5 回合 · 历史最佳第 %d 层\n奖励: %d 钻石 已入账") % [
@@ -1179,10 +1187,10 @@ func _relayout() -> void:
 	# 左上装备槽区
 	slots_box.position = Vector2(36.0, 84.0)
 	slots_box.size = Vector2(minf(340.0, w * 0.3), 160.0)
-	# 战场: 玩家左下 / 怪物右上
+	# 战场: 玩家左下 / 怪物右上(怪物整体上移, 底部血条不再压住形象)
 	var fighter_y := h * 0.42
 	_player_home = Vector2(w * 0.12, fighter_y)
-	_enemy_home = Vector2(w * 0.62, fighter_y)
+	_enemy_home = Vector2(w * 0.62, fighter_y - 48.0)
 	avatar.position = _player_home
 	monster.position = _enemy_home
 	_layout_bars(w, h)
@@ -1214,10 +1222,12 @@ func _layout_bars(w: float, h: float) -> void:
 	fury_bar.position = shield_bar.position + Vector2(0.0, 12.0)
 	fury_fg.size = Vector2(maxf(fury_bar.size.x * float(fm.fury) / 100.0, 0.0), 8)
 	shield_fg.size = Vector2(maxf(shield_bar.size.x * _shield_frac(), 0.0), 6)
+	# 怪物名/意图随怪物上移; 血条锚在原基准位(怪物底缘之下, 不再重叠)
+	var bar_anchor := _enemy_home + Vector2(0.0, 48.0)
 	e_name.position = _enemy_home + Vector2(-30.0, -34.0)
 	e_intent.position = _enemy_home + Vector2(-30.0, -12.0)
 	var ehp_bar: Control = kids[8]
-	ehp_bar.position = _enemy_home + Vector2(-20.0, 202.0)
+	ehp_bar.position = bar_anchor + Vector2(-20.0, 202.0)
 	ehp_fg.size = Vector2(maxf(ehp_bar.size.x * _enemy_hp_frac() - 4.0, 2.0), 14)
 	ehp_txt.position = ehp_bar.position + Vector2(0.0, 20.0)
 

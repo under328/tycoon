@@ -52,14 +52,14 @@ func _ready() -> void:
 	_body = RichTextLabel.new()
 	_body.bbcode_enabled = true
 	_body.scroll_active = false
-	_body.position = Vector2(160, 120)
-	_body.custom_minimum_size = Vector2(960, 150)
-	_body.size = Vector2(960, 150)
+	_body.position = Vector2(160, 104)
+	_body.custom_minimum_size = Vector2(960, 140)
+	_body.size = Vector2(960, 140)
 	_body.add_theme_font_size_override("normal_font_size", 18)
 	add_child(_body)
 
 	_fig = Control.new()
-	_fig.position = Vector2(160, 300)
+	_fig.position = Vector2(160, 252)
 	_fig.custom_minimum_size = Vector2(960, 280)
 	add_child(_fig)
 
@@ -110,9 +110,9 @@ func _relayout() -> void:
 	var sq := h < 660.0
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
-	_body.size = Vector2(960, (150.0 if not sq else 132.0))
-	_fig.position = Vector2(cx, (218.0 if sq else 300.0) + dy)
+	_body.position = Vector2(cx, (60.0 if sq else 104.0) + dy)
+	_body.size = Vector2(960, (132.0 if not sq else 128.0))
+	_fig.position = Vector2(cx, (204.0 if sq else 252.0) + dy)
 	_fig.size = Vector2(960, (210.0 if sq else 280.0))
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
@@ -129,6 +129,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
+	_prev_btn.disabled = p <= 0
+	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = tr(PAGES[p][0])
 	_body.text = tr(PAGES[p][1])
 	for i in _dots.size():
@@ -261,15 +263,15 @@ func _build_fig(kind: int) -> void:
 					"revolution_start", "chaos_exchange", "no_exchange"]
 			for i in ids1.size():
 				var m1: Dictionary = _mod(str(ids1[i]))
-				_card_small(Vector2(20 + (i % 3) * 320, 16 + (i / 3) * 128), m1)
-			_text("发牌类改牌堆构成; 规则类改当局长打法", Vector2(300, 292),
+				_card_small(Vector2(20 + (i % 3) * 320, 12 + (i / 3) * 124), m1)
+			_text("发牌类改牌堆构成; 规则类改当局长打法", Vector2(280, 250),
 					AppTheme.GOLD, 15)
 		2:
 			# 触发类×2 + 结算类×2
 			var ids2 := ["joker_rage", "eight_gift", "double_stakes", "score_negate"]
 			for i in ids2.size():
 				var m2: Dictionary = _mod(str(ids2[i]))
-				_card_small(Vector2(80 + (i % 2) * 440, 16 + (i / 2) * 128), m2)
+				_card_small(Vector2(80 + (i % 2) * 440, 12 + (i / 2) * 124), m2)
 			_text("触发类在对局中实时播报; 结算奖励与普通模式完全一致",
 					Vector2(240, 292), AppTheme.GOLD, 15)
 		3:

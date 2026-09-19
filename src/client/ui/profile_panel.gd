@@ -14,6 +14,7 @@ const Responsive = preload("res://src/client/theme/responsive.gd")
 var _tab := "ach"
 var _tab_ach_btn: Button
 var _tab_hist_btn: Button
+var _tab_replay_btn: Button
 var _tab_mission_btn: Button
 var _tab_stats_btn: Button
 var _scroll: ScrollContainer
@@ -72,24 +73,28 @@ func _ready() -> void:
 		_close())
 	head.add_child(close_btn)
 
-	# 页签行(成就/战绩/每日任务/统计)
+	# 页签行(成就/战绩/对局回放/每日任务/统计)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
 	page.add_child(tabs)
-	_tab_ach_btn = AppTheme.make_button("成  就", Vector2(120, 42), 15)
+	_tab_ach_btn = AppTheme.make_button("成  就", Vector2(104, 42), 15)
 	_tab_ach_btn.toggle_mode = true
 	_tab_ach_btn.pressed.connect(func() -> void: _set_tab("ach"))
 	tabs.add_child(_tab_ach_btn)
-	_tab_hist_btn = AppTheme.make_button("战  绩", Vector2(120, 42), 15)
+	_tab_hist_btn = AppTheme.make_button("战  绩", Vector2(104, 42), 15)
 	_tab_hist_btn.toggle_mode = true
 	_tab_hist_btn.pressed.connect(func() -> void: _set_tab("hist"))
 	tabs.add_child(_tab_hist_btn)
-	_tab_mission_btn = AppTheme.make_button("每日任务", Vector2(120, 42), 15)
+	_tab_replay_btn = AppTheme.make_button("对局回放", Vector2(104, 42), 15)
+	_tab_replay_btn.toggle_mode = true
+	_tab_replay_btn.pressed.connect(func() -> void: _set_tab("replay"))
+	tabs.add_child(_tab_replay_btn)
+	_tab_mission_btn = AppTheme.make_button("每日任务", Vector2(104, 42), 15)
 	_tab_mission_btn.toggle_mode = true
 	_tab_mission_btn.pressed.connect(func() -> void: _set_tab("mission"))
 	tabs.add_child(_tab_mission_btn)
-	_tab_stats_btn = AppTheme.make_button("统  计", Vector2(120, 42), 15)
+	_tab_stats_btn = AppTheme.make_button("统  计", Vector2(104, 42), 15)
 	_tab_stats_btn.toggle_mode = true
 	_tab_stats_btn.pressed.connect(func() -> void: _set_tab("stats"))
 	tabs.add_child(_tab_stats_btn)
@@ -127,6 +132,7 @@ func _set_tab(tab: String) -> void:
 	_tab = tab
 	_tab_ach_btn.button_pressed = tab == "ach"
 	_tab_hist_btn.button_pressed = tab == "hist"
+	_tab_replay_btn.button_pressed = tab == "replay"
 	_tab_mission_btn.button_pressed = tab == "mission"
 	_tab_stats_btn.button_pressed = tab == "stats"
 	_refresh()
@@ -137,6 +143,8 @@ func _refresh() -> void:
 		child.queue_free()
 	if _tab == "ach":
 		_build_achievements()
+	elif _tab == "replay":
+		_build_replays()
 	elif _tab == "mission":
 		_build_missions()
 	elif _tab == "stats":
@@ -306,26 +314,45 @@ func _preload_mods() -> Array:
 	return GameStateGd.ROGUE_MODS
 
 
-## 战绩: 头部汇总 + 最近记录行(模式/名次/积分/奖励)
+## 对局回放: 独立页签 — 最近回放列表(点击观看 / 删除)
+func _build_replays() -> void:
+	var head := AppTheme.make_label(15, AppTheme.DIM)
+	head.text = tr("最近 %d 场回放 · 点击观看, ✕ 删除") % [Wallet.replays.size()]
+	_grid.add_child(head)
+	if (Wallet.replays as Array).is_empty():
+		var empty := AppTheme.make_label(15, AppTheme.DIM)
+		empty.text = "还没有对局回放 — 完成一局本地大富豪后可在这里观看"
+		_grid.add_child(empty)
+		return
+	for i in Wallet.replays.size():
+		var rp: Dictionary = Wallet.replays[i]
+		var idx := i
+		var hands: int = (rp.get("actions", []) as Array).size()
+		var txt := "▶ %s · %s · %d 手" % [str(rp.get("day", "")),
+				str(rp.get("mode", "")), hands]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		_grid.add_child(row)
+		var btn := AppTheme.make_button(txt, Vector2(0, 40), 13)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.pressed.connect(func() -> void:
+			Audio.play("click")
+			replay_selected.emit(rp))
+		row.add_child(btn)
+		var del := AppTheme.make_button("✕", Vector2(40, 40), 16)
+		del.tooltip_text = "删除这场回放"
+		del.pressed.connect(func() -> void:
+			Audio.play("click")
+			Wallet.delete_replay(idx)
+			_toast.text = "已删除该场回放"
+			_refresh())
+		row.add_child(del)
+
+
+## 战绩: 汇总 + 最近记录行(模式/名次/积分/奖励; 回放列表见独立页签)
 func _build_history() -> void:
 	var total := Wallet.local_matches
-	# 对局回放列表(最近 10 场, 点击进入只读回放)
-	if not Wallet.replays.is_empty():
-		var rp_head := AppTheme.make_label(15, AppTheme.GOLD)
-		rp_head.text = tr("对局回放(点击观看)")
-		_grid.add_child(rp_head)
-		for rp in Wallet.replays:
-			var entry: Dictionary = rp
-			var hands: int = (rp.get("actions", []) as Array).size()
-			var txt := "▶ %s · %s · %d 手" % [str(rp.get("day", "")),
-					str(rp.get("mode", "")), hands]
-			var btn := AppTheme.make_button(txt, Vector2(0, 40), 13)
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.mouse_filter = Control.MOUSE_FILTER_STOP
-			btn.pressed.connect(func() -> void:
-				Audio.play("click")
-				replay_selected.emit(entry))
-			_grid.add_child(btn)
 	var wins := Wallet.local_wins
 	var head := AppTheme.make_label(16, AppTheme.WHITE)
 	head.text = tr("共 %d 场 · 胜 %d 场 · 胜率 %d%% · 称号 %s") % [total, wins,

@@ -688,6 +688,14 @@ func push_replay(entry: Dictionary) -> void:
 	_mark_dirty()
 
 
+## 删除一场对局回放(档案页回放列表): 越界静默忽略
+func delete_replay(idx: int) -> void:
+	if idx < 0 or idx >= replays.size():
+		return
+	replays.remove_at(idx)
+	_mark_dirty()
+
+
 ## 称号随本地胜场晋升(留存成长线, 主菜单徽章展示)
 func rank_title() -> String:
 	if local_wins >= 30:

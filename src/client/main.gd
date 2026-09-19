@@ -166,6 +166,7 @@ func _start_local(mode: String = "normal") -> void:
 
 
 func _launch_new_local(rogue: bool = false) -> void:
+	Audio.game_voice_enabled = true   # 新局终止旧后台局并恢复播报
 	if table != null:
 		table.queue_free()
 		table = null
@@ -249,6 +250,7 @@ func _close_resume_dialog() -> void:
 ## 回到后台托管中的对局: 重新接管自己的座位
 func _resume_local_game() -> void:
 	_close_resume_dialog()
+	Audio.game_voice_enabled = true   # 回到前台: 恢复播报
 	if table == null or not is_instance_valid(table):
 		menu._show_mode_select()
 		return
@@ -420,6 +422,8 @@ func _back_to_menu() -> void:
 		# 本地局托管中(返回菜单自动托管) → 保留牌桌后台继续, 重新进入可继续
 		if table.mode == "local" and table.auto_pilot:
 			table.visible = false
+			Audio.game_voice_enabled = false   # 后台局静音: 不再播报语音
+			Audio.stop_voice()
 		else:
 			table.queue_free()
 			table = null

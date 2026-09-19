@@ -170,10 +170,15 @@ func stop_voice() -> void:
 ## pitch 做座位差异化变调(1.0 原声); interrupt=true 清队列立即播(革命/胜负
 ## 等关键时刻)。同 key 去重窗口内只播一次; 队列上限 2 旧让新; 走 SFX 总线
 ## 受音效音量控制, 且受 GameSettings.voice_on 开关。
+var game_voice_enabled := true   # 后台托管局静音: 返回菜单后置 false
+
+
 func say(key: String, pitch := 1.0, interrupt := false) -> void:
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null and not bool(gs.voice_on):
 		return
+	if not game_voice_enabled:
+		return   # 后台托管局静音(返回菜单后不再播报)
 	if _voice_player == null:
 		return
 	var now := Time.get_ticks_msec()

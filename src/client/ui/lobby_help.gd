@@ -174,6 +174,8 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
+	_prev_btn.disabled = p <= 0
+	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = tr(PAGES[p][0])
 	_body.text = tr(PAGES[p][1])
 	_page_lbl.text = "%d / %d" % [p + 1, PAGES.size()]

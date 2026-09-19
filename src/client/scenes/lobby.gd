@@ -11,8 +11,6 @@ const LobbyHelpScript = preload("res://src/client/ui/lobby_help.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 const LanDisc = preload("res://src/protocol/lan_discovery.gd")
 
-const EMOJIS := ["👍", "😂", "😱", "😭", "😡", "👏", "🤔", "🎉"]
-
 const COLOR_BG := Color("14142b")
 const COLOR_GOLD := Color("e0a83c")
 const COLOR_WHITE := Color("f0f0f0")
@@ -32,7 +30,6 @@ var rounds_option: OptionButton
 var stakes_option: OptionButton
 var update_btn: Button
 var paste_btn: Button
-var _emoji_btns: Array = []
 var _transfer_btns: Array = []   # 房间页: 座位卡右上角转让房主按钮
 var host_panel: PanelContainer
 var host_ip_value: Label
@@ -43,6 +40,10 @@ var _ts_dot: ColorRect
 var _ts_state_lbl: Label
 var _ts_dl_btn: Button
 var _ts_apk_url := ""          # 运行时解析的 Android APK 直链(缓存)
+var rules_panel: PanelContainer   # 房间页: 规则设置卡片(金框容器整体包裹)
+var stakes_row: HBoxContainer
+var rounds_row: HBoxContainer
+var save_row: Control             # 保存按钮行(模式联动显隐)
 
 const TS_PKGS_URL := "https://pkgs.tailscale.com/stable/"
 var host_invite_ip := ""   # 本机开房对外地址(逗号分隔候选: 局域网优先+Tailscale)
@@ -219,18 +220,8 @@ func _relayout() -> void:
 		kick_btn.position = Vector2(190, 290)
 		start_btn.position = Vector2(340, 290)
 		status_label.position = Vector2(40, 360)
-		rules_lbl.position = Vector2(40, 424)
-		mode_lbl.position = Vector2(210, 428)
-		mode_option.position = Vector2(270, 424)
-		chk_joker.position = Vector2(490, 424)
-		chk_revolution.position = Vector2(670, 424)
-		save_settings_btn.position = Vector2(minf(860.0, w - 170.0), 420)
-		stakes_lbl.position = Vector2(40, 482)
-		stakes_option.position = Vector2(110, 470)
-		rounds_lbl.position = Vector2(310, 482)
-		rounds_option.position = Vector2(380, 470)
-		for i in _emoji_btns.size():
-			_emoji_btns[i].position = Vector2(40 + i * 52, h - 62.0)
+		rules_panel.position = Vector2(40, 424)
+		rules_panel.custom_minimum_size.x = minf(380.0, w - 80.0)
 
 	for i in 4:
 		var sp: Control = _seat_cards[i]["panel"]
@@ -445,15 +436,15 @@ func _enter_room() -> void:
 	_sync_rules_visibility()
 
 
-## 规则设置按模式联动: 普通/肉鸽显示规则(肉鸽的命运卡在其上动态改规则),
-## 格斗对战无规则设置 — 仅保留模式选择。
+## 规则设置按模式联动: 普通/肉鸽显示全部规则行,
+## 格斗对战无规则设置 — 卡片内仅保留模式选择行。
 func _sync_rules_visibility() -> void:
 	if _view != "room" or mode_option == null:
 		return
 	var fight: bool = mode_option.selected == 2
 	rules_lbl.visible = not fight
-	for w: Control in [chk_joker, chk_revolution, stakes_lbl, stakes_option,
-			rounds_lbl, rounds_option, save_settings_btn]:
+	for w: Control in [chk_joker, chk_revolution, stakes_row, rounds_row,
+			save_row]:
 		w.visible = not fight
 
 
@@ -611,28 +602,25 @@ func _build_ui() -> void:
 		_save_nickname()
 		_paste_join())
 	add_child(paste_btn)
-	# 对局模式: 入口页不再展示 — 进房后在房间内由房主选择(见房间页右列)
+	# 对局模式: 入口页不再展示 — 进房后在房间页规则设置卡片内由房主选择
+	# (控件加入 rules_panel 的模式行, 见 _build_ui 尾部)
 	mode_lbl = AppTheme.make_label(15, AppTheme.WHITE)
 	mode_lbl.text = "模式"
-	mode_lbl.position = Vector2(470, 356)
-	add_child(mode_lbl)
 	mode_option = OptionButton.new()
 	mode_option.add_item("普通模式")
 	mode_option.add_item("肉鸽模式")
 	mode_option.add_item("格斗对战(2人)")
 	mode_option.select(0)
-	mode_option.position = Vector2(530, 352)
 	mode_option.custom_minimum_size = Vector2(160, 36)
 	mode_option.item_selected.connect(func(_i: int) -> void:
 		Audio.play("click")
 		_sync_rules_visibility()
 		# 房主改模式立即推送(服务端校验房主身份); 建房前选好则随 create_room 带上
 		net.set_settings(_gather_rules()))
-	add_child(mode_option)
 
 	# 发现新版本: 版本握手不匹配时显示, 点击打开下载页
 	update_btn = AppTheme.make_button("⬇ 发现新版本, 点击更新", Vector2(260, 46), 16)
-	update_btn.position = Vector2(40, 200)
+	update_btn.position = Vector2(40, 96)
 	update_btn.visible = false
 	update_btn.pressed.connect(func() -> void:
 		Audio.play("click")
@@ -657,8 +645,9 @@ func _build_ui() -> void:
 	fp_sb.content_margin_top = 10
 	fp_sb.content_margin_bottom = 10
 	found_panel.add_theme_stylebox_override("panel", fp_sb)
-	# 左列状态区下方(紧凑档右列会被中列『本机开房』按钮侵入, 放左列永不重叠)
-	found_panel.position = Vector2(820, 66)
+	# 右列(与中列『本机开房』顶边对齐, y=150): 搜索到才有内容,
+	# 每行=一个可加入的房间
+	found_panel.position = Vector2(840, 150)
 	found_panel.custom_minimum_size = Vector2(368, 0)
 	found_panel.visible = false
 	add_child(found_panel)
@@ -763,55 +752,82 @@ func _build_ui() -> void:
 		_set_status("已复制: " + payload + " , 发给朋友即可加入", COLOR_GREEN))
 	add_child(copy_btn)
 
-	# 规则设置(模式选择器已在入口页创建, 双视图共用)
-	rules_lbl = AppTheme.section_label("规则设置")
-	rules_lbl.position = Vector2(830, 310)
-	add_child(rules_lbl)
-	chk_joker = _check("带王", Vector2(830, 340))
-	chk_revolution = _check("革命", Vector2(830, 380))
+	# 规则设置卡片(仅房间页): 金色边框容器整体包裹, 行内"左标签+右控件"
+	# 统一对齐; 模式选择也在卡片内(进房后由房主选择)。格斗对战仅保留模式行。
+	chk_joker = _check("带王")
+	chk_revolution = _check("革命")
 	stakes_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	stakes_lbl.text = "输赢"
-	stakes_lbl.position = Vector2(830, 414)
-	add_child(stakes_lbl)
 	stakes_option = OptionButton.new()
 	for item: Array in [["小 ×1", 1], ["中 ×2", 2], ["大 ×3", 3]]:
 		stakes_option.add_item(str(item[0]), int(item[1]))
 	stakes_option.select(0)
-	stakes_option.position = Vector2(880, 410)
-	stakes_option.custom_minimum_size = Vector2(90, 34)
-	add_child(stakes_option)
 	rounds_lbl = AppTheme.make_label(15, COLOR_WHITE)
 	rounds_lbl.text = "回合数"
-	rounds_lbl.position = Vector2(830, 460)
-	add_child(rounds_lbl)
 	rounds_option = OptionButton.new()
 	for r: Array in [[3, "一回合"], [9, "三回合"], [15, "五回合"]]:
 		rounds_option.add_item(str(r[1]) + "（%d 局）" % r[0], r[0])
 	rounds_option.select(0)
-	rounds_option.position = Vector2(880, 456)
-	rounds_option.custom_minimum_size = Vector2(90, 34)
-	add_child(rounds_option)
 	save_settings_btn = AppTheme.make_button("保存设置", Vector2(140, 38), 15)
-	save_settings_btn.position = Vector2(830, 496)
 	save_settings_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		net.set_settings(_gather_rules()))
-	add_child(save_settings_btn)
+	rules_panel = PanelContainer.new()
+	var rp_sb := AppTheme.flat(AppTheme.PANEL, AppTheme.GOLD, 12, 2)
+	rp_sb.content_margin_left = 18
+	rp_sb.content_margin_right = 18
+	rp_sb.content_margin_top = 12
+	rp_sb.content_margin_bottom = 14
+	rules_panel.add_theme_stylebox_override("panel", rp_sb)
+	rules_panel.position = Vector2(820, 20)
+	rules_panel.custom_minimum_size = Vector2(380, 0)
+	add_child(rules_panel)
+	var rbox := VBoxContainer.new()
+	rbox.add_theme_constant_override("separation", 10)
+	rules_panel.add_child(rbox)
+	rules_lbl = AppTheme.section_label("规则设置")
+	rbox.add_child(rules_lbl)
+	# 模式行
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 8)
+	rbox.add_child(mode_row)
+	mode_lbl.custom_minimum_size = Vector2(64, 36)
+	mode_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mode_row.add_child(mode_lbl)
+	mode_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(mode_option)
+	# 开关行(整行宽度, 开关圆点贴右, 视觉与行对齐)
+	rbox.add_child(chk_joker)
+	rbox.add_child(chk_revolution)
+	# 输赢行
+	stakes_row = HBoxContainer.new()
+	stakes_row.add_theme_constant_override("separation", 8)
+	rbox.add_child(stakes_row)
+	stakes_lbl.custom_minimum_size = Vector2(64, 0)
+	stakes_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stakes_row.add_child(stakes_lbl)
+	stakes_option.custom_minimum_size = Vector2(0, 34)
+	stakes_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stakes_row.add_child(stakes_option)
+	# 回合数行
+	rounds_row = HBoxContainer.new()
+	rounds_row.add_theme_constant_override("separation", 8)
+	rbox.add_child(rounds_row)
+	rounds_lbl.custom_minimum_size = Vector2(64, 0)
+	rounds_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rounds_row.add_child(rounds_lbl)
+	rounds_option.custom_minimum_size = Vector2(0, 34)
+	rounds_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rounds_row.add_child(rounds_option)
+	# 保存按钮(居中收尾)
+	var save_cc := CenterContainer.new()
+	save_cc.add_child(save_settings_btn)
+	rbox.add_child(save_cc)
+	save_row = save_cc
 
-	# 表情
-	for i in EMOJIS.size():
-		var id := i
-		var eb := AppTheme.make_button(EMOJIS[i], Vector2(44, 40), 20)
-		eb.position = Vector2(830 + i * 52, 550)
-		eb.pressed.connect(func() -> void:
-			Audio.play("pop")
-			net.send_emoji(id))
-		add_child(eb)
-		_emoji_btns.append(eb)
-
-	# 状态(左列独立分区: 联机准备条之下、更新按钮之下, 自动换行多行)
+	# 状态(联机准备条之下, 自动换行多行)
 	status_label = AppTheme.make_label(15, COLOR_DIM)
-	status_label.position = Vector2(40, 258)
+	status_label.position = Vector2(40, 234)
 	status_label.custom_minimum_size = Vector2(368, 90)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
@@ -827,7 +843,8 @@ func _build_ui() -> void:
 	ts_sb.content_margin_top = 10
 	ts_sb.content_margin_bottom = 10
 	_ts_chip.add_theme_stylebox_override("panel", ts_sb)
-	_ts_chip.position = Vector2(40, 108)
+	# 顶边与中列『本机开房』等按钮对齐(y=150): 左右两列同一起始线
+	_ts_chip.position = Vector2(40, 150)
 	_ts_chip.custom_minimum_size = Vector2(368, 0)
 	add_child(_ts_chip)
 	var ts_row := HBoxContainer.new()
@@ -860,7 +877,7 @@ func _build_ui() -> void:
 	hp_sb.content_margin_top = 12
 	hp_sb.content_margin_bottom = 12
 	host_panel.add_theme_stylebox_override("panel", hp_sb)
-	host_panel.position = Vector2(40, 240)
+	host_panel.position = Vector2(40, 234)
 	host_panel.custom_minimum_size = Vector2(360, 0)
 	host_panel.visible = false
 	add_child(host_panel)
@@ -901,9 +918,9 @@ func _build_ui() -> void:
 	_reg(help_btn, "right")
 
 	# ── 房间页锚定(独立子页面布局; 1280×720 设计基准) ──
-	# 顶部: 离开 | 房号+复制邀请码 | 说明(限宽 660, 与右列留出 160px 间隔)
+	# 顶部: 离开 | 房号+复制邀请码 | 说明(限宽 660, 与右列留出间隔)
 	# 左列: 4 座位卡(40 起步, 间距 10) + 操作按钮行 + 状态行
-	# 右列: 规则设置统一 38px 行距(label x=832 / 控件 x=880)
+	# 右列: 规则设置卡片(金框容器, 内部行自对齐)
 	_reg_room(back_btn, Vector2(20, 16), "left")
 	_reg_room(status_label, Vector2(40, 360), "left")
 	_reg_room(room_title_lbl, Vector2(150, 22), "center")
@@ -914,23 +931,7 @@ func _build_ui() -> void:
 	_reg_room(fill_btn, Vector2(40, 290), "center")
 	_reg_room(kick_btn, Vector2(190, 290), "center")
 	_reg_room(start_btn, Vector2(340, 290), "center")
-	_reg_room(rules_lbl, Vector2(832, 20), "right")
-	_reg_room(mode_lbl, Vector2(832, 62), "right")
-	_reg_room(mode_option, Vector2(880, 50), "right")
-	_reg_room(chk_joker, Vector2(832, 96), "right")
-	_reg_room(chk_revolution, Vector2(832, 132), "right")
-	_reg_room(stakes_lbl, Vector2(832, 180), "right")
-	_reg_room(stakes_option, Vector2(880, 168), "right")
-	_reg_room(rounds_lbl, Vector2(832, 218), "right")
-	_reg_room(rounds_option, Vector2(880, 206), "right")
-	_reg_room(save_settings_btn, Vector2(832, 252), "right")
-	# 模式选择: 仅房间页(进房后由房主选择)
-	mode_lbl.position = Vector2(832, 62)
-	mode_option.position = Vector2(880, 50)
-	_reg_room(mode_lbl, Vector2(832, 62), "right")
-	_reg_room(mode_option, Vector2(880, 50), "right")
-	for i in _emoji_btns.size():
-		_reg_room(_emoji_btns[i], Vector2(40 + i * 52, 662), "left", 1.0)  # 贴底缘
+	_reg_room(rules_panel, Vector2(820, 20), "right")
 
 	for b: Button in [fill_btn, start_btn, copy_btn, save_settings_btn]:
 		b.disabled = true
@@ -1285,10 +1286,8 @@ func _set_status(text: String, color: Color) -> void:
 	status_label.add_theme_color_override("font_color", color)
 
 
-func _check(text: String, pos: Vector2) -> CheckButton:
+func _check(text: String) -> CheckButton:
 	var c := CheckButton.new()
 	c.text = text
-	c.position = pos
 	c.button_pressed = true   # 默认开启(与服务端默认规则一致: 带王/革命)
-	add_child(c)
 	return c

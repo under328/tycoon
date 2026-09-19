@@ -9,6 +9,8 @@ ja = importlib.import_module("i18n_data_ja").T
 ko = importlib.import_module("i18n_data_ko").T
 tpl = importlib.import_module("i18n_data_tpl").T_TPL
 part = importlib.import_module("i18n_data_part").T_PART
+part2 = importlib.import_module("i18n_data_part2").T_PART2
+full = importlib.import_module("i18n_data_full").T_FULL
 
 DB = {"en": en, "zh_TW": tw, "ja": ja, "ko": ko}
 for k, langs in tpl.items():
@@ -16,6 +18,12 @@ for k, langs in tpl.items():
         DB.setdefault(lang, {})[k] = v
 for code, t in part.items():
     DB.setdefault(code, {}).update(t)
+for code, t in part2.items():
+    DB.setdefault(code, {}).update(t)
+# 全量补漏词典(逐条 4 语言): 后合并, 覆盖同名旧键
+for k, langs in full.items():
+    for lang, v in langs.items():
+        DB.setdefault(lang, {})[k] = v
 
 BS = chr(92)
 
