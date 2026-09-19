@@ -180,9 +180,6 @@ static func draft_pick(st: Dictionary, seat: int, cand: int, slot: int,
 	if cand == -1:
 		if slots.size() < 5:
 			return {"ok": false, "error": "cannot_skip"}
-	elif is_rare(cand):
-		per["fury_carry"] = mini(int(per["fury_carry"]) + 20, 100)
-		_log(st, TranslationServer.translate("%s 装备稀有牌! (怒气 +20)") % st["names"][seat])
 	elif cand >= 0:
 		if slots.size() >= 5:
 			if slot < 0 or slot >= 5:
@@ -191,6 +188,10 @@ static func draft_pick(st: Dictionary, seat: int, cand: int, slot: int,
 		else:
 			slots.append(card_of(cand))
 		_log_pick(st, seat, cand)
+		if is_rare(cand):
+			# 稀有金框: 装备 + 怒气携带 +20(开战时转入)
+			per["fury_carry"] = mini(int(per["fury_carry"]) + 20, 100)
+			_log(st, TranslationServer.translate("%s 装备稀有牌! (怒气 +20)") % st["names"][seat])
 	# 锁环(奇物1): 保留本组未选中的候选到下回合
 	if cand >= 0 and (per["specials"] as Array).has(1) \
 			and not is_sp(cand) and (per["pair"] as Array).size() >= 2:

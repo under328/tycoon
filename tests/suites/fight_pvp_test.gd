@@ -189,7 +189,8 @@ func _test_new_draft_semantics(t: T) -> void:
 	t.expect(bool(FightPvpGd.draft_pick(st4, 0, int(p40[0]), -1, rng4)["ok"]),
 			"锁环组选牌通过")
 	t.expect(int(st4["per"][0]["locked"]) == int(p40[1]), "未选中候选被锁定")
-	# 稀有牌怒气携带: 选金框稀有牌 → 怒气携带 +20, 开战时转入并清零
+	# 稀有牌怒气携带: 选金框稀有牌 → 必须装备 + 怒气携带 +20(回归:
+	# 稀有牌曾只加怒气不入槽, 白白浪费一次选牌)
 	var st5 := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
 	var rng5 := RandomNumberGenerator.new()
 	rng5.seed = 31
@@ -197,6 +198,7 @@ func _test_new_draft_semantics(t: T) -> void:
 	st5["per"][0]["pair"] = [205, 6]
 	t.expect(bool(FightPvpGd.draft_pick(st5, 0, 205, -1, rng5)["ok"]),
 			"稀有牌选牌通过")
+	t.expect((st5["per"][0]["slots"] as Array) == [5], "稀有牌装备入槽")
 	t.expect(int(st5["per"][0]["fury_carry"]) == 20, "稀有牌怒气 +20")
 
 

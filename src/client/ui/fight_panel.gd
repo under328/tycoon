@@ -1,6 +1,6 @@
 ## 格斗试炼(回合制)全屏页: 每回合『二选一』抽牌 → 编成左上 5 槽装备 →
 ## 小怪/精英/Boss 战(R1 小怪 R2 小怪 R3 精英 R4 小怪 R5 BOSS)。
-## 特殊牌不占槽: 抽到立即生效并补抽普通牌, 保证 Boss 战恰好 5 张。
+## 奇物(第三选项)不占装备槽: 拾取装入右侧 2 个奇物槽, 不消耗选牌。
 ## 怪物形象按主题组像素画; 玩家按皮肤演出攻击动作。纯渲染+输入, 规则在引擎。
 extends Control
 
@@ -612,7 +612,7 @@ func _render_draft() -> void:
 	for c in draft_ops.get_children():
 		c.queue_free()
 	if fm.comp:
-		draft_title.text = tr("🟣 奇物已生效 — 补抽一张普通牌 (装备 %d/5)") % fm.slots.size()
+		draft_title.text = tr("特殊候选组 (装备 %d/5)") % fm.slots.size()
 	else:
 		draft_title.text = tr("第 %d 回合 — 二选一 (装备 %d/5)%s") % [fm.round_num,
 				fm.slots.size(),

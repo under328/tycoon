@@ -6,10 +6,19 @@ extends SceneTree
 var frames := 0
 var arena: Control = null
 var stage := 0
+var vw := 1280
+var vh := 720
 
 
 func _initialize() -> void:
-	root.size = Vector2i(1280, 720)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("W") and "x" in a:
+			var parts := a.substr(1).split("x")
+			vw = int(parts[0])
+			vh = int(parts[1])
+	root.size = Vector2i(vw, vh)
+	root.content_scale_factor = 1.0   # 消除系统 DPI 缩放, 保证虚拟分辨率一致
+	print("[arena-cap] viewport=", vw, "x", vh)
 
 
 func _mk_arena() -> void:
