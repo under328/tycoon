@@ -183,6 +183,7 @@ func _test_draft() -> void:
 
 
 func _test_replace_flow() -> void:
+	arena._pick_lock_ms = 0   # 测试连点快于 400ms 防抖, 模拟真实用户间隔
 	arena._on_candidate(20)
 	_expect(arena._pending_cand == 20, "槽满进入替换模式")
 	arena._on_slot_clicked(0)

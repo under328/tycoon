@@ -16,6 +16,7 @@ var phase_delay_ms := 2200
 
 var _turn_deadline_ms := 0
 var _next_act_ms := 0
+var _draft_kick := 0          # 人类天选者超时托管时刻
 var _phase_until_ms := 0
 
 
@@ -46,14 +47,23 @@ func tick(now_ms: int) -> Dictionary:
 	match str(state["phase"]):
 		"draft":
 			# 命运二选一(联机): 每局由『天选者』一人代全桌选卡。
-			# 天选者为人类 → 留 5 秒自选窗口, 超时服务器代选;
-			# 天选者为 AI → 按 AI 节奏选。
+			# 天选者为 AI(或离线人类托管) → 按 AI 节奏选;
+			# 天选者为在线人类 → 5 秒自选窗口, 超时服务器托管代选
+			# (否则 AFK/旧版客户端卡死整局 draft)。
 			var picker: int = int(state.get("rogue_picker", -1))
 			var picker_bot: bool = picker < 0 or is_bot_seat(picker)
-			if now_ms >= _next_act_ms and picker_bot:
-				var n: int = maxi((state.get("rogue_choices", []) as Array).size(), 1)
-				return _step({"t": "rogue_pick", "idx": randi() % n,
-						"seat": picker}, now_ms)
+			if now_ms >= _next_act_ms:
+				if picker_bot:
+					var n: int = maxi((state.get("rogue_choices", []) as Array).size(), 1)
+					return _step({"t": "rogue_pick", "idx": randi() % n,
+							"seat": picker}, now_ms)
+				if _draft_kick == 0:
+					_draft_kick = now_ms + 2500   # 窗口后再宽限 2.5s
+				elif now_ms >= _draft_kick:
+					_draft_kick = 0
+					var n2: int = maxi((state.get("rogue_choices", []) as Array).size(), 1)
+					return _step({"t": "rogue_pick", "idx": randi() % n2,
+							"seat": picker}, now_ms)
 		"play":
 			if is_bot_seat(int(state["turn"])):
 				if now_ms >= _next_act_ms:
@@ -140,6 +150,7 @@ func _arm(now_ms: int) -> void:
 			var pk: int = int(state.get("rogue_picker", -1))
 			var picker_human: bool = pk >= 0 and not is_bot_seat(pk)
 			_next_act_ms = now_ms + (5000 if picker_human else ai_delay_ms)
+			_draft_kick = 0
 		"play":
 			_next_act_ms = now_ms + ai_delay_ms
 			_turn_deadline_ms = now_ms + int(state["cfg"]["turn_seconds"]) * 1000

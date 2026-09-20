@@ -66,13 +66,15 @@ func _ready() -> void:
 	add_child(spec_lbl)
 
 	# 连接状态提示: 竞技场盖住大厅, 断线/重连必须在本页可见
+	# (has_signal 防御: 兼容测试桩等精简 net 实现)
 	_conn_lbl = AppTheme.make_label(16, AppTheme.RED)
 	_conn_lbl.visible = false
 	add_child(_conn_lbl)
-	if net != null:
+	if net != null and net.has_signal("server_disconnected"):
 		net.server_disconnected.connect(func() -> void:
 			_conn_lbl.visible = true
-			_conn_lbl.text = "⚠ 连接中断 — 自动重连中…")
+			_conn_lbl.text = tr("⚠ 连接中断 — 自动重连中…"))
+	if net != null and net.has_signal("connected_ok"):
 		net.connected_ok.connect(func() -> void:
 			if _conn_lbl.visible:
 				_conn_lbl.visible = false
@@ -727,9 +729,11 @@ func _show_result() -> void:
 
 
 func _am_host() -> bool:
-	# 房主可见「再来一局」快捷重开(同规则直接开新对局)
-	return net != null \
-			and int(net.last_room_state.get("host_seat", -1)) == int(net.my_seat)
+	# 房主可见「再来一局」快捷重开(同规则直接开新对局)。
+	# 属性存在性防御: 兼容测试桩等精简 net 实现。
+	if net == null or not ("last_room_state" in net) or not ("my_seat" in net):
+		return false
+	return int(net.last_room_state.get("host_seat", -1)) == int(net.my_seat)
 
 
 func _show_overlay(title: String, body: String, restart := false) -> void:
