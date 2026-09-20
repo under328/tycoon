@@ -753,7 +753,7 @@ func _show_rogue_choice() -> void:
 			var pick := AppTheme.make_button(
 					"%s【%s】%s
 %s" % [rar_tag, meta.get("glyph", "?"), meta.get("name", ""),
-					meta.get("desc", "")], Vector2(250, 104), 14)
+					meta.get("desc", "")], Vector2(286, 88), 13)
 			pick.add_theme_color_override("font_color", rar_col)
 			pick.pressed.connect(func() -> void:
 				Audio.play("win")
@@ -772,7 +772,7 @@ func _show_rogue_choice() -> void:
 		if mode != "online" and Wallet.item_count("item_fate_dice") > 0:
 			var dice := AppTheme.make_button(
 					"🎲 重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
-					Vector2(150, 104), 14)
+					Vector2(150, 88), 13)
 			dice.pressed.connect(func() -> void:
 				Audio.play("click")
 				if Wallet.consume_item("item_fate_dice"):
@@ -794,7 +794,7 @@ func _position_rogue_strip() -> void:
 	var sz: Vector2 = _rogue_dlg.size
 	var fx: float = field_panel.position.x
 	var fw: float = field_panel.size.x
-	var fy: float = maxf(field_panel.position.y - sz.y - 10.0, 62.0)
+	var fy: float = maxf(field_panel.position.y - sz.y - 10.0, 96.0)
 	_rogue_dlg.position = Vector2(fx + (fw - sz.x) * 0.5, fy)
 
 
@@ -1410,12 +1410,15 @@ func _make_seat_panel(idx: int) -> Array:
 	var av := AvatarScript.new()
 	av.custom_minimum_size = Vector2(44, 44)
 	av.size = Vector2(44, 44)
+	av.size_flags_vertical = Control.SIZE_SHRINK_CENTER   # 头像随内容垂直居中
 	row.add_child(av)
 	var lb := RichTextLabel.new()
 	lb.bbcode_enabled = true
 	lb.scroll_active = false
+	lb.fit_content = true   # 高度贴合文本(信息框上下居中, 不留空腔)
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.custom_minimum_size = Vector2(140 if Responsive.is_touch() else 112, 74)
+	lb.custom_minimum_size = Vector2(96 if Responsive.is_touch() else 84, 0)
+	lb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	lb.add_theme_font_size_override("normal_font_size",
 			16 if Responsive.is_touch() else 14)
 	row.add_child(lb)
@@ -1580,26 +1583,30 @@ func _relayout() -> void:
 	var top_w := 64.0 if touch else 72.0
 	info_label.position = Vector2(20, 12)
 	timer_label.position = Vector2(w - 100, 12)
+	# 记牌/规则/设置 三钮: 统一尺寸与字号, 贴右缘等距窄排
+	var top_h := 34.0 if touch else 36.0
+	for b: Button in [counter_toggle, rules_btn, settings_btn]:
+		b.custom_minimum_size = Vector2(top_w, top_h)
+		b.size = Vector2(top_w, top_h)
+		b.add_theme_font_size_override("font_size", 16 if touch else 15)
 	settings_btn.position = Vector2(w - top_w - 10, 12)
 	rules_btn.position = Vector2(w - top_w * 2 - 18, 12)
 	counter_toggle.position = Vector2(w - top_w * 3 - 26, 12)
-	settings_btn.size = Vector2(top_w, 36)
-	rules_btn.size = Vector2(top_w, 36)
-	counter_toggle.size = Vector2(top_w, 36)
 	if counter_lbl != null:
 		counter_lbl.position = Vector2(20, field_panel.size.y - 30.0)
 		counter_lbl.size = Vector2(field_panel.size.x - 40.0, 22.0)
 	if rogue_lbl != null:
-		rogue_lbl.position = Vector2((w - 500.0) / 2.0, 14.0)
-		rogue_lbl.custom_minimum_size = Vector2(500.0, 0)
+		# 命运卡横幅: 对家面板正下方居中(避开面板与右侧牌背扇)
+		rogue_lbl.position = Vector2(w / 2.0 - 300.0, 96.0)
+		rogue_lbl.custom_minimum_size = Vector2(340.0, 0)
 		rogue_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# 对家(上中) + 其牌背扇
-	_seat_panels[1].position = Vector2(w / 2.0 - 230, 8)
+	# 对家(上中, 按面板实宽居中) + 其牌背扇
+	_seat_panels[1].position = Vector2(w / 2.0 - (84.0 if touch else 77.0), 8)
 	_opp_hands[1].position = Vector2(w / 2.0 + 60, 44)
-	# 上家(左) 与 下家(右)
+	# 上家(左) 与 下家(右, 面板贴右缘)
 	_seat_panels[2].position = Vector2(16, h * 0.41)
 	_opp_hands[2].position = Vector2(30, 50)
-	_seat_panels[0].position = Vector2(w - 284, h * 0.41)
+	_seat_panels[0].position = Vector2(w - (182.0 if touch else 170.0), h * 0.41)
 	_opp_hands[0].position = Vector2(w - 150, 108)
 	# 操作行(先定位: 手牌让位) — 卡底不得压按钮; 且不与左侧聊天行重叠
 	var ops_y := h - ops_h - 14.0
