@@ -393,7 +393,13 @@ func _backup_code(t) -> void:
 	w.note_relic(3)
 	w.note_relic(3)
 	w.note_relic(7)
+	# 身份入备份码: 昵称/游客id 经全局 GameSettings 往返(重装恢复身份)
+	var ml: SceneTree = Engine.get_main_loop() as SceneTree
+	var gs = ml.root.get_node("GameSettings")
+	var nick0: String = str(gs.nickname)
+	gs.nickname = "备份昵称乙"
 	var code: String = w.export_backup()
+	gs.nickname = "改动后的名字"
 	t.expect(code.begins_with("TB1-"), "备份码前缀 TB1-")
 	t.expect(code.length() > 60, "备份码包含完整载荷")
 	# 篡改与破坏
@@ -415,6 +421,9 @@ func _backup_code(t) -> void:
 	t.expect_eq(int(w.item_count("item_revive_coin")), 2, "库存恢复")
 	t.expect(int(w.relic_seen.get(3, 0)) == 2 and int(w.relic_seen.get(7, 0)) == 1,
 			"奇物图鉴恢复(int 键归一)")
+	t.expect(str(gs.nickname) == "备份昵称乙", "昵称经备份码恢复")
+	gs.nickname = nick0
+	gs.save_settings()
 	# 跨实例: 另一钱包实例从存档读回(持久化闭环)
 	w.save_wallet()
 	var w2 = WalletGd.new()

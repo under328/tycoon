@@ -798,6 +798,7 @@ func _backup_payload() -> Dictionary:
 		"ddy": daily_day, "dbr": daily_best_round, "dbh": daily_best_hp,
 		"ddy2": daily_days,
 		"ms": mod_seen, "mt": mod_taken, "rs": relic_seen,
+		"nk": GameSettings.nickname, "cid": GameSettings.client_id,
 		"pu": purchases, "rv": revives, "iv": inventory,
 		"dmd": diamond_mult_day, "dm": diamond_mult,
 		"sdy": sign_day, "sst": sign_streak, "sto": sign_total,
@@ -865,6 +866,12 @@ func import_backup(code: String) -> Dictionary:
 	daily_best_hp = clampi(int(parsed.get("dbh", 0)), 0, 100)
 	daily_days = maxi(int(parsed.get("ddy2", 0)), 0)
 	mod_seen = parsed.get("ms", {})
+	# 身份恢复: 昵称 + 游客id(重装设备导入备份码即找回身份)
+	GameSettings.nickname = str(parsed.get("nk", GameSettings.nickname))
+	if GameSettings.nickname.strip_edges() == "":
+		GameSettings.nickname = "玩家"
+	GameSettings.client_id = str(parsed.get("cid", GameSettings.client_id))
+	GameSettings.save_settings()
 	relic_seen = parsed.get("rs", {})
 	if relic_seen is not Dictionary:
 		relic_seen = {}

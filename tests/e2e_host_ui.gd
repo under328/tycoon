@@ -84,6 +84,10 @@ func _poll(delta: float) -> void:
 				if humans >= 1:
 					stage = "空位加AI"
 					print("[e2e-ui] 房间就绪 code=", main.lobby._last_room_code)
+					for p in players:
+						if not bool(p.get("empty", true)):
+							print("[e2e-ui] 座位名=", str(p.get("name", "")),
+									" nickname=", str(root.get_node("GameSettings").nickname))
 					main.lobby.fill_btn.pressed.emit()  # 空位加AI(真实按钮)
 		"空位加AI":
 			var players: Array = (main.net.last_room_state as Dictionary).get("players", [])
