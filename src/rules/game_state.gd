@@ -479,6 +479,7 @@ static func _empty_state(cfg: Dictionary, seed_v: int) -> Dictionary:
 	return {
 		"cfg": cfg,
 		"seed": seed_v,
+		"names": ["", "", "", ""],   # 座位昵称(视图等待提示用; 回放/本地由调用方填充)
 		"phase": "wait",
 		"round": 0,
 		"hands": [[], [], [], []],

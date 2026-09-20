@@ -272,6 +272,7 @@ func _new_match() -> void:
 		child.queue_free()  # 关闭上一场的结算面板/特效
 	# 肉鸽模式: 引擎启用命运卡(每局二选一), 普通模式不受影响
 	state = GameStateGd.new_match({"rogue": rogue}, -1) if rogue 			else GameStateGd.new_match({}, -1)
+	state["names"] = [str(GameSettings.nickname), "AI·甲", "AI·乙", "AI·丙"]
 	selected.clear()
 	# 重置视听状态(上场的革命/阶段/桌面/手牌缓存全部作废)
 	_end_shown = false

@@ -137,6 +137,11 @@ func start(now_ms: int, ai_delay_ms: int, phase_delay_ms: int) -> Dictionary:
 		peers.append(int(seat["peer"]) if not bool(seat["bot"]) else -1)
 		online.append(bool(seat["online"]) and not bool(seat["bot"]))
 	var st := GameStateGd.new_match(settings, -1)
+	var nms: Array = ["", "", "", ""]
+	for s2 in SEATS:
+		if seats[s2] != null:
+			nms[s2] = str(seats[s2]["name"])
+	st["names"] = nms   # 视图等待提示用(view.names)
 	match_ctl = MatchCtlGd.new(st, peers, online, ai_delay_ms, phase_delay_ms, now_ms)
 	return {"ok": true, "match_ctl": match_ctl}
 
