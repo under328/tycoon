@@ -9,11 +9,20 @@ const BotPlayerGd = preload("res://src/rules/ai/bot_player.gd")
 var main = null
 var f := 0
 var stage := ""
+var mode := "normal"        # 用户参数: mode=normal|rogue|fight
+var mode_settled := false
+var progress_ms := 0        # rogue/fight: 进入对局后再跑 5s 无错即通过
 var failed := false
 var chat_sent := false
 var emoji_sent := false
 var done := false
 var guard_ms := 0
+
+
+func _initialize() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("mode="):
+			mode = a.substr(5)
 
 
 func _fail(msg: String) -> void:
@@ -50,13 +59,16 @@ func _process(delta: float) -> bool:
 				_fail("lobby 未创建")
 		40:
 			stage = "本机开房"
+			var idx: int = {"normal": 0, "rogue": 1, "fight": 2}.get(mode, 0)
+			main.lobby.mode_option.selected = idx
+			print("[e2e-ui] 模式=", mode)
 			main._start_host()
 		_:
-			_poll()
+			_poll(delta)
 	return false
 
 
-func _poll() -> void:
+func _poll(delta: float) -> void:
 	if failed or done:
 		return
 	match stage:
@@ -84,11 +96,27 @@ func _poll() -> void:
 				print("[e2e-ui] AI 已补满, 开局")
 				main.lobby.start_btn.pressed.emit()  # 开始游戏(真实按钮)
 		"开始游戏":
-			if main.table != null and main.net.latest_view.size() > 0:
+			if mode == "fight":
+				# 格斗: 竞技场创建且战斗视图到达即为通过(完整对局由
+				# e2e_fight_pvp2 双真人覆盖, 这里验证 UI 开局不崩)
+				if main._fight_arena != null 						and not (main.net.latest_fight as Dictionary).is_empty():
+					stage = "对局中"
+					print("[e2e-ui] 竞技场已进入, phase=",
+							str((main.net.latest_fight as Dictionary)
+									.get("phase")))
+			elif main.table != null and main.net.latest_view.size() > 0:
 				stage = "对局中"
 				main.net.autoplay = true  # 客户端自动代打(与服务端 AI 对打)
 				print("[e2e-ui] 牌桌已进入, phase=", str(main.net.latest_view.get("phase")))
 		"对局中":
+			if mode != "normal":
+				progress_ms += int(delta * 1000.0)
+				if progress_ms >= 5000:
+					done = true
+					print("[e2e-ui] E2E_OK —— ", mode,
+							" UI 开局链路(开房→加AI→开局→对局推进 5s 无错) 通过")
+					quit(0)
+				return
 			# 途中各打一次表情/聊天(在线专属 UI 路径)
 			# 表情: 表情栏改为折叠弹出式 → 展开后按 emoji_grid 里的第一颗
 			if not emoji_sent and main.table != null \
