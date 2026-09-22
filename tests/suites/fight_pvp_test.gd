@@ -8,12 +8,14 @@ const RulesConfigGd = preload("res://src/rules/rules_config.gd")
 const FightPvpGd = preload("res://src/rules/fight/fight_pvp.gd")
 const FightMatchGd = preload("res://src/server/fight_match.gd")
 const ManagerGd = preload("res://src/server/room_manager.gd")
+const CardsGd = preload("res://src/rules/cards.gd")
 
 
 func run(t: T) -> void:
 	_test_rules_mode(t)
 	_test_pure_pvp(t)
 	_test_new_draft_semantics(t)
+	_test_first_attacker(t)
 	_test_full_match_sim(t)
 	_test_controller(t)
 	_test_manager_integration(t)
@@ -200,6 +202,50 @@ func _test_new_draft_semantics(t: T) -> void:
 			"稀有牌选牌通过")
 	t.expect((st5["per"][0]["slots"] as Array) == [5], "稀有牌装备入槽")
 	t.expect(int(st5["per"][0]["fury_carry"]) == 20, "稀有牌怒气 +20")
+
+
+## ── 先攻规则: 本回合双方装备的牌, 点数大者先攻; 同点按黑红梅方(♠>♥>♣>♦) ──
+## (旧规则为整套牌型等级, 平局固定 1 号位=左边占优, 已按任务反馈替换)
+func _test_first_attacker(t: T) -> void:
+	# 花色序映射: 牌编码 0♠ 1♥ 2♦ 3♣ → 黑红梅方 = ♣(3) 应排在 ♦(2) 前
+	t.expect(FightPvpGd._suit_rank(8) == 0 and FightPvpGd._suit_rank(9) == 1
+			and FightPvpGd._suit_rank(11) == 2 and FightPvpGd._suit_rank(10) == 3,
+			"决胜花色序 = 黑红梅方")
+	# 300 种子真实流程: battle 开启时的行动方 == 双方本回合选牌比较的胜者
+	var mismatch := 0
+	var checked := 0
+	for seed in 300:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed
+		var st := FightPvpGd.new_state([0, 1], {0: "甲", 1: "乙"})
+		FightPvpGd.open_round(st, rng)
+		var guard := 0
+		while str(st["phase"]) == "draft" and guard < 40:
+			guard += 1
+			for seat in st["fighters"]:
+				if str(st["phase"]) != "draft":
+					break
+				var per: Dictionary = st["per"][seat]
+				if bool(per["done"]) or (per["pair"] as Array).is_empty():
+					continue
+				FightPvpGd.draft_pick(st, seat, int(per["pair"][0]),
+						0 if (per["slots"] as Array).size() >= 5 else -1, rng)
+		if str(st["phase"]) != "battle":
+			continue
+		checked += 1
+		var pa := int(st["per"][0]["round_pick"])
+		var pb := int(st["per"][1]["round_pick"])
+		t.expect(pa >= 0 and pb >= 0, "双方本回合选牌已记录")
+		var va := CardsGd.value(pa)
+		var vb := CardsGd.value(pb)
+		var want := 0
+		if va < vb or (va == vb
+				and FightPvpGd._suit_rank(pa) > FightPvpGd._suit_rank(pb)):
+			want = 1
+		if int(st["battle"]["turn"]) != want:
+			mismatch += 1
+	t.expect(checked == 300 and mismatch == 0,
+			"先攻 = 本回合装备牌点数大者(同点黑红梅方决胜)")
 
 
 ## ── 全局模拟: 五回合内必出胜负, 每回合装备恰好推进 ──

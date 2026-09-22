@@ -87,6 +87,9 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 			dia.text("(双倍卡)", AppTheme.GOLD)
 		if int(reward.get("bonus", 0)) > 0:
 			dia.text(" 首胜+%d" % int(reward.get("bonus", 0)), AppTheme.GOLD)
+		if int(reward.get("streak", 0)) >= 2:
+			dia.text(" 连胜×%d(+%d金)" % [int(reward["streak"]),
+					int(reward.get("streak_gold", 0))], AppTheme.GOLD)
 		dia.text("    钱包:", AppTheme.DIM)
 		dia.amount("coin", str(int(reward.get("wallet_gold", 0))), AppTheme.WHITE)
 		dia.text("·", AppTheme.DIM)

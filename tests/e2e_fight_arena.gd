@@ -196,7 +196,7 @@ func _test_my_turn() -> void:
 	_expect(str(arena.phase_lbl.text).contains("对战"), "对战标题")
 	_expect(_find_button("⚔ 攻击") != null, "我的回合显示攻击按钮")
 	_expect(_find_button("🛡 防御") != null, "我的回合显示防御按钮")
-	var skill := _find_button("🔥火球")
+	var skill := _find_button("🔥烈焰")   # 火系技能按钮(格斗重做后文案: 🔥烈焰)
 	_expect(skill != null and not skill.disabled, "技能就绪可用")
 	var atk := _find_button("⚔ 攻击")
 	if atk != null:

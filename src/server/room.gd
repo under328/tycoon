@@ -115,20 +115,28 @@ func _gen_token() -> String:
 	return out
 
 
-## 移除成员（离开/被踢）。对局中不掉座位，只标记离线交给 AI。
-func remove_seat(seat: int) -> void:
+## 移除成员（离开/被踢）。对局中普通退房保留座位(离线·AI 代管,
+## 重进归位); final=true(应用退出等彻底离开)则对局中座位也置空 —
+## 其他玩家不再看到其"离线"座位挂到对局结束(任务反馈)。
+## 断线(WiFi 抖动/杀进程)不经此路, 走 peer_gone 的离线宽限保留重连归位。
+func remove_seat(seat: int, final: bool = false) -> void:
 	if seat < 0:
 		return
-	if match_ctl != null:
-		seats[seat]["online"] = false
-	else:
-		seats[seat] = null
-		if seat == host_seat:
-			for s in SEATS:
-				var seat2 = seats[s]
-				if seat2 != null and not bool(seat2["bot"]):
-					host_seat = s
-					break
+	if match_ctl != null and not final:
+		if seats[seat] != null:
+			seats[seat]["online"] = false
+		return
+	if seat >= SEATS or seats[seat] == null:
+		return
+	seats[seat] = null
+	if match_ctl != null and "seat_online" in match_ctl:
+		match_ctl.seat_online[seat] = false   # AI 立即接管
+	if seat == host_seat:
+		for s in SEATS:
+			var seat2 = seats[s]
+			if seat2 != null and not bool(seat2["bot"]):
+				host_seat = s
+				break
 
 
 ## room_state payload（token 只发给归属者）。

@@ -12,6 +12,9 @@ const CardsGd = preload("res://src/rules/cards.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const MonsterViewScript = preload("res://src/client/ui/monster_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
+const FightSpriteScript = preload("res://src/client/ui/fight_sprite.gd")
+## 怪物主题组 → 像素背景图(联机随机/本地按关卡)
+const GROUP_BGS := ["forest", "cave", "lava", "ice", "graveyard"]
 const SkinsLib = preload("res://src/client/ui/skins.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
@@ -57,7 +60,8 @@ var _aura: Control            # 变身光环(五张集满显示, 随主花色变
 var _aura_spin := 0.0
 var _transform_floor := -1    # 已播变身演出的层(每层首次集满五张触发)
 var _bgm_boss := false        # BOSS 战专属 BGM 状态(进入/离开 boss 战切换)
-var _bg: ColorRect            # 战斗背景(随怪群主题变色)
+var _bg: ColorRect            # 背景暗化叠层(压暗像素背景保证 HUD 可读)
+var _bg_tex: TextureRect      # 像素战斗背景(随怪群主题切换)
 # 每怪群背景色调: 翡翠森林/回声洞穴/熔火之心/冰封雪原/幽暗墓地
 const GROUP_TINTS := [Color("16281a"), Color("221a38"), Color("341a12"),
 		Color("122530"), Color("261a2e")]
@@ -89,6 +93,11 @@ func _ready() -> void:
 	if daily:
 		Audio.say("daily_start", 1.0, true)   # 每日挑战开场播报
 
+	_bg_tex = TextureRect.new()
+	_bg_tex.stretch_mode = TextureRect.STRETCH_SCALE
+	_bg_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_bg_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_bg_tex)
 	_bg = ColorRect.new()
 	_bg.color = Color("191934")
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -183,10 +192,10 @@ func _ready() -> void:
 	battle_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(battle_box)
 
-	avatar = AvatarScript.new()
-	# 战斗形象 = 玩家装备皮肤本体(与所选头像同一套像素画, 无徽章底盘/描金边框)
+	avatar = FightSpriteScript.new()
+	# 战斗形象 = 128×128 像素精灵(待机/攻击/技能/防御/奥义/变身动画);
+	# 缺资产时 FightSprite 自动回退程序化头像
 	avatar.skin_id = Wallet.equipped_skin
-	avatar.frameless = true
 	avatar.custom_minimum_size = Vector2(160, 160)
 	avatar.size = Vector2(160, 160)
 	battle_box.add_child(avatar)
@@ -432,8 +441,12 @@ func _suit_color(su: int) -> Color:
 func _update_transform() -> void:
 	if _aura == null:
 		return
-	if _bg != null and fm.group < GROUP_TINTS.size():
-		_bg.color = Color("191934").lerp(GROUP_TINTS[fm.group], 0.6)
+	if _bg_tex != null:
+		var bg_name: String = GROUP_BGS[fm.group] if fm.group < GROUP_BGS.size() 				else GROUP_BGS[0]
+		var path := "res://assets/fight/bg/%s.png" % bg_name
+		if ResourceLoader.exists(path) and _bg_tex.texture == null:
+			_bg_tex.texture = load(path)
+		_bg.color = Color(0.05, 0.04, 0.12, 0.42)
 	var on := _transformed() \
 			and str(fm.phase) not in ["round_end", "over"]
 	_aura.visible = on
@@ -443,6 +456,7 @@ func _update_transform() -> void:
 	avatar.modulate = Color(1, 1, 1).lerp(_suit_color(_dominant_suit()), 0.3) if on 			else Color.WHITE
 	if on and _transform_floor != fm.floor_num:
 		_transform_floor = fm.floor_num
+		avatar.play_once("transform")
 		_play_transform()
 
 
@@ -461,7 +475,8 @@ func _draw_aura() -> void:
 
 ## 变身演出: 白闪 + 「变 身!」横幅 + 光环展开 + 震屏 + 播报
 func _play_transform() -> void:
-	Audio.say("f_transform", 1.0, true)
+	# 变身配音随最终属性(主花色)变调: ♠低沉 ♥明亮 ♦尖锐 ♣浑厚
+	Audio.say("f_transform", [0.85, 1.1, 1.2, 0.95][_dominant_suit()], true)
 	Audio.play("win")
 	var flash := ColorRect.new()
 	flash.color = Color(1, 1, 1, 0.85)
@@ -799,16 +814,23 @@ func _on_action(action: String) -> void:
 	_busy = true
 	act_row.visible = false
 	Audio.play("click")
+	var kind0 := str(fm.stats.get("skill_kind", "fire"))
 	match action:
 		"attack":
 			Audio.say("f_attack")
+			avatar.play_once("attack")
 		"skill":
 			Audio.say("f_skill")
-			_skill_cast(monster, Color("7ec8ff"))
+			avatar.play_once("skill_" + kind0)
+			var cast_col: Color = {"fire": Color("ff7f3c"), "frost": Color("7ec8ff"),
+					"light": Color("ffe9a0")}.get(kind0, Color("7ec8ff"))
+			_skill_cast(monster, cast_col)
 		"defend":
 			Audio.say("f_defend")
+			avatar.play_once("defend")
 		"ult":
 			Audio.say("f_ult", 1.0, true)
+			avatar.play_once("ult")
 	if action != "defend":
 		_player_strike()
 	var fury_before := fm.fury
@@ -913,10 +935,12 @@ func _run_events(evs: Array) -> void:
 			Audio.say("f_kill", 1.0, true)
 			_monster_die()
 	if kind == "heavy" or kind == "spell":
+		avatar.play_once("hit")
 		_hit_flash(avatar)
 		_shake(6.0)
 		_sfx("hurt")
 	if kind == "dmg" and not is_enemy_target:
+		avatar.play_once("hit")
 		_enemy_strike("lunge")
 		_hit_flash(avatar)
 		_shake(4.0)
@@ -1084,8 +1108,8 @@ func _shake(strength: float) -> void:
 	tw.tween_property(battle_box, "position", Vector2.ZERO, 0.035)
 
 
-func _floater(text: String, x: float, y: float, col: Color) -> void:
-	var lb := _label(24, col)
+func _floater(text: String, x: float, y: float, col: Color, fsize: int = 24) -> void:
+	var lb := _label(fsize, col)
 	lb.text = text
 	lb.position = Vector2(x - 40.0, y)
 	lb.z_index = 10

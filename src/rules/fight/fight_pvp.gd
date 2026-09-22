@@ -51,9 +51,10 @@ static func new_state(fighters: Array, names: Dictionary) -> Dictionary:
 	for seat in fighters:
 		per[seat] = {
 			"slots": [], "specials": [],
-			"specials_left": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+			"specials_left": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
 			"pair": [], "bonus_relic": -1, "pairs_left": 1,
 			"locked": -1, "fury_carry": 0, "done": true,
+			"round_pick": -1,   # 本回合最终装备的那张牌(先攻决胜用)
 		}
 	var deck := []
 	for i in 52:
@@ -107,6 +108,7 @@ static func open_round(st: Dictionary, rng: RandomNumberGenerator) -> void:
 		per["done"] = false
 		per["pair"] = []
 		per["bonus_relic"] = -1
+		per["round_pick"] = -1
 		per["pairs_left"] = 1 + (1 if (per["specials"] as Array).has(0) else 0)
 	for seat in st["fighters"]:
 		_deal_pair(st, int(seat), rng)
@@ -204,6 +206,7 @@ static func draft_pick(st: Dictionary, seat: int, cand: int, slot: int,
 			slots[slot] = card_of(cand)
 		else:
 			slots.append(card_of(cand))
+		per["round_pick"] = card_of(cand)   # 记录本回合装备的牌(先攻决胜)
 		_log_pick(st, seat, cand)
 		if is_rare(cand):
 			# 稀有金框: 装备 + 怒气携带 +20(开战时转入)
@@ -265,13 +268,31 @@ static func _begin_round_battle(st: Dictionary) -> void:
 		# 稀有牌积攒的怒气带入本场, 用后清零
 		b["fury"][seat] = mini(int(per["fury_carry"]), 100)
 		per["fury_carry"] = 0
+	# 先攻规则(任务反馈): 本回合双方各自装备的牌, 点数大者先攻 —
+	# 点数相同按黑红梅方(♠>♥>♣>♦)决胜; 共享牌库同牌唯一, 不存在全同。
+	# 旧规则(整套牌型等级, 平局偏向 1 号位=左边)仅作缺牌兜底。
 	var fa: int = st["fighters"][0]
 	var fb: int = st["fighters"][1]
-	var ra: int = FightGd.TIER_RANK.find(str(b["combo"][fa]["tier"]))
-	var rb: int = FightGd.TIER_RANK.find(str(b["combo"][fb]["tier"]))
-	b["turn"] = fa if ra <= rb else fb
+	var pa: int = int((st["per"][fa] as Dictionary).get("round_pick", -1))
+	var pb: int = int((st["per"][fb] as Dictionary).get("round_pick", -1))
+	if pa >= 0 and pb >= 0:
+		var va := CardsGd.value(pa)
+		var vb := CardsGd.value(pb)
+		if va != vb:
+			b["turn"] = fa if va > vb else fb
+		else:
+			b["turn"] = fa if _suit_rank(pa) < _suit_rank(pb) else fb
+	else:
+		var ra: int = FightGd.TIER_RANK.find(str(b["combo"][fa]["tier"]))
+		var rb: int = FightGd.TIER_RANK.find(str(b["combo"][fb]["tier"]))
+		b["turn"] = fa if ra <= rb else fb
 	st["battle"] = b
 	_log(st, TranslationServer.translate("对战开始 — %s 先攻") % st["names"][int(b["turn"])])
+
+
+## 先攻决胜花色序: 黑红梅方(♠>♥>♣>♦)。牌编码 0♠ 1♥ 2♦ 3♣ → 序 [0,1,3,2]
+static func _suit_rank(card: int) -> int:
+	return [0, 1, 3, 2][CardsGd.suit(card)]
 
 
 ## 行动: attack/skill/defend/ult。返回 {ok, error, events}。
@@ -302,8 +323,13 @@ static func apply_action(st: Dictionary, seat: int, action: String,
 			b["hp"][seat] = 0
 			_end_round(st, foe)
 			return {"ok": true, "error": "", "events": evs}
+	# 凤羽: 行动回合开始生命 <35% 时回复 12%(绝境续命)
+	if (st["per"][seat]["specials"] as Array).has(15) 			and int(b["hp"][seat]) > 0 			and int(b["hp"][seat]) < int(int(b["max_hp"][seat]) * 0.35):
+		var ph := maxi(int(int(b["max_hp"][seat]) * 0.12), 2)
+		b["hp"][seat] = mini(int(b["hp"][seat]) + ph, int(b["max_hp"][seat]))
+		evs.append(_ev(seat, seat, "heal", ph))
 	b["battle_round"] = int(b["battle_round"]) + 1
-	evs = _resolve(st, seat, foe, action, rng)
+	evs.append_array(_resolve(st, seat, foe, action, rng))
 	if action != "ult":
 		# 基础积攒(昂扬战鼓 ×1.5)
 		var fmul: float = float(b["stats"][seat].get("fury_mul", 1.0))
@@ -420,6 +446,9 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 			var heal := maxi(int(b["max_hp"][actor]) / 25, 3)
 			b["hp"][actor] = mini(int(b["hp"][actor]) + heal,
 					int(b["max_hp"][actor]))
+			if (st["per"][actor]["specials"] as Array).has(16):   # 铁壁符
+				b["shield"][actor] = int(b["shield"][actor]) 						+ maxi(int(int(b["max_hp"][actor]) * 0.10), 2)
+				b["fury"][actor] = mini(int(b["fury"][actor]) 						+ int(10 * float(a.get("fury_mul", 1.0))), 100)
 			evs.append(_ev(actor, actor, "defend", heal))
 		"ult":
 			# 奥义: 2.2 倍攻击必中(无视减伤) + 回复 15% 生命, 怒气清零

@@ -78,10 +78,10 @@ func _emoji_sticker_passthrough(t) -> void:
 	var m = _mgr()
 	var out: Array = m.create_room(100, "甲", {}, "cid-A")
 	m.join_room(101, "乙", str(_rs(out, 100)["room_code"]), "cid-B")
-	out = m.emoji(101, 105)
+	out = m.emoji(101, 105, 1000)   # 显式 now_ms: 两次调用间隔须 ≥500ms(聊天限速)
 	t.expect(_count_to(out, 100, "s_emoji") == 1, "表情包: 房间收到贴纸广播")
 	t.expect(int(_find(out, 100, "s_emoji")["id"]) == 105, "表情包: 贴纸 id 透传(105)")
-	out = m.emoji(101, 3)
+	out = m.emoji(101, 3, 1600)
 	t.expect(int(_find(out, 100, "s_emoji")["id"]) == 3, "表情: 普通表情不受影响")
 
 
@@ -215,9 +215,11 @@ func _fight_leave_and_autoend(t) -> void:
 	t.expect(room.match_ctl.has_left(0) and room.match_ctl.is_bot_seat(0),
 			"格斗rejoin: 重进后本场仍由 AI 代管")
 	# AI 代管推进战斗, 且退出者不再收到战斗视图
+	# (窗口 600 tick=60s: 先攻方随本轮选牌变化, AI 首次出手可能要等
+	#  在线玩家的回合计时超时托管, 20s 窗口不够)
 	var views_to_left := 0
 	var views_total := 0
-	for i in 200:
+	for i in 600:
 		now += 100
 		var o: Array = m.tick(now)
 		views_total += _count(o, "s_fight_state")

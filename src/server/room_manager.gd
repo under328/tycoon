@@ -292,29 +292,30 @@ func join_room(peer: int, name: String, code: String, client_id: String = "",
 	return out
 
 
-func leave(peer: int) -> Array:
+func leave(peer: int, final: bool = false) -> Array:
 	var out := []
-	_leave_room(peer, out)
+	_leave_room(peer, out, final)
 	return out
 
 
 ## 局域网发现: 对外可见的房间概览(压测房间不公开;
-## 有空位且未开局才标 open — 客户端只把 open 房间列为可点)
+## 有人机空位且未开局才标 open — 客户端只把 open 房间列为可点)。
+## 人数只计真人(任务反馈: 联机页房间人数不应包含 AI)
 func discovery_snapshot() -> Array:
 	var out: Array = []
 	for code in rooms:
 		var room = rooms[code]
 		if room.soak:
 			continue
-		var players := 0
+		if room.first_free_seat() < 0:
+			continue   # 座位全满(含 AI 补位)
+		var humans := 0
 		for s in room.seats:
-			if s != null:
-				players += 1
-		if players >= 4:
-			continue
+			if s != null and not bool(s["bot"]):
+				humans += 1
 		out.append({
 			"code": code,
-			"players": players,
+			"players": humans,
 			"cap": 4,
 			"open": room.match_ctl == null,
 		})
@@ -617,11 +618,12 @@ func tick(now_ms: int) -> Array:
 						and now_ms - int(sd["offline_ms"]) > 30000:
 					room0.remove_seat(s)
 					changed = true
+			# 全 AI/无人房(对局收尾后人类全离线)直接回收, 防 rooms 无限累积
+			if room0.is_empty():
+				rooms.erase(code)
+				continue
 			if changed:
-				if room0.is_empty():
-					rooms.erase(code)
-				else:
-					_bcast_room_state(out, room0)
+				_bcast_room_state(out, room0)
 	for code in rooms.keys():
 		var room = rooms[code]
 		if room.match_ctl == null:
@@ -746,7 +748,7 @@ func _in_live_match(peer: int) -> bool:
 	return room != null and room.match_ctl != null
 
 
-func _leave_room(peer: int, out: Array) -> void:
+func _leave_room(peer: int, out: Array, final: bool = false) -> void:
 	var code = peer_room.get(peer, "")
 	if code == "":
 		return
@@ -754,7 +756,7 @@ func _leave_room(peer: int, out: Array) -> void:
 	var room = rooms.get(code)
 	if room == null:
 		return
-	room.remove_seat(room.seat_of_peer(peer))
+	room.remove_seat(room.seat_of_peer(peer), final)
 	if room.is_empty():
 		rooms.erase(code)
 	else:

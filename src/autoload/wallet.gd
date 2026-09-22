@@ -120,6 +120,7 @@ var double_diamond_day := ""   # 双倍钻石卡生效日期(YYYY-MM-DD, 当地�
 var first_win_day := ""        # 每日首胜已领取日期(空=今日未领)
 var sign_day := ""             # 最近一次签到日期
 var sign_streak := 0           # 连续签到天数(7 天一循环)
+var win_streak := 0            # 对局连胜场次(结算加成, 输即清零)
 var sign_total := 0            # 累计签到天数
 var diamonds_earned := 0       # 累计获得钻石(成就统计)
 var special_bought := 0        # 累计购入特殊道具数(成就统计)
@@ -381,6 +382,14 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1,
 			dia_delta = 1
 		1:
 			dia_delta = 1
+	# 连胜奖励: 第 2 胜起每连胜 +10 金(封顶 +40)。钻石结算保持原口径。
+	var streak_gold := 0
+	if rank == 1:
+		win_streak += 1
+		streak_gold = 10 * mini(win_streak - 1, 4)
+	else:
+		win_streak = 0
+	gold_delta += streak_gold
 	gold = maxi(gold + gold_delta, 0)
 	var doubled := double_diamond_active()
 	if doubled:
@@ -406,6 +415,7 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1,
 	balance_changed.emit()
 	return {"gold": gold_delta, "diamonds": dia_delta, "points": points,
 			"stakes": stakes, "doubled": doubled, "bonus": bonus,
+			"streak": win_streak, "streak_gold": streak_gold,
 			"achievements": newly}
 
 
@@ -912,7 +922,7 @@ func _backup_payload() -> Dictionary:
 		"nk": GameSettings.nickname, "cid": GameSettings.client_id,
 		"pu": purchases, "rv": revives, "iv": inventory,
 		"dmd": diamond_mult_day, "dm": diamond_mult,
-		"sdy": sign_day, "sst": sign_streak, "sto": sign_total,
+		"sdy": sign_day, "sst": sign_streak, "sto": sign_total, "wst": win_streak,
 		"de": diamonds_earned, "sb": special_bought,
 		"fw": first_win_day, "ddd": double_diamond_day,
 		"mdy": mission_day, "mp": mission_progress, "mc": mission_claimed,
@@ -1000,6 +1010,7 @@ func import_backup(code: String) -> Dictionary:
 	diamond_mult = maxi(int(parsed.get("dm", 1)), 1)
 	sign_day = str(parsed.get("sdy", ""))
 	sign_streak = maxi(int(parsed.get("sst", 0)), 0)
+	win_streak = maxi(int(parsed.get("wst", 0)), 0)
 	sign_total = maxi(int(parsed.get("sto", 0)), 0)
 	diamonds_earned = maxi(int(parsed.get("de", 0)), 0)
 	special_bought = maxi(int(parsed.get("sb", 0)), 0)

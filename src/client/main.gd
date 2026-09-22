@@ -55,6 +55,7 @@ func _ready() -> void:
 	menu.fight_mode.connect(_start_fight)
 	menu.fight_daily.connect(_start_fight_daily)
 	menu.replay_game.connect(_open_replay)
+	menu.quit_game.connect(_quit_game)
 	if AppMode.online_client:
 		_start_online()  # --client 直达联机大厅
 
@@ -166,6 +167,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_handle_android_back()
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quit_game()   # 桌面关窗: 先退房再退出(见下)
 
 
 func _handle_android_back() -> void:
@@ -182,7 +185,18 @@ func _handle_android_back() -> void:
 	if lobby != null and is_instance_valid(lobby) and lobby.visible:
 		lobby.go_back()
 		return
-	get_tree().quit()  # 首页按返回 = 退出应用
+	_quit_game()  # 首页按返回 = 退出应用
+
+
+## 退出应用: 仍在房间时先发"彻底退房" — 否则服务器按断线宽限保留座位,
+## 其他玩家会一直看到"离线·AI 代管"(任务反馈: 退出游戏应离开房间)
+func _quit_game() -> void:
+	if net != null and is_instance_valid(net) and net.in_room:
+		net.leave_room(true)
+	_stop_host()
+	# 给 c_room_leave 一个发出窗口(立即 quit 会连包一起销毁)
+	await get_tree().create_timer(0.25).timeout
+	get_tree().quit()
 
 
 func _start_local(mode: String = "normal") -> void:
@@ -443,9 +457,14 @@ func _enter_table() -> void:
 	# 守卫: 大厅的 view_changed 在每个服务器广播都会触发 start_game,
 	# 已有牌桌时绝不再实例化(否则牌桌叠罗汉: 特效闪烁/卡顿/操作多次)
 	if table != null and is_instance_valid(table):
-		table.visible = true
-		_fit_safe_area(table)
-		return
+		if table.mode == "online":
+			table.visible = true
+			_fit_safe_area(table)
+			return
+		# 本地残留局(后台 AI 托管中)让位联机对局: 直接关闭 —
+		# 联机开局必须显示联机新局, 且复用本地桌会因 finished 一次性
+		# 信号早已消费导致"返回菜单"失灵(任务反馈)
+		_discard_local_table()
 	table = TableScene.instantiate()
 	table.name = "Table"
 	table.mode = "online"
@@ -453,6 +472,15 @@ func _enter_table() -> void:
 	add_child(table)
 	_fit_safe_area(table)
 	table.finished.connect(_leave_table, CONNECT_ONE_SHOT)
+
+
+## 关闭后台托管的本地局(进联机/开新局前的清理)
+func _discard_local_table() -> void:
+	if table != null and is_instance_valid(table):
+		table.queue_free()
+	table = null
+	Audio.game_voice_enabled = false
+	Audio.stop_voice()   # 后台局终止: 未播完的语音播报静默
 
 
 func _leave_table() -> void:

@@ -8,6 +8,7 @@ signal online_game
 signal fight_mode
 signal fight_daily
 signal replay_game(entry: Dictionary)   # 从档案回放列表进入只读回放
+signal quit_game   # 退出应用(经 main 统一: 在房先退房再退出)
 
 const BGScript = preload("res://src/client/ui/menu_background.gd")
 const SettingsPanelScript = preload("res://src/client/ui/settings_panel.gd")
@@ -374,7 +375,7 @@ func _build_menu() -> void:
 		["新手引导", func() -> void:
 			_open_tutorial(), _tutorial_badge(), "scroll"],
 		["退出游戏", func() -> void:
-			get_tree().quit(), "", "exit"],
+			quit_game.emit(), "", "exit"],
 	]
 	for i in items.size():
 		var item := SlashItem.new()

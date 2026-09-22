@@ -109,13 +109,13 @@ func _ready() -> void:
 	_bind_net()
 	_refresh_ts_chip()
 	var ts_timer := Timer.new()
-	ts_timer.wait_time = 3.0
+	ts_timer.wait_time = 8.0
 	ts_timer.timeout.connect(_refresh_ts_chip)
 	add_child(ts_timer)
 	ts_timer.start()
 	var scan_timer := Timer.new()
 	scan_timer.wait_time = 3.0
-	scan_timer.timeout.connect(_scan_tick)
+	scan_timer.timeout.connect(func() -> void: _scan_tick(false))
 	add_child(scan_timer)
 	scan_timer.start()
 	_auto_connect()
@@ -658,8 +658,9 @@ func _build_ui() -> void:
 	discover_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		_search_pressed_ms = Time.get_ticks_msec()
+		_search_guided = false
 		_set_status(tr("正在搜索同 WiFi 房间…"), COLOR_DIM)
-		_scan_tick())
+		_scan_tick(true))
 	add_child(discover_btn)
 	#   ③ 粘贴邀请码(异地一键加入)
 	paste_btn = AppTheme.make_button("📋 粘贴邀请码, 一键加入", Vector2(360, 56), 18)
@@ -1061,19 +1062,20 @@ func _open_ts_fallback() -> void:
 
 
 ## ── 局域网发现(同 WiFi 一键加入) ──
-## 每 3 秒广播一次查询, 主机(游戏端口+2)单播回房间概览; 超时 12s 未回包移除。
+## 定时轻扫(仅广播); 手动搜索走深扫(含 /24 逐主机单播补盲)。
+## 主机(游戏端口+2)单播回房间概览; 超时 12s 未回包移除。
 ## 本机开房时同样扫描(自己房间会出现在列表并标注"本机房间", 便于确认可见性);
 ## 已进房/整页不可见(首页或牌桌)时不搜 — 空转定时器耗电且无意义。
-func _scan_tick() -> void:
+func _scan_tick(deep := false) -> void:
 	if not is_visible_in_tree():
 		return
 	_update_reconnect_vis()
-	_scan_send()
+	_scan_send(deep)
 	_scan_read()
 	_rebuild_found_rows()
 
 
-func _scan_send() -> void:
+func _scan_send(deep := false) -> void:
 	# 入口页正常扫描; 本机开房后(主机在房间页)也保持自查 —
 	# 否则"开房后搜索不到房间"(主机自己的房间永远不会出现在结果里)
 	if _view != "entry" and not _host_panel_wanted:
@@ -1089,8 +1091,7 @@ func _scan_send() -> void:
 	# ① 全网广播: 同子网主机一次命中
 	_disc.set_dest_address("255.255.255.255", dport)
 	_disc.put_packet(q)
-	# ② 单播补盲: 广播在部分路由器(AP 隔离除外)与手机(组播过滤)上收不到,
-	#    对本机所在 /24 逐地址单播 + 本机回环。UDP 无连接一次性发出, 开销可忽略。
+	# ② 本机回环(内嵌服务器自查)
 	_disc.set_dest_address("127.0.0.1", dport)
 	_disc.put_packet(q)
 	var subnets := {}
@@ -1099,21 +1100,27 @@ func _scan_send() -> void:
 		if p.size() != 4:
 			continue
 		var sub: String = "%s.%s.%s" % [p[0], p[1], p[2]]
+		if subnets.has(sub):
+			continue
 		subnets[sub] = true
 		# ③ 子网定向广播: 部分网络只放行子网广播、拦 255.255.255.255
 		_disc.set_dest_address(sub + ".255", dport)
 		_disc.put_packet(q)
-		for h in range(1, 255):
-			_disc.set_dest_address("%s.%d" % [sub, h], dport)
-			_disc.put_packet(q)
-	# ④ 上次直连过的主机网段(与当前不同网段时的兜底 — 按历史 IP 找回)
-	var last: PackedStringArray = str(GameSettings.host).split(".")
-	if last.size() == 4:
-		var sub2: String = "%s.%s.%s" % [last[0], last[1], last[2]]
-		if not subnets.has(sub2):
+	# ④ /24 逐主机单播补盲(部分路由器/手机拦截广播): 仅手动搜索时执行 —
+	#    每次数百个 put_packet 系统调用, 定时扫会拖慢主线程(联机页按钮卡顿源)
+	if deep:
+		for sub2 in subnets:
 			for h in range(1, 255):
 				_disc.set_dest_address("%s.%d" % [sub2, h], dport)
 				_disc.put_packet(q)
+		# 上次直连过的主机网段(与当前不同网段时的兜底 — 按历史 IP 找回)
+		var last: PackedStringArray = str(GameSettings.host).split(".")
+		if last.size() == 4:
+			var lsub: String = "%s.%s.%s" % [last[0], last[1], last[2]]
+			if not subnets.has(lsub):
+				for h in range(1, 255):
+					_disc.set_dest_address("%s.%d" % [lsub, h], dport)
+					_disc.put_packet(q)
 
 
 func _scan_read() -> void:
@@ -1142,6 +1149,9 @@ func _addr_score(ip: String) -> int:
 	return 20        # 其余(172. 私有段等)
 
 
+var _found_sig := ""   # 附近主机列表内容签名(未变化则跳过重建, 防每 3s 重建按钮)
+
+
 func _rebuild_found_rows() -> void:
 	# 主机房间页: 不显示附近主机列表(与房间页右列重叠), 改为在状态栏
 	# 提示"本机房间可被发现" — 发现应答里出现自己房间即证明搜索链路可用
@@ -1161,10 +1171,7 @@ func _rebuild_found_rows() -> void:
 	for ip in _found.keys():
 		if now - int(_found[ip]["seen"]) > LanDisc.TTL_MS:
 			_found.erase(ip)
-	for r in _found_rows:
-		(r as Control).queue_free()
-	_found_rows.clear()
-	# 按房间码合并多地址, 每房间选可达性最好的地址为首选
+	# 内容签名: 概览没变就不重建(每 3s free+新建按钮是联机页卡顿源之一)
 	var by_code := {}
 	for ip in _found.keys():
 		var e: Dictionary = _found[ip]
@@ -1177,13 +1184,25 @@ func _rebuild_found_rows() -> void:
 			rec["addrs"].append({"ip": str(ip), "port": int(e["port"]),
 					"score": _addr_score(str(ip))})
 			rec["open"] = rec["open"] or bool(room["open"])
+	var sig := ""
+	for code in by_code.keys():
+		var rec0: Dictionary = by_code[code]
+		var addrs0: Array = rec0["addrs"]
+		addrs0.sort_custom(func(a, b): return int(a["score"]) < int(b["score"]))
+		sig += "%s/%d/%s/%d;" % [code, int(rec0["players"]),
+				str(addrs0[0]["ip"]), 1 if bool(rec0["open"]) else 0]
+	if sig == _found_sig and found_panel.visible == (sig != ""):
+		return   # 无变化: 按钮不动(省一次整列表重建)
+	_found_sig = sig
+	for r in _found_rows:
+		(r as Control).queue_free()
+	_found_rows.clear()
 	var shown := 0
 	for code in by_code.keys():
 		if shown >= 5:
 			break
 		var rec: Dictionary = by_code[code]
 		var addrs: Array = rec["addrs"]
-		addrs.sort_custom(func(a, b): return int(a["score"]) < int(b["score"]))
 		var best: Dictionary = addrs[0]
 		var open := bool(rec["open"])
 		var txt := "🏠 %s  %d/%d人  %s" % [code, int(rec["players"]),
@@ -1212,7 +1231,7 @@ func _rebuild_found_rows() -> void:
 			_set_status(tr("未发现同 WiFi 房间: 请确认两台设备在同一网络(路由器 AP 隔离会拦截发现), 并在防火墙放行本游戏;
 也可让房主点【复制邀请码】, 你点【粘贴邀请码, 一键加入】"),
 					COLOR_DIM)
-			_scan_send()
+			_scan_send(true)
 	found_panel.visible = shown > 0
 
 
@@ -1318,10 +1337,20 @@ func _bind_net() -> void:
 		_set_status("无法连接 %s:%d（第 %d 次），自动重试中…\n确认服务器已启动、地址正确、防火墙放行"
 				% [net.address, net.port, _conn_fails], COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
-		_exit_room()
+		# 断线不清房间身份(不调 _exit_room/net.leave_room):
+		# 那会清掉 session_token, 重连后 c_hello 变成无票 → 永远找不回房间
+		# (任务反馈"游戏过程中突然断线, 重新连接找不到房间"的根因)。
+		# 保留 token 由 net 自动重连; 重连成功 room_state/视图广播会自动复位页面。
+		_close_xfer_overlay()
 		_conn_problems = true
 		_update_reconnect_vis()
-		_set_status("与服务器断开, 自动重连中…", COLOR_RED))
+		_set_status("与服务器断开, 自动重连中…" if net.in_room
+				else "与服务器断开", COLOR_RED))
+	# 重连成功但服务器已无我们的座位(断线太久被移出): 回入口页并明示
+	net.welcomed.connect(func(seat: int) -> void:
+		if seat < 0 and _view == "room":
+			return_to_entry()
+			_set_status("断线时间过长, 原房间已失效 — 请重新加入", COLOR_RED))
 	net.errored.connect(func(code: String, msg: String) -> void:
 		if code != "not_connected":
 			_set_status("错误 %s: %s" % [code, msg], COLOR_RED))

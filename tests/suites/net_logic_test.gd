@@ -9,6 +9,7 @@ const RoomManagerGd = preload("res://src/server/room_manager.gd")
 
 func run(t) -> void:
 	_basic_room_flow(t)
+	_reconnect_by_token(t)
 	_match_flow_with_bots(t)
 	_disconnect_and_rejoin(t)
 	_turn_timeout(t)
@@ -17,6 +18,7 @@ func run(t) -> void:
 	_room_limit(t)
 	_rejoin_finished_match(t)
 	_rejoin_reclaim_offline_seat(t)
+	_final_leave_during_match(t)
 	_transfer_host(t)
 
 
@@ -66,6 +68,42 @@ func _rejoin_reclaim_offline_seat(t) -> void:
 	var out3: Array = m2.join_room(501, "路人", code2, "cid-other")
 	t.expect_eq(_count(out3, "s_error"), 0, "对局中他人加入接管 AI 座位")
 	t.expect(int(_room_state_to(out3, 501)["my_seat"]) >= 0, "对局中他人接管 AI 座位入座")
+
+
+## 应用退出等彻底退房(final): 对局中座位也立即移除 — 其他玩家不再
+## 看到"离线·AI 代管"挂到对局结束; 普通退房仍保留座位供重进归位。
+func _final_leave_during_match(t) -> void:
+	var m = _mgr()
+	var out: Array = m.create_room(600, "房主", {}, "cid-600")
+	var code := str(_room_state_to(out, 600)["room_code"])
+	m.hello(601, MsgC.PROTOCOL_VERSION, "", "cid-601")
+	m.join_room(601, "玩家", code, "cid-601")
+	m.fill_bots(600)
+	m.start(600, 0)
+	t.expect(m.rooms[code].match_ctl != null, "final: 对局进行中")
+	m.leave(601, true)   # 应用退出: 彻底离开
+	t.expect(m.rooms[code].seats[1] == null, "final: 对局中座位被移除")
+	t.expect(m.rooms[code].match_ctl != null, "final: 对局继续由 AI 推进")
+	t.expect(bool(m.rooms[code].match_ctl.seat_online[1]) == false,
+			"final: 对局侧座位转离线(AI 接管)")
+	var seats_human := 0
+	for s in 4:
+		var sd = m.rooms[code].seats[s]
+		if sd != null and not bool(sd["bot"]):
+			seats_human += 1
+	t.expect_eq(seats_human, 1, "final: 房内只剩房主一名真人")
+	# 普通退房(非 final)在对局中仍保留座位(重进归位, 见 reclaim 场景)
+	var m2 = _mgr()
+	var out2: Array = m2.create_room(700, "房主", {}, "cid-700")
+	var code2 := str(_room_state_to(out2, 700)["room_code"])
+	m2.hello(701, MsgC.PROTOCOL_VERSION, "", "cid-701")
+	m2.join_room(701, "玩家", code2, "cid-701")
+	m2.fill_bots(700)
+	m2.start(700, 0)
+	m2.leave(701)
+	t.expect(m2.rooms[code2].seats[1] != null \
+			and not bool(m2.rooms[code2].seats[1]["online"]),
+			"普通退房: 对局中座位保留(离线·AI 代管)")
 
 
 ## 转让房主: 仅房主/真人座位/非自己; 转让后房主权利随 host_seat 走
@@ -221,6 +259,35 @@ func _basic_room_flow(t) -> void:
 	# 非成员出牌 → 无对局错误
 	out = m.play(103, [0])
 	t.expect_eq(_count(out, "s_error"), 1, "无对局时出牌报错")
+
+
+## 断线重连(任务回归): 对局中掉线 → 新 peer 带 token hello → 归位原座位
+func _reconnect_by_token(t) -> void:
+	var m = _mgr()
+	var out: Array = m.create_room(100, "甲", {})
+	var rs: Dictionary = _room_state_to(out, 100)
+	var token := str(rs["session_token"])
+	var code := str(rs["room_code"])
+	# 断线: 座位保留(离线宽限), 不移除
+	m.peer_gone(100)
+	var room = m.rooms.get(code)
+	t.expect(room != null, "断线后房间保留")
+	t.expect(room.seats[0] != null, "宽限期内座位保留")
+	t.expect(not bool(room.seats[0]["online"]), "座位保留但标记离线")
+	# 新 peer(重连)凭 token 归位
+	out = m.hello(200, MsgC.PROTOCOL_VERSION, token, "cid-100")
+	var w := _find(out, 200, "s_welcome")
+	t.expect_eq(int(w["seat"]), 0, "token 重连归位 0 号座位")
+	var rs2: Dictionary = _room_state_to(out, 200)
+	t.expect_eq(str(rs2["room_code"]), code, "重连回到原房间")
+	# 断线太久(>30s)未归 → 座位回收; 此时 token 失效
+	m.peer_gone(200)
+	out = m.tick(10000000)
+	t.expect(m.rooms.get(code) == null or m.rooms[code].seats[0] == null,
+			"超时座位回收/空房销毁")
+	out = m.hello(300, MsgC.PROTOCOL_VERSION, token, "cid-100")
+	t.expect_eq(int(_find(out, 300, "s_welcome")["seat"]), -1,
+			"座位已回收 → token 失效(客户端应回入口页)")
 
 
 func _setup_match(m, human_peers: Array) -> Dictionary:

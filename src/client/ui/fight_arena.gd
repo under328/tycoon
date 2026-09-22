@@ -11,6 +11,10 @@ const FightModeGd = preload("res://src/rules/fight/fight_mode.gd")
 const CardsGd = preload("res://src/rules/cards.gd")
 const CardViewScript = preload("res://src/client/ui/card_view.gd")
 const AvatarScript = preload("res://src/client/ui/avatar.gd")
+const FightSpriteScript = preload("res://src/client/ui/fight_sprite.gd")
+## 联机格斗: 九组像素背景随机登场
+const STAGE_BGS := ["forest", "cave", "lava", "ice", "graveyard", "waste",
+		"village", "palace", "colony"]
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
 var mode := "online"
@@ -52,8 +56,17 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	size = get_parent_area_size()
 
+	var bg_tex := TextureRect.new()
+	bg_tex.stretch_mode = TextureRect.STRETCH_SCALE
+	bg_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bg_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var bg_name: String = STAGE_BGS[randi() % STAGE_BGS.size()]
+	var bg_path := "res://assets/fight/bg/%s.png" % bg_name
+	if ResourceLoader.exists(bg_path):
+		bg_tex.texture = load(bg_path)
+	add_child(bg_tex)
 	var bg := ColorRect.new()
-	bg.color = Color("1c1428")
+	bg.color = Color(0.04, 0.03, 0.10, 0.42)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -297,8 +310,8 @@ func _refresh_slots(idx: int, seat: int, mine: bool) -> void:
 		var ghost: bool = not has_card and s < count
 		if has_card:
 			var cv: Control = CardViewScript.new(int(revealed[s]))
-			cv.custom_minimum_size = Vector2(30, 42)
-			cv.size = Vector2(30, 42)
+			cv.custom_minimum_size = Vector2(42, 58)
+			cv.size = Vector2(42, 58)
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			(ui["card_box"] as Control).add_child(cv)
 		elif ghost:
@@ -339,10 +352,8 @@ func _refresh_bars(idx: int, seat: int) -> void:
 		(p["fury_bg"] as ColorRect).visible = false
 		(p["hp_fg"] as ColorRect).size = Vector2(0, 14)
 		(p["fury_fg"] as ColorRect).size = Vector2(0, 7)
-		(p["hp_txt"] as Label).text = ""
-		(p["shield_txt"] as Label).text = ""
+		(p["hp_txt"] as Label).text = tr("编成中 — 集卡触发牌型协同")
 		(p["stats"] as Label).text = ""
-		(p["combo"] as Label).text = tr("编成中 — 集卡触发牌型协同")
 		return
 	(p["hp_bg"] as ColorRect).visible = true
 	(p["fury_bg"] as ColorRect).visible = true
@@ -366,7 +377,7 @@ func _refresh_bars(idx: int, seat: int) -> void:
 				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	fg.color = Color("58c858") if frac > 0.5 \
 			else (Color("ffb14e") if frac > 0.25 else Color("d05050"))
-	(p["hp_txt"] as Label).text = "HP %d / %d" % [maxi(hp, 0), mh]
+	# 怒气条
 	var fury: int = int((view.get("fury", {}) as Dictionary).get(seat, 0))
 	var ffg: ColorRect = p["fury_fg"]
 	var fw := maxf(bg_w * clampf(float(fury) / 100.0, 0.0, 1.0) - 2.0, 0.0)
@@ -375,18 +386,27 @@ func _refresh_bars(idx: int, seat: int) -> void:
 		ffg.position = Vector2(bg_w - fw - 2.0, 2.0)
 	else:
 		ffg.position = Vector2(2, 2)
+	# 行1: HP · 护盾 · 牌型协同(两行显示 — 原三行状态区占高太多)
 	var sh: int = int((view.get("shield", {}) as Dictionary).get(seat, 0))
-	(p["shield_txt"] as Label).text = "🔮%d" % sh if sh > 0 else ""
+	var line1 := "HP %d / %d" % [maxi(hp, 0), mh]
+	if sh > 0:
+		line1 += "  🔮%d" % sh
 	var combos: Dictionary = view.get("combo", {})
 	if (combos as Dictionary).has(seat):
 		var c: Dictionary = combos[seat]
-		(p["combo"] as Label).text = "%s · %s" % [c["name"], c["desc"]]
-		var br: Dictionary = (view.get("stats_brief", {}) as Dictionary)[seat]
+		line1 += "  ·  %s·%s" % [c["name"], c["desc"]]
+	(p["hp_txt"] as Label).text = line1
+	# 行2: 攻/防/技属性(+护盾图标/技能冷却)
+	var br: Dictionary = (view.get("stats_brief", {}) as Dictionary).get(seat, {})
+	if (br as Dictionary).is_empty():
+		(p["stats"] as Label).text = ""
+	else:
 		var kinds := {"fire": "🔥烈焰", "frost": "❄冰霜", "light": "✟圣光"}
-		(p["stats"] as Label).text = "⚔%d  🛡%d  ✟%d  %s%s" % [
+		(p["stats"] as Label).text = "⚔%d  🛡%d  ✟%d  %s%s%s" % [
 			int(br["atk"]), int(br["def"]), int(br["skill"]),
 			str(kinds.get(str((view.get("skill_kind", {}) as Dictionary)
 					.get(seat, "fire")), "")),
+			("  🔮%d" % sh) if sh > 0 else "",
 			("  ⏱冷却%d" % int((view.get("skill_cd", {}) as Dictionary)
 					.get(seat, 0))) if int((view.get("skill_cd", {})
 					as Dictionary).get(seat, 0)) > 0 else ""]
@@ -407,6 +427,16 @@ func _refresh_stage() -> void:
 		aura.visible = transformed
 		if transformed:
 			aura.queue_redraw()
+			# 集满五张: 变身动画(首次)+按主花色染色的能量态
+			var spr: Control = _hud[i]["avatar"]
+			if spr is FightSpriteScript and str(spr.get("action")) != "transform":
+				if not bool(_hud[i].get("transform_played", false)):
+					_hud[i]["transform_played"] = true
+					spr.play_once("transform")
+				spr.modulate = Color(1, 1, 1).lerp(_suit_color(seat), 0.35)
+		else:
+			_hud[i]["transform_played"] = false
+			(_hud[i]["avatar"] as Control).modulate = Color.WHITE
 		# 回合指示圈(脚下, 金色) — 对战阶段当前行动方
 		var is_turn: bool = int(view.get("turn", -1)) == seat \
 				and str(view.get("phase", "")) == "battle"
@@ -738,6 +768,8 @@ func _play_next() -> void:
 				_shake(10.0)
 			else:
 				_shake(4.0)
+			_play_action(side, "attack")
+			_play_action(target_side, "hit")
 			_lunge(side)
 			_spark(Vector2(tx, y), Color("ffd166") if kind == "crit"
 					else Color("ff9a6a"))
@@ -751,6 +783,7 @@ func _play_next() -> void:
 			var sk: String = str(view.get("skill_kind", {}).get(who, "fire"))
 			var col: Color = {"fire": Color("ff7f3c"), "frost": Color("7ec8ff"),
 					"light": Color("ffe9a0")}.get(sk, Color("7ec8ff"))
+			_play_action(side, "skill_" + sk)
 			_skill_cast_pose(side)
 			_projectile(_avatar_home[side] + Vector2(0, -30),
 					_avatar_home[target_side] + Vector2(0, -30), col)
@@ -770,11 +803,14 @@ func _play_next() -> void:
 			_floater("+%d" % v, x, y - 20.0, Color("7dd87d"))
 			_ring(_avatar_home[side] + Vector2(0, -20), Color("7dd87d"))
 		"defend":
+			_play_action(side, "defend")
 			_ring(_avatar_home[side] + Vector2(0, -20), Color("7ec8ff"))
 			_floater(tr("防御"), x, y - 20.0, Color("7ec8ff"))
 		"ult":
 			_flash()
 			_shake(16.0)
+			_play_action(side, "ult")
+			_play_action(target_side, "hit")
 			_lunge(side, 110.0)
 			_spark(Vector2(tx, y), AppTheme.GOLD)
 			_ring(_avatar_home[target_side] + Vector2(0, -20), AppTheme.GOLD)
@@ -795,6 +831,13 @@ func _play_next() -> void:
 	var tw := create_tween()
 	tw.tween_interval(0.42)
 	tw.tween_callback(_play_next)
+
+
+## 精灵动作(一次性, 播完自动回待机); 兼容回退头像(无动作直接忽略)
+func _play_action(side: int, p_action: String) -> void:
+	var spr: Control = _hud[side]["avatar"]
+	if spr is FightSpriteScript:
+		spr.play_once(p_action)
 
 
 func _avatar_center(side: int) -> Vector2:
@@ -1203,7 +1246,7 @@ func _build_hud(idx: int) -> Dictionary:
 	left_chip.visible = false
 	name_row.add_child(left_chip)
 	# ── 装备槽 5 + 奇物槽 2(合并一行; 手机 HUD 收窄不遮挡中央舞台) ──
-	# 槽位 34×46(压缩卡槽区高度): 编成面板更矮, 中央头像不再被抽牌面板遮挡
+	# 槽位 46×62(任务反馈: 原 34×46 看不清): 卡面与牌点清晰可读
 	var slots_row := HBoxContainer.new()
 	slots_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	slots_row.add_theme_constant_override("separation", 4)
@@ -1218,7 +1261,7 @@ func _build_hud(idx: int) -> Dictionary:
 		ssb.content_margin_top = 2
 		ssb.content_margin_bottom = 2
 		wrap.add_theme_stylebox_override("panel", ssb)
-		wrap.custom_minimum_size = Vector2(34, 46)
+		wrap.custom_minimum_size = Vector2(46, 62)
 		wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 		var card_box := CenterContainer.new()
 		wrap.add_child(card_box)
@@ -1238,10 +1281,10 @@ func _build_hud(idx: int) -> Dictionary:
 		var rsb := AppTheme.flat(Color(0.16, 0.09, 0.24),
 				Color("b070e0", 0.45), 6, 1)
 		rwrap.add_theme_stylebox_override("panel", rsb)
-		rwrap.custom_minimum_size = Vector2(34, 46)
+		rwrap.custom_minimum_size = Vector2(46, 62)
 		rwrap.tooltip_text = "奇物槽 — 拾取奇物自动装入(最多 2 个)"
 		var rcc := CenterContainer.new()
-		var rglyph := AppTheme.make_label(18, Color("c89ae8"))
+		var rglyph := AppTheme.make_label(24, Color("c89ae8"))
 		rglyph.text = "◇"
 		rcc.add_child(rglyph)
 		rwrap.add_child(rcc)
@@ -1257,7 +1300,7 @@ func _build_hud(idx: int) -> Dictionary:
 	hp_fg.size = Vector2(302, 12)
 	hp_bg.add_child(hp_fg)
 	box.add_child(hp_bg)
-	var hp_txt := _label(11, AppTheme.WHITE)
+	var hp_txt := _label(12, AppTheme.WHITE)
 	hp_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hp_txt)
 	# ── 怒气条 ──
@@ -1270,16 +1313,8 @@ func _build_hud(idx: int) -> Dictionary:
 	fury_fg.size = Vector2(0, 5)
 	fury_bg.add_child(fury_fg)
 	box.add_child(fury_bg)
-	# ── 牌型/属性/护盾 ──
-	var shield_txt := _label(11, Color("6ad0e8"))
-	shield_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(shield_txt)
-	var combo := AppTheme.make_label(12, AppTheme.GOLD)
-	combo.text = tr("编成中 — 集卡触发牌型协同")
-	combo.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	combo.custom_minimum_size = Vector2(320, 18)
-	combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(combo)
+	# ── 状态区两行(任务反馈: 原 HP/牌型/属性三行占高太多) ──
+	# 行1: HP(+护盾) · 牌型协同;  行2: 攻/防/技属性(+技能冷却)
 	var stats := AppTheme.make_label(12, Color("c9b06a"))
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stats.custom_minimum_size = Vector2(320, 18)
@@ -1290,11 +1325,11 @@ func _build_hud(idx: int) -> Dictionary:
 	box.add_child(prog)
 	if idx == 1:
 		box.layout_direction = Control.LAYOUT_DIRECTION_RTL   # 右侧镜像对称
-	return {"panel": panel, "sb": sb, "name": nm, "you": you, "combo": combo,
+	return {"panel": panel, "sb": sb, "name": nm, "you": you,
 			"hp_fg": hp_fg, "hp_bg": hp_bg, "hp_txt": hp_txt,
 			"fury_bg": fury_bg, "fury_fg": fury_fg, "stats": stats,
 			"turn_chip": turn_chip, "score": score, "prog": prog, "done": done,
-			"shield_txt": shield_txt, "slots_ui": slots_ui, "relic_ui": relic_ui,
+			"slots_ui": slots_ui, "relic_ui": relic_ui,
 			"left_chip": left_chip}
 
 
@@ -1321,8 +1356,8 @@ func _build_stage() -> void:
 		holder.add_child(turn_ring)
 		_hud[i]["turn_ring"] = turn_ring
 		_hud[i]["turn_ring_spin"] = 0.0
-		var avatar: Control = AvatarScript.new()
-		avatar.frameless = true   # 无头像框, 同本地模式
+		var avatar: Control = FightSpriteScript.new()
+		avatar.flip_h = i == 1   # 右侧格斗者镜像, 面向左侧对手
 		avatar.custom_minimum_size = _AVATAR_SIZE
 		avatar.size = _AVATAR_SIZE
 		avatar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1424,8 +1459,9 @@ func _relayout() -> void:
 	score_lbl.position = Vector2(w / 2.0 - 22.0, 60)
 	spec_lbl.position = Vector2(w / 2.0 - 140.0, 88)
 	_conn_lbl.position = Vector2(w / 2.0 - 150.0, 112)
-	# ── 双角 HUD: 我方左上 / 对手右上(收窄至 0.30 屏宽, 给中央舞台让位) ──
-	var hud_w := minf(352.0, w * 0.30)
+	# ── 双角 HUD: 我方左上 / 对手右上(加宽到 384 配合调大后的卡槽,
+	# 窄屏按 0.32 比例收窄, 给中央舞台让位) ──
+	var hud_w := minf(384.0, w * 0.32)
 	var bar_w := maxf(hud_w - 24.0, 140.0)
 	for i in 2:
 		var panel: PanelContainer = _hud[i]["panel"]
@@ -1435,7 +1471,7 @@ func _relayout() -> void:
 		# 血条/怒气条/文案行宽度随面板(此前固定宽, 窄面板会溢出)
 		(_hud[i]["hp_bg"] as ColorRect).custom_minimum_size = Vector2(bar_w, 18)
 		(_hud[i]["fury_bg"] as ColorRect).custom_minimum_size = Vector2(bar_w, 11)
-		(_hud[i]["combo"] as Label).custom_minimum_size = Vector2(bar_w, 30)
+		(_hud[i]["hp_txt"] as Label).custom_minimum_size = Vector2(bar_w, 20)
 		(_hud[i]["stats"] as Label).custom_minimum_size = Vector2(bar_w, 18)
 	# ── 中央舞台: 大头像对峙 — 水平锚在各自面板中线下方(不再被面板遮挡) ──
 	# 紧凑视口(手机)头像缩小一档: 底部操作行(h-84)之上留出净空

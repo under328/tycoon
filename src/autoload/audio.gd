@@ -27,10 +27,27 @@ var _voice_variants := {}       # base key -> 趣味变体 key 列表(<base>_f1.
 const VOICE_VARIANT_RATE := 0.45   # 趣味变体命中率(基础播报 55% / 变体 45%)
 
 
+const MUSIC_DIR := "res://assets/music/"
+const MUSIC_TRACKS := ["lobby", "table", "table_rev", "rogue", "boss", "fight"]
+
+
 func _ready() -> void:
 	_setup_buses()
 	_build_library()
-	# 首页曲启动即合成; 对局两曲较长 → 后台线程预合成(主线程整轨合成会冻结 1-4 秒)
+	# 正式 BGM(工具作曲的 OGG 资产)优先: 全部就位则跳过程序化合成
+	# (主线程整轨合成要 1-4 秒, 是启动卡顿源)。缺资产(测试环境)才回退合成。
+	var have_all := true
+	for track: String in MUSIC_TRACKS:
+		var path := MUSIC_DIR + track + ".ogg"
+		if ResourceLoader.exists(path):
+			_bgm_tracks[track] = load(path)
+		else:
+			have_all = false
+	if have_all:
+		_table_synth_done = true
+		apply_volumes()
+		play_bgm("lobby")
+		return
 	_bgm_tracks["lobby"] = Synth.bgm_lobby()
 	_bgm_thread = Thread.new()
 	if _bgm_thread.start(_synth_table_tracks) != OK:

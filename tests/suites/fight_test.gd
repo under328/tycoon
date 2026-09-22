@@ -12,6 +12,7 @@ static func card(value: int, suit: int) -> int:
 
 
 func run(t) -> void:
+	_new_relics(t)
 	_combo_tiers(t)
 	_stats_by_suit(t)
 	_draft_flow(t)
@@ -22,6 +23,47 @@ func run(t) -> void:
 	_reward_record(t)
 	_juice(t)
 	_deep_combat(t)
+
+
+## 新奇物(凤羽/铁壁符): 池纳入 + 效果结算
+func _new_relics(t) -> void:
+	t.expect(FightGd.SPECIALS.size() >= 17, "奇物池 ≥17(新增凤羽/铁壁符)")
+	t.expect(str(FightGd.sp_meta(15)["key"]) == "sp_phoenix", "15=凤羽")
+	t.expect(str(FightGd.sp_meta(16)["key"]) == "sp_ironwall", "16=铁壁符")
+	var fm := FightGd.new(42)
+	t.expect((fm.specials_left as Array).has(15) and (fm.specials_left as Array).has(16),
+			"两件新奇物进入抽取池")
+	# 凤羽: 低血回合开始自愈 12%
+	var f2 := FightGd.new(7)
+	while f2.phase != "battle":
+		f2.draft_pick(int(f2.pair[0]))
+		if f2.phase == "round_end":
+			f2.advance_round()
+	f2.specials = [15]
+	f2.hp = maxi(int(int(f2.stats["max_hp"]) * 0.10), 1)
+	var hp_before := f2.hp
+	var evs: Array = f2.step("attack")
+	var healed := 0
+	for e in evs:
+		if str(e["kind"]) == "heal" and str(e["who"]) == "p":
+			healed += int(e["v"])
+	t.expect(healed >= maxi(int(int(f2.stats["max_hp"]) * 0.12) - 1, 1) - 1,
+			"凤羽低血触发回复(≈12%)")
+	t.expect(f2.hp > hp_before, "凤羽回复后生命上升")
+	# 铁壁符: 防御附赠护盾 + 怒气
+	var f3 := FightGd.new(9)
+	while f3.phase != "battle":
+		f3.draft_pick(int(f3.pair[0]))
+		if f3.phase == "round_end":
+			f3.advance_round()
+	f3.specials = [16]
+	f3.shield = 0
+	f3.enemy["atk"] = 0   # 敌人攻击清零: 护盾不被敌方反击消耗, 隔离验证
+	var fury_before := f3.fury
+	f3.step("defend")
+	t.expect(f3.shield >= maxi(int(int(f3.stats["max_hp"]) * 0.10), 2) - 1,
+			"铁壁符防御获得护盾(≈10%生命)")
+	t.expect(f3.fury > fury_before, "铁壁符防御额外回怒")
 
 
 func _combo_tiers(t) -> void:
@@ -159,7 +201,7 @@ func _slot_guarantee(t) -> void:
 
 ## ── 特殊牌(10 种奇物) ──
 func _specials(t) -> void:
-	t.expect(FightGd.SPECIALS.size() == 15, "特殊牌共 15 种")
+	t.expect(FightGd.SPECIALS.size() == 17, "特殊牌共 17 种(含凤羽/铁壁符)")
 	for i in 8:
 		t.expect(str(FightGd.sp_meta(i)["key"]).begins_with("sp_"),
 				"奇物 %d 目录完整" % i)

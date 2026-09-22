@@ -30,6 +30,7 @@ const PROFILES := [
 	["phone20_9", Vector2(1600, 720)],
 	["ultrawide", Vector2(1770, 720)],
 	["phone_compact", Vector2(1248, 576)],   # 手机触屏 csf1.25 后的逻辑视口
+	["phone_narrow", Vector2(1104, 576)],    # 窄机身手机(任务回归: 信息框不压出牌区)
 ]
 
 const TOL := 6.0   # 越界容差: 旋转卡牌的 AABB 天然略大于布局盒
@@ -181,9 +182,7 @@ func _check_scene(i: int, w: float, h: float) -> void:
 			for n in s._layouts:
 				if (s._layouts[n] as Dictionary).has("room"):
 					_in_rect(n, w, h, "lobby room %s" % n.name)
-			expect(absf(s._emoji_btns[0].position.y - (662.0 + eh)) <= 1.0,
-					"lobby 房间页表情未贴底缘 y=%s eh=%s" % [s._emoji_btns[0].position.y, eh])
-			expect(absf(s._seat_cards[0]["panel"].position.x - (150.0 + extra * 0.45)) <= 1.0,
+			expect(absf(s._seat_cards[0]["panel"].position.x - (40.0 + extra * 0.45)) <= 1.0,
 					"lobby 座位卡未随宽漂移 x=%s" % s._seat_cards[0]["panel"].position.x)
 			expect(s.room_title_lbl.visible and not s.host_btn.visible,
 					"房间页显隐错误")
@@ -201,6 +200,15 @@ func _check_scene(i: int, w: float, h: float) -> void:
 			_in_rect(s.ops_row, w, h, "table 操作行")
 			for sp in s._seat_panels:
 				_in_rect(sp, w, h, "table 座位面板")
+				# 座位面板与中央出牌区水平不相交(窄机身手机回归: 收窄面板+动态出牌区宽)
+				expect(sp.position.x + sp.size.x <= s.field_panel.position.x + 2.0
+						or sp.position.x >= s.field_panel.position.x
+						+ s.field_panel.size.x - 2.0
+						or sp.position.y + sp.size.y <= s.field_panel.position.y
+						or sp.position.y >= s.field_panel.position.y
+						+ s.field_panel.size.y,
+						"table 座位面板压出牌区 panel=%s field=%s" % [
+							sp.get_global_rect(), s.field_panel.get_global_rect()])
 			# 手牌卡底不压操作行; 出牌区不压手牌区(紧凑/标准档都要成立)
 			var ops_top: float = s.ops_row.position.y
 			expect(ops_top >= s.hand_box.position.y + s.hand_box.size.y - 6.0,

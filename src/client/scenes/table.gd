@@ -201,7 +201,8 @@ func _process(delta: float) -> void:
 	if _pass_wait > 0.0 and (mode == "online" or _settings_page == null):
 		_pass_wait -= delta
 		var pw_cur := int(ceil(maxf(_pass_wait, 0.0)))
-		if pw_cur != _pass_wait_shown:
+		# 归零帧不写"0"(大数字只跳 5..1, 结束即隐藏, 不滞留)
+		if pw_cur >= 1 and pw_cur != _pass_wait_shown:
 			_pass_wait_shown = pw_cur
 			if pass_lbl != null:
 				pass_lbl.text = str(pw_cur)
@@ -637,8 +638,8 @@ func _start_pass_wait() -> void:
 
 
 func _cancel_pass_wait() -> void:
-	if _pass_wait < 0.0:
-		return
+	# 无哨兵早退: 倒计时自然走完时 _pass_wait 已减成微小负数,
+	# 早退会跳过隐藏 → 大数字"0"永久滞留屏幕(任务反馈)
 	_pass_wait = -1.0
 	_pass_wait_shown = -1
 	if pass_lbl != null:
@@ -1277,7 +1278,7 @@ func _build_ui() -> void:
 	field_sb.border_color = Color(AppTheme.GOLD, 0.50)
 	field_panel.add_theme_stylebox_override("panel", field_sb)
 	field_panel.position = Vector2(320, 204)
-	field_panel.custom_minimum_size = Vector2(640, 248)
+	field_panel.custom_minimum_size = Vector2(640, 276)
 	add_child(field_panel)
 
 	# "要不起"自动不要倒计时大数字(居中悬浮于出牌区, 5→1 每秒跳字)
@@ -1556,11 +1557,11 @@ func _make_seat_panel(idx: int) -> Array:
 	add_child(panel)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
 	var av := AvatarScript.new()
-	av.custom_minimum_size = Vector2(44, 44)
-	av.size = Vector2(44, 44)
+	av.custom_minimum_size = Vector2(38, 38)
+	av.size = Vector2(38, 38)
 	av.size_flags_vertical = Control.SIZE_SHRINK_CENTER   # 头像随内容垂直居中
 	row.add_child(av)
 	var lb := RichTextLabel.new()
@@ -1568,11 +1569,13 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.scroll_active = false
 	lb.fit_content = true   # 高度贴合文本(信息框上下居中, 不留空腔)
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 宽度保证【大富豪/大贫民】称号 + 6 字昵称(含省略号)一行放下
-	lb.custom_minimum_size = Vector2(186 if Responsive.is_touch() else 164, 0)
+	# 宽度保证【大富豪/大贫民】称号 + 6 字昵称(含省略号)一行放下。
+	# 触屏档比 PC 再窄一档(任务反馈: 手机上左右信息框与中央出牌区重叠,
+	# 收窄面板给出牌区让位; 溢出折行由 _relayout 的动态出牌区宽兜底)
+	lb.custom_minimum_size = Vector2(158 if Responsive.is_touch() else 146, 0)
 	lb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	lb.add_theme_font_size_override("normal_font_size",
-			16 if Responsive.is_touch() else 14)
+			15 if Responsive.is_touch() else 14)
 	row.add_child(lb)
 	return [panel, lb, av]
 
@@ -1725,10 +1728,16 @@ func _relayout() -> void:
 	var compact: bool = h < 660.0
 	var card_h := 134.0 if touch else 100.0
 	var field_w := 760.0 if touch else 640.0
-	var field_h := 280.0 if touch else 248.0
+	# PC 出牌区加高(248→276): 顶部提示行(本局玩法/命运卡横幅)之下放牌,
+	# 两排出牌 + 底部记牌器行完整放下, 互不重叠
+	var field_h := 280.0 if touch else 276.0
 	if compact:
-		field_w = 640.0   # 收窄让位两侧座位面板(面板 ~268 宽 + 左右余量)
-		field_h = 236.0 if touch else 232.0
+		field_w = 640.0   # 收窄让位两侧座位面板(面板 ~220 宽 + 左右余量)
+		field_h = 236.0 if touch else 260.0
+	# 防重叠兜底: 中央出牌区宽度绝不超过 两侧座位面板之间的净空
+	# (任务反馈: 手机窄视口上 左右信息框与出牌区重叠)。
+	# 触屏面板锚 w-256 / PC 锚 w-236, 左侧面板占 ~236/224, 各留 12px 缝
+	field_w = clampf(minf(field_w, w - (536.0 if touch else 496.0)), 420.0, 760.0)
 	var ops_h := 52.0 if touch else 44.0
 	var ops_w := 494.0 if touch else 414.0   # 操作行满编宽度(4 钮 + 间距)
 	# 顶部: 记牌/规则/设置 三钮贴右缘窄排(总宽 ~200), 回合文字限宽避让
@@ -1763,9 +1772,10 @@ func _relayout() -> void:
 	_seat_panels[1].position = Vector2(w / 2.0 - (128.0 if touch else 117.0), 8)
 	_opp_hands[1].position = Vector2(w / 2.0 + (150.0 if touch else 140.0), 12)
 	# 上家(左) 与 下家(右, 面板右缘留 36px, 整体左移不再贴边)
+	# (触屏面板实测宽 ~220 / PC ~208: 右锚 = 面宽 + 36)
 	_seat_panels[2].position = Vector2(16, h * 0.41)
 	_opp_hands[2].position = Vector2(30, 50)
-	_seat_panels[0].position = Vector2(w - (292.0 if touch else 270.0), h * 0.41)
+	_seat_panels[0].position = Vector2(w - (256.0 if touch else 236.0), h * 0.41)
 	_opp_hands[0].position = Vector2(w - 150, 108)
 	# 操作行(先定位: 手牌让位) — 卡底不得压按钮; 且不与左侧聊天行重叠
 	var ops_y := h - ops_h - 14.0
@@ -1784,9 +1794,9 @@ func _relayout() -> void:
 	field_panel.position = Vector2(field_x, field_y)
 	field_panel.custom_minimum_size = Vector2(field_w, field_h)
 	field_panel.size = Vector2(field_w, field_h)
-	# 手机(触屏)出牌区只有一行牌: 下移到顶部提示行(本局规则/命运卡横幅)之下,
-	# 不再与首行出牌的座位昵称重叠; PC 保持双行紧凑布局
-	var field_top := 44.0 if touch else 12.0
+	# PC 出牌区下移到顶部提示行(本局规则/命运卡横幅, y 6..30)之下 —
+	# 首行出牌的玩家昵称不再与横幅文字重叠; 触屏原本就在 44
+	var field_top := 44.0 if touch else 32.0
 	field_box.position = Vector2(20, field_top)
 	field_box.size = Vector2(field_w - 40, field_h - field_top - 34)
 	if trick_lbl != null:
@@ -1795,7 +1805,7 @@ func _relayout() -> void:
 	# 紧凑档: 两侧座位面板上移至顶部带(避开出牌区), 牌背列上移至顶角(避开面板)
 	if compact:
 		_seat_panels[2].position = Vector2(16, 220)
-		_seat_panels[0].position = Vector2(w - (292.0 if touch else 270.0), 220)
+		_seat_panels[0].position = Vector2(w - (256.0 if touch else 236.0), 220)
 		# 左上/右上角防重叠: 回合文字右移到上家牌背扇右侧(x≥64),
 		# 下家牌背扇下移到 记牌/规则/设置 三钮之下(y≥52)
 		info_label.position = Vector2(64, 12)
@@ -2406,6 +2416,15 @@ func _trim_field() -> void:
 	if box_w < 60.0:
 		return
 	var max_lines := 1 if (Responsive.is_touch() and size.y < 660.0) else 2
+	# 高度兜底(任务反馈: 保证两排不与底部记牌器行重叠): 按条目实高
+	# (昵称行+卡面)算出可用高度能容纳的行数, 与宽度行数取小
+	var entry_h := 0.0
+	for child in field_box.get_children():
+		if is_instance_valid(child) and not (child as Control).is_queued_for_deletion():
+			entry_h = maxf(entry_h, (child as Control).get_combined_minimum_size().y)
+	if entry_h > 0.0:
+		var rows_fit := int((field_box.size.y + 8.0) / (entry_h + 8.0))
+		max_lines = mini(max_lines, maxi(rows_fit, 1))
 	# 从最新(末尾)往回逐手模拟折行, 数出容量内能保留的手数
 	var kept: Array = []
 	var x := 0.0

@@ -390,10 +390,11 @@ func c_stats(_data: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func c_room_leave(_data: Dictionary) -> void:
+func c_room_leave(data: Dictionary) -> void:
 	if not is_server:
 		return
-	_flush(manager.leave(_sender()))
+	# final=true = 应用退出等彻底离开: 对局中座位也移除(不留"离线·AI 代管")
+	_flush(manager.leave(_sender(), bool(data.get("final", false))))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -477,7 +478,17 @@ func s_identity(data: Dictionary) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func s_welcome(data: Dictionary) -> void:
-	my_seat = int(data.get("seat", -1))
+	if is_server:
+		return
+	var seat := int(data.get("seat", -1))
+	if seat < 0 and in_room:
+		# 重连后服务器已无我们的座位(断线超时被移出/房间已销毁):
+		# 清掉残留的房间身份, 否则客户端永远停留"房间页"等不到任何广播
+		in_room = false
+		my_seat = -1
+		_session_token = ""
+		_had_view = false
+	my_seat = seat
 	if my_seat >= 0:
 		in_room = true
 		if _had_view:
@@ -622,6 +633,12 @@ func connect_to(p_address: String, p_port: int) -> bool:
 		return false
 	address = p_address
 	port = p_port
+	# 先关旧 peer 再建新: 重试路径反复 create_client 会堆积未关闭的
+	# ENet peer(端口/内存泄漏, 手机上表现为越连越卡)
+	var old_peer = multiplayer.multiplayer_peer
+	if old_peer != null:
+		old_peer.close()
+		multiplayer.multiplayer_peer = null
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, port)
 	if err != OK:
@@ -676,9 +693,9 @@ func drop_connection() -> void:
 		peer.close()
 
 
-func leave_room() -> void:
+func leave_room(final: bool = false) -> void:
 	if _is_connected():
-		_c_send("c_room_leave", {})
+		_c_send("c_room_leave", {"final": final})
 	_session_token = ""
 	in_room = false
 	my_seat = -1

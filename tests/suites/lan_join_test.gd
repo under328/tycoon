@@ -102,6 +102,11 @@ func _snapshot(t) -> void:
 	var j: Array = m.join_room(1001, "朋友", str(snap[0]["code"]), "cid-1001")
 	t.expect(_count(j, "s_room_state") >= 1, "第二人加入(加入者+房内广播)")
 	t.expect_eq(int(m.discovery_snapshot()[0]["players"]), 2, "人数=2")
+	# 房主补 1 个 AI: 发现页人数只计真人(任务反馈)
+	m.rooms[str(snap[0]["code"])].sit_bot()
+	var snap_bots: Array = m.discovery_snapshot()
+	t.expect_eq(snap_bots.size(), 1, "AI 补位后仍有空位则公开")
+	t.expect_eq(int(snap_bots[0]["players"]), 2, "人数不含 AI(=2)")
 	# 满员房间不公开
 	var full_code := str(snap[0]["code"])
 	for peer in range(1002, 1005):
@@ -110,8 +115,8 @@ func _snapshot(t) -> void:
 	# 压测房间不公开
 	var soak: Array = m.create_room(2000, "压测", {}, "cid-2000")
 	t.expect(_count(soak, "s_room_state") == 1, "压测房创建")
-	for code in m.rooms:
-		m.rooms[code].soak = true
+	for c in m.rooms:
+		m.rooms[c].soak = true
 	t.expect_eq(m.discovery_snapshot().size(), 0, "压测房间不公开")
 
 

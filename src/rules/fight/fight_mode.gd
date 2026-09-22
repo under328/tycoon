@@ -55,6 +55,10 @@ const SPECIALS := [
 		"desc": "所有怒气获取提升 50%"},
 	{"id": 14, "key": "sp_clover", "name": "四叶草", "icon": "🍀",
 		"desc": "闪避率 +10%, 好运常伴"},
+	{"id": 15, "key": "sp_phoenix", "name": "凤羽", "icon": "🪶",
+		"desc": "回合开始生命低于 35% 时回复 12%"},
+	{"id": 16, "key": "sp_ironwall", "name": "铁壁符", "icon": "🛡️",
+		"desc": "防御时获得 10% 生命护盾并额外 +10 怒气"},
 ]
 ## 每回合附带奇物第三选项的概率(下调等待、上调惊喜: 0.22 → 0.30)
 const SPECIAL_RATE := 0.30
@@ -157,7 +161,7 @@ func _init(seed_v: int = -1) -> void:
 	for i in 52:
 		deck.append(i)
 	_shuffle(deck)
-	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 	group = rng.randi() % GROUPS.size()
 	hp = 100
 	_refresh_stats()
@@ -479,6 +483,11 @@ func step(action: String) -> Array:
 		evs.append({"who": "p", "kind": "burn", "v": _burn_dmg})
 		if player_dead():
 			return evs
+	# 凤羽: 回合开始生命 <35% 时回复 12%(绝境续命)
+	if specials.has(15) and hp > 0 			and hp < int(int(stats["max_hp"]) * 0.35):
+		var ph := maxi(int(int(stats["max_hp"]) * 0.12), 2)
+		hp = mini(hp + ph, int(stats["max_hp"]))
+		evs.append({"who": "p", "kind": "heal", "v": ph})
 	# 泉涌: 回合开始回血
 	if bool(stats.get("regen", false)) and hp < int(stats["max_hp"]):
 		var rg := maxi(int(int(stats["max_hp"]) * 0.05), 2)
@@ -559,6 +568,9 @@ func step(action: String) -> Array:
 			_guarding = true   # 格挡: 本回合受击减免 80%
 			var heal := maxi(int(stats["max_hp"]) / 25, 3)
 			hp = mini(hp + heal, int(stats["max_hp"]))
+			if specials.has(16):   # 铁壁符: 护盾 + 怒气
+				shield += maxi(int(int(stats["max_hp"]) * 0.10), 2)
+				fury = mini(fury + _fury_gain(10), 100)
 			evs.append({"who": "p", "kind": "defend", "v": heal})
 		"ult":
 			# 奥义: 2.5 倍攻击必中 + 回复 20% 生命, 怒气清零
@@ -762,7 +774,7 @@ func start_next_floor() -> void:
 	run_won = false
 	slots.clear()
 	specials.clear()
-	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+	specials_left = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 	deck.clear()
 	for i in 52:
 		deck.append(i)
