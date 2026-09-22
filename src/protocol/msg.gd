@@ -2,4 +2,4 @@
 class_name Msg
 extends RefCounted
 
-const PROTOCOL_VERSION := 2  # v2: exchange_return 动作 + s_game_played.eight_cut
+const PROTOCOL_VERSION := 3  # v3: 修复 c_room_settings RPC 缺失(模式/规则此前未下发) + hello 携带昵称(重装找回)

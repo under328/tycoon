@@ -38,6 +38,7 @@ func _ready() -> void:
 				and ev.button_index == MOUSE_BUTTON_LEFT:
 			_close())
 	add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条, 页面内外一致
 
 	# 居中容器 + 弹窗面板
 	var center := CenterContainer.new()
@@ -135,6 +136,8 @@ func _set_tab(tab: String) -> void:
 	_tab_replay_btn.button_pressed = tab == "replay"
 	_tab_mission_btn.button_pressed = tab == "mission"
 	_tab_stats_btn.button_pressed = tab == "stats"
+	# 底部回执只在当前页签显示: 切页即清(避免"已删除回放"残留到别的页)
+	_toast.text = ""
 	_refresh()
 
 
@@ -162,7 +165,8 @@ func _build_achievements() -> void:
 			done += 1
 		_grid.add_child(_ach_row(a, unlocked))
 	var head := AppTheme.make_label(15, AppTheme.DIM)
-	head.text = tr("已解锁 %d / %d") % [done, WalletGd.ACHIEVEMENTS.size()]
+	head.text = tr("已解锁 %d / %d · 每枚成就 +2钻石, 集齐全部再 +36钻石") \
+			% [done, WalletGd.ACHIEVEMENTS.size()]
 	var wrap := PanelContainer.new()
 	wrap.add_theme_stylebox_override("panel",
 			AppTheme.flat(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0))
@@ -314,11 +318,36 @@ func _preload_mods() -> Array:
 	return GameStateGd.ROGUE_MODS
 
 
-## 对局回放: 独立页签 — 最近回放列表(点击观看 / 删除)
+## 对局回放: 独立页签 — 最近回放列表(点击观看 / 删除); 右上角"清空全部"
 func _build_replays() -> void:
 	var head := AppTheme.make_label(15, AppTheme.DIM)
 	head.text = tr("最近 %d 场回放 · 点击观看, ✕ 删除") % [Wallet.replays.size()]
-	_grid.add_child(head)
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var head_row := HBoxContainer.new()
+	head_row.add_theme_constant_override("separation", 10)
+	head_row.add_child(head)
+	# 右上角: 一键删除所有回放(二次确认, 3 秒不确认自动还原)
+	if not (Wallet.replays as Array).is_empty():
+		var armed := [false]
+		var clear_btn := AppTheme.make_button("🗑 清空全部", Vector2(118, 36), 13)
+		clear_btn.tooltip_text = "删除所有对局回放(不可恢复)"
+		clear_btn.pressed.connect(func() -> void:
+			Audio.play("click")
+			if not armed[0]:
+				armed[0] = true
+				clear_btn.text = "确认清空?"
+				var tw := clear_btn.create_tween()
+				tw.tween_interval(3.0)
+				tw.tween_callback(func() -> void:
+					armed[0] = false
+					if is_instance_valid(clear_btn) and clear_btn.is_inside_tree():
+						clear_btn.text = "🗑 清空全部")
+				return
+			Wallet.clear_replays()
+			_toast.text = "已删除全部回放"
+			_refresh())
+		head_row.add_child(clear_btn)
+	_grid.add_child(head_row)
 	if (Wallet.replays as Array).is_empty():
 		var empty := AppTheme.make_label(15, AppTheme.DIM)
 		empty.text = "还没有对局回放 — 完成一局本地大富豪后可在这里观看"

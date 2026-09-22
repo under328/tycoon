@@ -2,6 +2,159 @@
 # 逐条人工翻译。key = 简体中文源文(必须与代码字面量逐字一致, 含换行)。
 # 由 i18n_build.py 合并进 strings_db.gd; 其余语言缺词回退英语。
 T_FULL = {
+    "已连接 — 正在进入房间 %s …": {
+        "en": "Connected — entering room %s…",
+        "zh_TW": "已連線 — 正在進入房間 %s …",
+        "ja": "接続済み — 部屋 %s に入室中…",
+        "ko": "연결됨 — 방 %s 입장 중…"},
+    "正在搜索同 WiFi 房间…": {
+        "en": "Searching for rooms on this WiFi…",
+        "zh_TW": "正在搜尋同 WiFi 房間…",
+        "ja": "同じ WiFi の部屋を検索中…",
+        "ko": "같은 WiFi 방 검색 중…"},
+    "未发现同 WiFi 房间: 请确认两台设备在同一网络(路由器 AP 隔离会拦截发现), 并在防火墙放行本游戏;\n也可让房主点【复制邀请码】, 你点【粘贴邀请码, 一键加入】": {
+        "en": "No room found: make sure both devices are on the same network (router AP isolation blocks discovery) and allow this game in the firewall;\nor let the host tap [Copy Invite Code] and use [Paste Invite Code, One-tap Join].",
+        "zh_TW": "未發現同 WiFi 房間: 請確認兩台設備在同一網絡(路由器 AP 隔離會攔截發現), 並在防火牆放行本遊戲;\n也可讓房主點【複製邀請碼】, 你點【貼上邀請碼, 一鍵加入】",
+        "ja": "同じ WiFi の部屋が見つかりません: 2 台が同じネットワーク上にあるか確認し(AP 隔離は発見を妨げます)、ファイアウォールで本ゲームを許可してください;\nホストが【招待コードをコピー】し、あなたは【招待コードを貼り付けてワンタップ参加】できます",
+        "ko": "같은 WiFi 방을 못 찾았습니다: 두 기기가 같은 네트워크인지 확인하고(공유기 AP 격리가 검색을 막음) 방화벽에서 이 게임을 허용하세요;\n호스트가【초대 코드 복사】를, 당신은【초대 코드 붙여넣기 후 원터치 참가】를 사용하세요"},
+    "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)\n搜不到时: 在主机防火墙放行本游戏后重试(邀请码加入不受影响)": {
+        "en": "Same-WiFi friends: tap [Search Nearby Hosts] on the online page to join in one tap.\nRemote friends: tap [Copy Invite Code] and send it (contains all addresses).\nNot found: allow this game in the host's firewall and retry (invite code join is unaffected).",
+        "zh_TW": "同一 WiFi 的朋友: 聯機頁點【搜尋附近主機】一鍵加入\n異地朋友: 點【複製邀請碼】發給他(含全部地址)\n搜不到時: 在主機防火牆放行本遊戲後重試(邀請碼加入不受影響)",
+        "ja": "同じ WiFi の友達: オンラインページの【近くのホストを検索】でワンタップ参加\n遠隔の友達: 【招待コードをコピー】で送る(全アドレス付き)\n見つからない場合: ホストのファイアウォールで本ゲームを許可して再試行(招待コード参加は影響なし)",
+        "ko": "같은 WiFi 친구: 온라인 페이지의【주변 호스트 검색】으로 원터치 참가\n원격 친구:【초대 코드 복사】로 전달(전체 주소 포함)\n검색 안 될 때: 호스트 방화벽에서 이 게임을 허용 후 재시도(초대 코드 참가는 영향 없음)"},
+    "已连接 — 正在进入房间 %s …": {
+        "en": "Connected — entering room %s…",
+        "zh_TW": "已連線 — 正在進入房間 %s …",
+        "ja": "接続済み — 部屋 %s に入室中…",
+        "ko": "연결됨 — 방 %s 입장 중…"},
+    "退出了对局（AI 代管）": {
+        "en": "left the match (AI takeover)",
+        "zh_TW": "退出了對局（AI 代管）",
+        "ja": "対局を離脱（AI代行）",
+        "ko": "대국 퇴장（AI 대리）"},
+    "%s 退出对局 — AI 代管接管": {
+        "en": "%s left the match — AI takes over",
+        "zh_TW": "%s 退出對局 — AI 代管接管",
+        "ja": "%s が対局を離脱 — AI が代行",
+        "ko": "%s 님이 대국을 떠났습니다 — AI 대리 진행"},
+    "🤖 AI 代管": {
+        "en": "🤖 AI", "zh_TW": "🤖 AI 代管",
+        "ja": "🤖 AI代行", "ko": "🤖 AI 대리"},
+    "对局已结束 — 即将返回房间…": {
+        "en": "Match over — returning to the room…",
+        "zh_TW": "對局已結束 — 即將返回房間…",
+        "ja": "対局終了 — 部屋に戻ります…",
+        "ko": "대국 종료 — 방으로 돌아갑니다…"},
+    "狂暴!": {
+        "en": "ENRAGE!", "zh_TW": "狂暴!", "ja": "怒髪天!", "ko": "격노!"},
+    "离开后你的本场对局由 AI 代管, 你将返回房间页。全员退出时对局自动结束。": {
+        "en": "After leaving, AI takes over your match seat and you return to the room. The match auto-ends when everyone leaves.",
+        "zh_TW": "離開後你的本場對局由 AI 代管, 你將返回房間頁。全員退出時對局自動結束。",
+        "ja": "離脱後、あなたの対局は AI が代行し、部屋に戻ります。全員が離脱すると対局は自動終了します。",
+        "ko": "떠나면 AI가 당신의 대국 좌석을 대신하고 방으로 돌아갑니다. 전원이 떠나면 대국이 자동 종료됩니다."},
+    "装备槽已满 — 点击左上角要替换的槽位，或跳过": {
+        "en": "Slots full — tap the slot to replace (top corner), or skip",
+        "zh_TW": "裝備槽已滿 — 點擊左上角要替換的槽位，或跳過",
+        "ja": "枠が満杯 — 左上の交換する枠をタップ、またはスキップ",
+        "ko": "슬롯 가득 — 교체할 왼쪽 위 슬롯을 누르거나 건너뛰기"},
+    "返回房间": {
+        "en": "Back to Room", "zh_TW": "返回房間",
+        "ja": "部屋へ戻る", "ko": "방으로 돌아가기"},
+    "连击 ×%d": {
+        "en": "Combo ×%d", "zh_TW": "連擊 ×%d",
+        "ja": "コンボ ×%d", "ko": "콤보 ×%d"},
+    "闪避!": {
+        "en": "Evade!", "zh_TW": "閃避!", "ja": "回避!", "ko": "회피!"},
+    " · 本机房间": {
+        "en": " · this room",
+        "zh_TW": " · 本機房間",
+        "ja": " · 自部屋",
+        "ko": " · 내 방"},
+    "AI·丙": {
+        "en": "AI·C", "zh_TW": "AI·丙", "ja": "AI·C", "ko": "AI·C"},
+    "AI·乙": {
+        "en": "AI·B", "zh_TW": "AI·乙", "ja": "AI·B", "ko": "AI·B"},
+    "AI·甲": {
+        "en": "AI·A", "zh_TW": "AI·甲", "ja": "AI·A", "ko": "AI·A"},
+    "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]积分 %+d[/color]\n[color=#%s]剩 %d 张[/color][/center]": {
+        "en": "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]Pts %+d[/color]\n[color=#%s]%d left[/color][/center]",
+        "zh_TW": "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]積分 %+d[/color]\n[color=#%s]剩 %d 張[/color][/center]",
+        "ja": "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]スコア %+d[/color]\n[color=#%s]残り %d 枚[/color][/center]",
+        "ko": "[center]%s%s[color=#%s]%s[/color]\n[color=#%s]점수 %+d[/color]\n[color=#%s]%d장 남음[/color][/center]"},
+    "local table: AI 动作已回退(%s)": {
+        "en": "local table: AI action rolled back (%s)",
+        "zh_TW": "local table: AI 動作已回退(%s)",
+        "ja": "local table: AI アクションをロールバック(%s)",
+        "ko": "local table: AI 행동 롤백(%s)"},
+    "⚠ 连接中断 — 自动重连中…": {
+        "en": "⚠ Disconnected — reconnecting…",
+        "zh_TW": "⚠ 連線中斷 — 自動重連中…",
+        "ja": "⚠ 接続切断 — 自動再接続中…",
+        "ko": "⚠ 연결 끊김 — 자동 재연결 중…"},
+    "✓ 本机房间已可被同一 WiFi 的玩家【搜索附近主机】发现": {
+        "en": "✓ Your room is now discoverable via [Search Nearby Hosts] on the same WiFi",
+        "zh_TW": "✓ 本機房間已可被同一 WiFi 的玩家【搜尋附近主機】發現",
+        "ja": "✓ 自分の部屋が同じ WiFi の【近くのホストを検索】で見つけられます",
+        "ko": "✓ 내 방이 같은 WiFi의【주변 호스트 검색】에서 보입니다"},
+    "『天选者』判定: 首局每人均等 25% 概率; 此后按上一局身份加权 — [color=#e0a83c]大富豪[/color] 40% / [color=#e0a83c]富豪[/color] 30% / [color=#e0a83c]贫民[/color] 20% / [color=#e0a83c]大贫民[/color] 10%。\n": {
+        "en": "Destiny Picker: everyone has an equal 25% chance in game 1; later games weight by last rank — [color=#e0a83c]Tycoon[/color] 40% / [color=#e0a83c]Millionaire[/color] 30% / [color=#e0a83c]Pauper[/color] 20% / [color=#e0a83c]Beggar[/color] 10%.\n",
+        "zh_TW": "『天選者』判定: 首局每人均等 25% 機率; 此後按上一局身份加權 — [color=#e0a83c]大富豪[/color] 40% / [color=#e0a83c]富豪[/color] 30% / [color=#e0a83c]貧民[/color] 20% / [color=#e0a83c]大貧民[/color] 10%。\n",
+        "ja": "『天選者』判定: 初回は全員等確率 25%; 以降は前回の身分で加重 — [color=#e0a83c]大富豪[/color] 40% / [color=#e0a83c]富豪[/color] 30% / [color=#e0a83c]貧民[/color] 20% / [color=#e0a83c]大貧民[/color] 10%。\n",
+        "ko": "『천명자』 판정: 첫 국은 모두 동일 25%; 이후 이전 신분에 따라 가중 — [color=#e0a83c]최상위[/color] 40% / [color=#e0a83c]상위[/color] 30% / [color=#e0a83c]하위[/color] 20% / [color=#e0a83c]최하위[/color] 10%.\n"},
+    "关 闭": {
+        "en": "Close", "zh_TW": "關 閉", "ja": "閉じる", "ko": "닫기"},
+    "加入房间 %s 失败: 可能已满员、已开局或版本不一致": {
+        "en": "Failed to join room %s: it may be full, in game, or version-mismatched",
+        "zh_TW": "加入房間 %s 失敗: 可能已滿員、已開局或版本不一致",
+        "ja": "部屋 %s への参加に失敗: 満員・対局中・バージョン不一致の可能性",
+        "ko": "방 %s 참가 실패: 만원·진행 중·버전 불일치 가능성"},
+    "区别只有一条: 每局开局由本局的[color=#ffd166]『天选者』[/color]代全桌抽选一张[color=#7dd87d]『命运卡』[/color], 全场统一生效。\n": {
+        "en": "One difference only: at the start of each game the [color=#ffd166]Destiny Picker[/color] draws one [color=#7dd87d]Fate Card[/color] for the whole table, effective for everyone.\n",
+        "zh_TW": "區別只有一條: 每局開局由本局的[color=#ffd166]『天選者』[/color]代全桌抽選一張[color=#7dd87d]『命運卡』[/color], 全場統一生效。\n",
+        "ja": "違いはひとつだけ: 各ゲーム開始時、その局の[color=#ffd166]『天選者』[/color]がテーブル全員のために[color=#7dd87d]『運命カード』[/color]を 1 枚抽選し、全員に適用。\n",
+        "ko": "차이는 단 하나: 각 게임 시작 시 이번 국의[color=#ffd166]『천명자』[/color]가 전 테이블을 위해[color=#7dd87d]『운명 카드』[/color]를 1장 뽑아 전원에게 적용.\n"},
+    "命运卡共 [color=#b070e0]11 种[/color](见后几页), 分普通/史诗/传说三档稀有度。": {
+        "en": "Fate Cards come in [color=#b070e0]11 kinds[/color] (see next pages) across three rarities: Common / Epic / Legendary.",
+        "zh_TW": "命運卡共 [color=#b070e0]11 種[/color](見後幾頁), 分普通/史詩/傳說三檔稀有度。",
+        "ja": "運命カードは全 [color=#b070e0]11 種[/color](次ページ以降参照)、ノーマル/エピック/レジェンドの 3 レアリティ。",
+        "ko": "운명 카드는 총 [color=#b070e0]11종[/color](뒷 장 참조), 일반/에픽/전설 세 등급의 희귀도."},
+    "对局已结束 — 房主可开局下一局": {
+        "en": "Match over — the host can start the next one",
+        "zh_TW": "對局已結束 — 房主可開局下一局",
+        "ja": "対局終了 — ホストは次の局を開始できます",
+        "ko": "대국 종료 — 방장이 다음 국을 시작할 수 있습니다"},
+    "第 %d/%d 回合 · 第 %d/%d 局": {
+        "en": "Round %d/%d · Game %d/%d",
+        "zh_TW": "第 %d/%d 回合 · 第 %d/%d 局",
+        "ja": "第 %d/%d 回戦 · 第 %d/%d 局",
+        "ko": "%d/%d 라운드 · %d/%d 게임"},
+    "表情包": {
+        "en": "Stickers", "zh_TW": "表情包", "ja": "スタンプ", "ko": "스티커"},
+    "要不起 — 倒计时结束自动不要": {
+        "en": "Can't beat it — auto-pass when the countdown ends",
+        "zh_TW": "要不起 — 倒數結束自動不要",
+        "ja": "出せない — カウントダウン終了で自動パス",
+        "ko": "이길 수 없음 — 카운트다운 종료 시 자동 패스"},
+    "🔥 革命!": {
+        "en": "🔥 Revolution!",
+        "zh_TW": "🔥 革命!",
+        "ja": "🔥 革命!",
+        "ko": "🔥 혁명!"},
+    "命运二选一 · 第 %d 局": {
+        "en": "Fate Draft · Match %d",
+        "zh_TW": "命運二選一 · 第 %d 局",
+        "ja": "運命の二択 · 第 %d 局",
+        "ko": "운명 택1 · %d국"},
+    "等待 %s 选择命运卡…": {
+        "en": "Waiting for %s to pick a Fate Card…",
+        "zh_TW": "等待 %s 選擇命運卡…",
+        "ja": "%s が運命カードを選択中…",
+        "ko": "%s 님이 운명 카드 선택 중…"},
+    "🎲 重抽 (持有 %d)": {
+        "en": "🎲 Reroll (owned %d)",
+        "zh_TW": "🎲 重抽 (持有 %d)",
+        "ja": "🎲 再抽選 (所持 %d)",
+        "ko": "🎲 다시 뽑기 (보유 %d)"},
     "每日一次 · 奖励×2": {
         "en": "Once daily · 2× rewards",
         "zh_TW": "每日一次 · 獎勵×2",

@@ -74,6 +74,10 @@ func _refit_bleed_bg() -> void:
 			_bleed_bg.color = Color("232348")
 		elif p.ends_with("table.gd"):
 			_bleed_bg.color = Color("191934")
+		elif p.ends_with("fight_panel.gd"):
+			_bleed_bg.color = Color("191934")   # 本地格斗页底色
+		elif p.ends_with("fight_arena.gd"):
+			_bleed_bg.color = Color("1c1428")
 		else:
 			_bleed_bg.color = AppTheme.BG
 
@@ -120,8 +124,34 @@ func _fit_safe_area(c: Control) -> void:
 	var top := sa.position.y / sy
 	var right := (wsize.x - sa.end.x) / sx
 	var bottom := (wsize.y - sa.end.y) / sy
+	# 背景铺满整个视口(含避让条): 菜单暗角阴影/牌桌描金边框延伸到屏幕真边缘,
+	# 避让区与非避让区样式一致(否则条带是异色断层)
+	_expand_backdrop(c, left, top, canvas)
 	c.position = Vector2(left, top)
 	c.size = canvas - Vector2(left + right, top + bottom)
+
+
+## 场景根内缩后, 把其中的程序化背景节点反向扩到全视口。
+## 背景节点画的渐变/暗角/描金边框以自身 size 为画布, 扩大后样式自然铺满。
+func _expand_backdrop(c: Control, left: float, top: float, canvas: Vector2) -> void:
+	for ch in c.get_children():
+		if ch is Control and _is_backdrop(ch):
+			var bd := ch as Control
+			bd.anchor_left = 0.0
+			bd.anchor_top = 0.0
+			bd.anchor_right = 0.0
+			bd.anchor_bottom = 0.0
+			bd.position = Vector2(-left, -top)
+			bd.size = canvas
+			return
+
+
+func _is_backdrop(n: Node) -> bool:
+	var s: Script = n.get_script()
+	if s == null:
+		return false
+	var p := str(s.resource_path)
+	return p.ends_with("menu_background.gd") or p.ends_with("table_backdrop.gd")
 
 
 ## ESC 关闭"返回上一局"确认框
@@ -359,7 +389,10 @@ func _leave_fight_arena() -> void:
 	if lobby != null:
 		lobby.visible = true
 		_fit_safe_area(lobby)
-		if lobby.has_method("return_to_entry"):
+		# 离开竞技场 = 退出本场(人留在房间) → 回房间页等下一局
+		if lobby.has_method("return_to_room"):
+			lobby.return_to_room()
+		else:
 			lobby.return_to_entry()
 	Audio.play_bgm("lobby")
 
@@ -370,9 +403,26 @@ func _start_host() -> void:
 	var port: int = GameSettings.host_port
 	embed_server = NetNodeGd.start_embedded(self, port)
 	if embed_server == null:
-		lobby.show_status("本机服务器启动失败（端口 %d 被占用？）" % port,
+		# 端口被占用(常见: 旧实例/进程尚未完全退出) → 1 秒后自动重试一次
+		lobby.show_status("本机服务器启动失败(端口 %d 被占用), 1 秒后自动重试…" % port,
 				Color("ff6b6b"))
+		get_tree().create_timer(1.0).timeout.connect(func() -> void:
+			if embed_server != null:
+				return   # 重试前已在别处启动成功
+			embed_server = NetNodeGd.start_embedded(self, port)
+			if embed_server != null:
+				_after_host_started(port)
+			else:
+				lobby.show_status("本机服务器启动失败: 端口 %d 被占用"
+						+ "(可能有另一个游戏实例在运行)。请关闭旧实例后重试;"
+						+ " 或用【搜索附近主机】/邀请码加入朋友的房间" % port,
+						Color("ff6b6b")))
 		return
+	_after_host_started(port)
+
+
+## 本机开房成功后的公共收尾: 连接内嵌服 + 自动建房 + 展示主机信息卡
+func _after_host_started(port: int) -> void:
 	net.disconnect_all()
 	net.auto_reconnect = true
 	net.connect_to("127.0.0.1", port)

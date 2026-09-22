@@ -38,6 +38,7 @@ func _ready() -> void:
 			_save_all()
 			_close())
 	add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条, 页面内外一致
 
 	# 居中容器
 	var center := CenterContainer.new()
@@ -121,7 +122,10 @@ func _ready() -> void:
 	lang_row.add_theme_constant_override("separation", 12)
 	box.add_child(lang_row)
 	_lang_btn = OptionButton.new()
-	_lang_btn.custom_minimum_size = Vector2(220, 38)
+	# 触屏热区: 下拉框与弹出列表整体加大(16 项小字在手机上难点选)
+	var lang_h := 48 if Responsive.is_touch() else 38
+	_lang_btn.custom_minimum_size = Vector2(240 if Responsive.is_touch() else 220, lang_h)
+	_lang_btn.add_theme_font_size_override("font_size", 17 if Responsive.is_touch() else 15)
 	var cur_lang := 0
 	var i18n := get_node_or_null("/root/I18n")
 	for i in I18n.LANGUAGES.size():
@@ -133,6 +137,13 @@ func _ready() -> void:
 	_lang_btn.select(cur_lang)
 	_lang_btn.item_selected.connect(_on_language)
 	lang_row.add_child(_lang_btn)
+	# 弹出列表: 字号/行高随触屏加大, 默认收起(点选后展开选择)
+	var pop := _lang_btn.get_popup()
+	if pop != null:
+		if Responsive.is_touch():
+			pop.add_theme_font_size_override("font_size", 18)
+			pop.add_theme_constant_override("v_separation", 6)
+		pop.max_size = Vector2i(0, 460) if Responsive.is_touch() else Vector2i(0, 380)
 	var lang_hint := AppTheme.make_label(13, AppTheme.DIM)
 	lang_hint.text = tr("切换后全界面即时生效")
 	lang_row.add_child(lang_hint)

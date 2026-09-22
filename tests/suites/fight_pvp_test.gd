@@ -1,5 +1,5 @@
-## 联机格斗对战测试(回合制 v2): 每回合二选一编成 → 玩家互殴(无怪) →
-## 先胜 3 回合获胜。覆盖: 纯规则 draft/battle/计分 / 控制器 AI+超时 /
+## 联机格斗对战测试(回合制 v4): 每回合二选一编成 → 玩家互殴(无怪) →
+## 五回合打满, 胜场多者赢。覆盖: 纯规则 draft/battle/计分 / 控制器 AI+超时 /
 ## RoomManager 集成(4 人房: 前 2 座互殴, 其余观战)。
 extends RefCounted
 
@@ -234,10 +234,10 @@ func _test_full_match_sim(t: T) -> void:
 				FightPvpGd.apply_action(st, t0, "attack", rng)
 			"round_end":
 				t.expect(FightPvpGd.advance_round(st, rng) or true, "推进回合")
-	t.expect(str(st["phase"]) == "over", "先胜 3 回合 → 终局")
+	t.expect(str(st["phase"]) == "over", "五回合打满 → 终局")
 	t.expect(int(st["winner"]) in [0, 1], "整场胜者产生")
-	t.expect(int(st["score"][int(st["winner"])]) >= 3, "胜者至少 3 分")
-	t.expect(int(st["round_num"]) <= 5, "不超过 5 回合")
+	t.expect(int(st["score"][int(st["winner"])]) >= 3, "胜者至少 3 分(胜场多者赢)")
+	t.expect(int(st["round_num"]) == 5, "固定打满 5 回合(不提前终结)")
 
 
 ## ── 控制器: AI 托管 / 超时 / 回合过场 ──
@@ -317,12 +317,21 @@ func _test_manager_integration(t: T) -> void:
 	var foe_peer := 100 if turn == 1 else 200
 	out = m.fight_act(foe_peer, "attack")
 	t.expect(_has_error(out), "回合外行动被拒")
-	var actor_peer := 100 if turn == 0 else 200
-	var foe := 1 - turn
-	var hp_before := int(ctl.state["battle"]["hp"][foe])
-	out = m.fight_act(actor_peer, "attack")
-	t.expect(not _has_error(out), "回合方攻击通过")
-	t.expect(int(ctl.state["battle"]["hp"][foe]) < hp_before, "伤害生效")
+	# 攻击可能被闪避(新增机制) → 轮流攻击直至伤害落地(有界)
+	var dmg_landed := false
+	var attempts := 0
+	while attempts < 16 and not dmg_landed and ctl.state["battle"].has("turn"):
+		attempts += 1
+		var t2 := int(ctl.state["battle"]["turn"])
+		var actor_peer := 100 if t2 == 0 else 200
+		var foe := 1 - t2
+		var hp_before := int(ctl.state["battle"]["hp"][foe])
+		out = m.fight_act(actor_peer, "attack")
+		t.expect(not _has_error(out), "回合方攻击通过")
+		var ha := int(ctl.state["battle"]["hp"][foe])
+		if ha < hp_before:
+			dmg_landed = true
+	t.expect(dmg_landed, "伤害生效(含闪避重试)")
 	# 踢到终局: 超时托管互殴至收尾回房
 	guard = 0
 	while m.rooms.get(code) != null and m.rooms[code].match_ctl != null \

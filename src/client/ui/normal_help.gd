@@ -34,6 +34,7 @@ func _ready() -> void:
 	bg.color = AppTheme.BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	Responsive.page_bleed(self, AppTheme.BG)   # 避让条露出同色, 页面内外一致
 
 	_title = _label(32, AppTheme.GOLD)
 	_title.position = Vector2(0, 46)
@@ -44,14 +45,14 @@ func _ready() -> void:
 	_body = RichTextLabel.new()
 	_body.bbcode_enabled = true
 	_body.scroll_active = false
-	_body.position = Vector2(160, 120)
+	_body.position = Vector2(160, 106)
 	_body.custom_minimum_size = Vector2(960, 130)
 	_body.size = Vector2(960, 130)
 	_body.add_theme_font_size_override("normal_font_size", 18)
 	add_child(_body)
 
 	_fig = Control.new()
-	_fig.position = Vector2(160, 290)
+	_fig.position = Vector2(160, 242)
 	_fig.custom_minimum_size = Vector2(960, 290)
 	add_child(_fig)
 
@@ -100,11 +101,17 @@ func _relayout() -> void:
 	var cx := (w - 960.0) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
 	var sq := h < 660.0
+	_title.position = Vector2(0, 20.0 if sq else 46.0)
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (64.0 if sq else 120.0) + dy)
+	_body.position = Vector2(cx, (68.0 if sq else 106.0) + dy)
 	_body.size = Vector2(960, 130)
-	_fig.position = Vector2(cx, (226.0 if sq else 290.0) + dy)
+	# 图示整体上移: 紧贴正文; 矮屏按剩余高度等比缩小, 底部不压页码点/按钮
+	var fig_y := (202.0 if sq else 242.0) + dy
+	var dots_y := (h - 132.0 if sq else 610.0) + dy
+	var fs := minf(1.0, maxf(dots_y - 14.0 - fig_y, 120.0) / 330.0)
+	_fig.scale = Vector2(fs, fs)
+	_fig.position = Vector2(cx + (960.0 - 960.0 * fs) * 0.5, fig_y)
 	_fig.size = Vector2(960, (260.0 if sq else 290.0))
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,

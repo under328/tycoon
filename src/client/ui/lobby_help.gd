@@ -51,6 +51,7 @@ func _ready() -> void:
 		if ev is InputEventMouseButton and ev.pressed:
 			_close())
 	add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条
 
 	# 居中实底弹窗面板
 	var center := CenterContainer.new()

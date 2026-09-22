@@ -18,6 +18,9 @@ const FIRST_WIN_DIAMONDS := 2
 const CODEX_TARGET := 11   # 命运卡图鉴全收集目标   # 每日首胜奖励钻石数
 const HISTORY_MAX := 20         # 对局记录保留条数
 const REPLAY_MAX := 10          # 对局回放保留场数
+## 成就奖励: 每解锁 1 枚成就 +2 钻石; 集齐全部成就额外 +36 钻石
+const ACH_REWARD_DIAMONDS := 2
+const ACH_ALL_BONUS := 36
 
 ## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
 const SIGN_REWARDS := [
@@ -58,6 +61,19 @@ const ACHIEVEMENTS := [
 	{"id": "rogue_win_10", "name": "命运主宰", "desc": "肉鸽模式取得 10 场胜利"},
 	{"id": "codex_all", "name": "命运收藏家", "desc": "图鉴见齐全部 10 张命运卡"},
 	{"id": "pvp_win_1", "name": "擂台新人", "desc": "联机格斗对战取得 1 场胜利"},
+	{"id": "wins_100", "name": "百战王者", "desc": "累计获胜 100 场"},
+	{"id": "diamonds_500", "name": "钻石大亨", "desc": "累计获得 500 颗钻石"},
+	{"id": "gold_5000", "name": "富可敌国", "desc": "金币持有量达到 5000"},
+	{"id": "quads_10", "name": "爆破专家", "desc": "累计打出 10 次四条(炸弹)"},
+	{"id": "signer_30", "name": "签到达人", "desc": "累计签到 30 天"},
+	{"id": "shopper_20", "name": "购物狂", "desc": "商城累计消费 20 次"},
+	{"id": "fight_clear_10", "name": "试炼传说", "desc": "通关格斗试炼 10 次"},
+	{"id": "endless_3", "name": "无尽远征", "desc": "无尽挑战到达第 3 层"},
+	{"id": "rogue_win_30", "name": "命运之主", "desc": "肉鸽模式取得 30 场胜利"},
+	{"id": "codex_take_30", "name": "与命运共舞", "desc": "命运卡累计选用 30 次"},
+	{"id": "relics_all", "name": "奇物收藏家", "desc": "格斗奇物图鉴收集过半"},
+	{"id": "daily_7", "name": "每日标兵", "desc": "累计 7 天参与每日挑战"},
+	{"id": "pvp_win_10", "name": "擂台名将", "desc": "联机格斗对战取得 10 场胜利"},
 ]
 
 ## 特殊道具: effect 决定生效方式
@@ -86,6 +102,12 @@ const SPECIALS := [
 	{"id": "item_clear_record", "name": "清空战绩", "price": 80,
 		"currency": "diamonds", "effect": "clearr", "stack": false,
 		"desc": "立即清空全部对局记录、胜负统计与各模式战绩(不可逆)"},
+	{"id": "item_counter_day", "name": "记牌器·日卡", "price": 40,
+		"currency": "diamonds", "effect": "cday", "stack": false,
+		"desc": "激活后至当日结束, 本机所有对局均可使用记牌器"},
+	{"id": "item_counter_once", "name": "记牌器·次卡", "price": 80,
+		"currency": "gold", "effect": "conce", "stack": true,
+		"desc": "1 张 = 1 场对局的记牌器使用权, 开局自动消耗 1 张"},
 ]
 
 var gold := 500       # 默认 500 金币
@@ -126,6 +148,10 @@ var diamond_mult := 1          # 当前钻石倍率
 var mission_day := ""          # 任务所属日期
 var mission_progress := {}     # id -> 进度
 var mission_claimed := {}      # id -> true(已领取)
+var quads := 0                 # 累计打出四条次数(成就统计)
+var endless_best := 0          # 无尽挑战历史最高层(成就统计)
+var counter_day := ""          # 记牌器·日卡生效日期(空=未激活)
+var all_ach_bonus := false     # 集齐全部成就的 +36 钻奖励是否已发放
 
 ## 本地战绩统计
 var local_matches := 0
@@ -195,6 +221,10 @@ func _reset_defaults() -> void:
 	mission_day = ""
 	mission_progress = {}
 	mission_claimed = {}
+	quads = 0
+	endless_best = 0
+	counter_day = ""
+	all_ach_bonus = false
 	local_matches = 0
 	local_wins = 0
 
@@ -271,6 +301,10 @@ func _read_into(path: String) -> bool:
 	mission_progress = mp if mp is Dictionary else {}
 	var mc = cf.get_value("wallet", "mission_claimed", {})
 	mission_claimed = mc if mc is Dictionary else {}
+	quads = int(cf.get_value("wallet", "quads", 0))
+	endless_best = int(cf.get_value("wallet", "endless_best", 0))
+	counter_day = str(cf.get_value("wallet", "counter_day", ""))
+	all_ach_bonus = bool(cf.get_value("wallet", "all_ach_bonus", false))
 	return true
 
 
@@ -318,6 +352,10 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "mission_day", mission_day)
 	cf.set_value("wallet", "mission_progress", mission_progress)
 	cf.set_value("wallet", "mission_claimed", mission_claimed)
+	cf.set_value("wallet", "quads", quads)
+	cf.set_value("wallet", "endless_best", endless_best)
+	cf.set_value("wallet", "counter_day", counter_day)
+	cf.set_value("wallet", "all_ach_bonus", all_ach_bonus)
 	if cf.save(tmp) == OK:
 		DirAccess.rename_absolute(
 				ProjectSettings.globalize_path(tmp),
@@ -529,6 +567,7 @@ func note_rogue_mod(mod_id: String, taken: bool) -> void:
 func note_relic(sp_id: int) -> void:
 	relic_seen[int(sp_id)] = int(relic_seen.get(int(sp_id), 0)) + 1
 	_mark_dirty()
+	check_achievements()   # 奇物收藏家成就即时解锁
 
 
 ## ── 每日任务 ──
@@ -626,7 +665,8 @@ func _days_shift(day: String, delta: int) -> String:
 
 ## ── 成就 ──
 
-## 按当前统计求值全部成就, 新解锁的入列并广播; 返回本次新解锁列表
+## 按当前统计求值全部成就, 新解锁的入列并广播; 返回本次新解锁列表。
+## 奖励: 每枚成就解锁 +2 钻石; 集齐全部成就额外 +36 钻石(一次性)。
 func check_achievements() -> Array:
 	var stats := {
 		"wins": local_wins, "matches": local_matches,
@@ -638,6 +678,9 @@ func check_achievements() -> Array:
 		"revives": revives, "fight_clears": fight_clears,
 		"rogue_wins": rogue_wins, "pvp_wins": pvp_wins,
 		"daily_days": daily_days, "codex_seen": mod_seen.size(),
+		"quads": quads, "endless_best": endless_best,
+		"sign_total": sign_total, "codex_taken": _codex_taken_total(),
+		"relic_seen": relic_seen.size(),
 	}
 	var newly: Array = []
 	for a in ACHIEVEMENTS:
@@ -648,9 +691,23 @@ func check_achievements() -> Array:
 			unlocked.append(id)
 			newly.append(a)
 	if not newly.is_empty():
+		diamonds += newly.size() * ACH_REWARD_DIAMONDS
+		diamonds_earned += newly.size() * ACH_REWARD_DIAMONDS
+		# 集齐全部成就: 一次性发放 +36 钻
+		if not all_ach_bonus and unlocked.size() >= ACHIEVEMENTS.size():
+			all_ach_bonus = true
+			diamonds += ACH_ALL_BONUS
+			diamonds_earned += ACH_ALL_BONUS
 		_mark_dirty()
 		achievements_changed.emit(newly)
 	return newly
+
+
+func _codex_taken_total() -> int:
+	var n := 0
+	for k in mod_taken:
+		n += int(mod_taken[k])
+	return n
 
 
 func _ach_met(id: String, s: Dictionary) -> bool:
@@ -678,6 +735,19 @@ func _ach_met(id: String, s: Dictionary) -> bool:
 		"rogue_win_10": return int(s.get("rogue_wins", 0)) >= 10
 		"codex_all": return int(s.get("codex_seen", 0)) >= CODEX_TARGET
 		"pvp_win_1": return int(s.get("pvp_wins", 0)) >= 1
+		"wins_100": return int(s.get("wins", 0)) >= 100
+		"diamonds_500": return int(s.get("diamonds_earned", 0)) >= 500
+		"gold_5000": return int(s.get("gold", 0)) >= 5000
+		"quads_10": return int(s.get("quads", 0)) >= 10
+		"signer_30": return int(s.get("sign_total", 0)) >= 30
+		"shopper_20": return int(s.get("purchases", 0)) >= 20
+		"fight_clear_10": return int(s.get("fight_clears", 0)) >= 10
+		"endless_3": return int(s.get("endless_best", 0)) >= 3
+		"rogue_win_30": return int(s.get("rogue_wins", 0)) >= 30
+		"codex_take_30": return int(s.get("codex_taken", 0)) >= 30
+		"relics_all": return int(s.get("relic_seen", 0)) >= 8
+		"daily_7": return int(s.get("daily_days", 0)) >= 7
+		"pvp_win_10": return int(s.get("pvp_wins", 0)) >= 10
 	return false
 
 
@@ -746,8 +816,12 @@ func buy_item(item_id: String) -> bool:
 				diamond_mult_day = _today()
 				diamond_mult = 3
 				double_diamond_day = _today()  # 三倍覆盖双倍(同日只留一条记录)
+			"cday":
+				counter_day = _today()
 			"clearr":
 				clear_records()
+			"conce":
+				pass   # 次卡: 入库存按次消耗(开局时 consume_counter_use)
 		purchases += 1
 		check_achievements()
 		_mark_dirty()
@@ -773,6 +847,43 @@ func clear_records() -> void:
 	daily_best_round = 0
 	daily_best_hp = 0
 	daily_days = 0
+	_mark_dirty()
+
+
+## ── 记牌器道具(日卡 40 钻 / 次卡 80 金, 购买后才能使用) ──
+
+## 记牌器当前是否可用: 日卡当日生效, 或持有次卡
+func counter_active() -> bool:
+	return counter_day == _today() or item_count("item_counter_once") > 0
+
+
+## 开局占用记牌器: 日卡当日不限次; 否则消耗 1 张次卡。无可用返回 false。
+func consume_counter_use() -> bool:
+	if counter_day == _today():
+		return true
+	return consume_item("item_counter_once")
+
+
+## 记录一次四条(成就统计; 我方打出时由牌桌调用)
+func note_quad() -> void:
+	quads += 1
+	check_achievements()
+	_mark_dirty()
+
+
+## 记录无尽挑战到达层数(成就统计; 格斗页开新层时调用)
+func note_endless(floor_num: int) -> void:
+	if floor_num > endless_best:
+		endless_best = floor_num
+		check_achievements()
+		_mark_dirty()
+
+
+## ── 对局回放 ──
+
+## 清空全部回放(档案页"删除所有回放"按钮)
+func clear_replays() -> void:
+	replays = []
 	_mark_dirty()
 
 

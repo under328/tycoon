@@ -65,7 +65,8 @@ static func rank_value_label(v: int) -> String:
 
 static func label(card: int) -> String:
 	if is_joker(card):
-		return "小王" if card == 52 else "大王"
+		# 52/53 基础王, 54/55 = 『王者归来』扩展王: 偶数小王 / 奇数大王
+		return "小王" if card % 2 == 0 else "大王"
 	return "%s%s" % [rank_label(card), SUIT_NAMES[suit(card)]]
 
 

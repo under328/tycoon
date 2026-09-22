@@ -27,8 +27,8 @@ func _mk_arena() -> void:
 	root.add_child(arena)
 	arena.size = root.size
 	# 手动指定皮肤(无 net 时刷新不覆盖)
-	(arena._side[0]["avatar"] as Control).skin_id = "skin_aka"
-	(arena._side[1]["avatar"] as Control).skin_id = "skin_kitsu"
+	(arena._hud[0]["avatar"] as Control).skin_id = "skin_aka"
+	(arena._hud[1]["avatar"] as Control).skin_id = "skin_kitsu"
 
 
 func _view_draft(transformed: bool) -> Dictionary:

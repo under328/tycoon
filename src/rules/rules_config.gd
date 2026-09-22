@@ -16,6 +16,8 @@ static func defaults() -> Dictionary:
 		"mode": "normal",   # normal | rogue | fight(联机格斗对战: 前2座互殴, 其余观战)
 		"rogue": false,
 		"rogue_mod": "",
+		# 本地肉鸽: 命运卡由玩家(座位0)自选, 不启用天选者(联机概率代选专用)
+		"rogue_picker_local": false,
 	}
 
 

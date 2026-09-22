@@ -16,6 +16,7 @@ signal errored(code: String, msg: String)
 signal kicked_off(reason: String)
 signal stats_updated(entry: Dictionary)
 signal fight_state(view: Dictionary)   # 联机格斗对战: 按座位裁剪的战斗视图
+signal fight_events(events: Array)   # 格斗战斗事件(伤害/暴击/闪避/奥义…演出驱动)
 signal server_bind_failed(port: int, err: int)   # 专用服端口占用(占用时进程应退出而非空转)
 
 const MsgC = preload("res://src/protocol/msg.gd")
@@ -42,9 +43,11 @@ var last_room_state: Dictionary = {}
 var my_seat := -1
 var in_room := false
 var autoplay := false          # E2E：轮到自己自动出牌
+var client_id_override := ""   # E2E 单进程多客户端: 覆盖 GameSettings 的设备身份
 var address := "127.0.0.1"
 var port := 24565
 var auto_reconnect := true     # 掉线后凭 token 自动重连
+var last_kick := {}            # 最近一次被踢的完整数据(版本不一致等明细)
 var _session_token := ""
 var _want_connection := false
 var _retry_timer := 0.0
@@ -100,6 +103,10 @@ func _ready() -> void:
 			push_warning("局域网发现端口 %d 绑定失败(不影响游戏联机)" % (port_v + LanDisc.PORT_OFFSET))
 		print("[server] Tycoon 服务器已启动 端口=%d ai_delay=%dms phase_delay=%dms" % [
 			port_v, ai_ms, phase_ms])
+		# Windows 防火墙是"同一 WiFi 连不上"的最常见原因 → 后台静默放行本程序
+		# (需要管理员权限; 失败不影响服务器, 大厅会给出手动放行指引)
+		if OS.has_feature("windows"):
+			_firewall_fix_async()
 
 
 func _process(delta: float) -> void:
@@ -122,6 +129,26 @@ func _poll_discovery() -> void:
 			continue
 		_disc.set_dest_address(_disc.get_packet_ip(), _disc.get_packet_port())
 		_disc.put_packet(LanDisc.make_reply(manager.discovery_snapshot(), _listen_port))
+
+
+## Windows 防火墙放行(后台线程): 程序级入站规则覆盖 游戏 UDP/健康检查 TCP/发现 UDP。
+## netsh 需要管理员; 无权限时失败退出, 打印提示即可(不阻塞、不影响启动)。
+func _firewall_fix_async() -> void:
+	var t := Thread.new()
+	t.start(func() -> void:
+		var exe := OS.get_executable_path()
+		var args := PackedStringArray([
+			"advfirewall", "firewall", "add", "rule",
+			"name=Tycoon-Daifugo-Online", "dir=in", "action=allow",
+			"program=" + exe, "enable=yes", "profile=any",
+		])
+		var out: Array = []
+		var code := OS.execute("netsh", args, out, 10.0)
+		if code == 0:
+			print("[server] 防火墙放行规则已就绪(Tycoon-Daifugo-Online)")
+		else:
+			print("[server] 防火墙自动放行失败(需管理员) — 若手机连不上, "
+					+ "请手动放行本程序或运行 deploy/allow_firewall.bat"))
 
 
 ## 健康检查 + 内置下载服务: GET / → JSON 状态; GET /download → 安装包列表页;
@@ -279,11 +306,11 @@ func _on_peer_disconnected(peer: int) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func c_hello(ver: int, token: String, client_id: String, skin_id: String = "",
-		card_id: String = "") -> void:
+		card_id: String = "", nick: String = "") -> void:
 	if not is_server:
 		return
 	_flush(manager.hello(multiplayer.get_remote_sender_id(), ver, str(token),
-			str(client_id), str(skin_id), str(card_id)))
+			str(client_id), str(skin_id), str(card_id), str(nick)))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -334,6 +361,7 @@ func c_fight_act(data: Dictionary) -> void:
 	_flush(manager.fight_act(_sender(), str(data.get("action", "attack"))))
 
 
+@rpc("any_peer", "call_remote", "reliable")
 func c_room_settings(data: Dictionary) -> void:
 	if not is_server:
 		return
@@ -417,7 +445,35 @@ func c_exchange_return(data: Dictionary) -> void:
 	_flush(manager.exchange_return(_sender(), data.get("cards", [])))
 
 
+@rpc("any_peer", "call_remote", "reliable")
+func c_game_leave(_data: Dictionary) -> void:
+	if not is_server:
+		return
+	# 退出本场对局(人留在房间): 按对局类型分流; 双方都退 → 对局自动结束
+	var room = manager.room_of_peer(_sender())
+	if room == null or room.match_ctl == null:
+		return
+	if str(room.match_ctl.get("kind")) == "fight":
+		_flush(manager.fight_leave(_sender()))
+	else:
+		_flush(manager.game_leave(_sender()))
+
+
 # ================================================================ S → C
+
+## 服务器身份簿找回昵称(重装后 client_id 不变 → 免备份码恢复)
+@rpc("authority", "call_remote", "reliable")
+func s_identity(data: Dictionary) -> void:
+	if is_server:
+		return
+	var nk := str(data.get("nickname", "")).strip_edges()
+	if nk == "" or nk == "玩家":
+		return
+	var gs := get_node_or_null("/root/GameSettings")
+	if gs != null and str(gs.nickname).strip_edges() != nk:
+		gs.nickname = nk
+		gs.save_settings()
+
 
 @rpc("authority", "call_remote", "reliable")
 func s_welcome(data: Dictionary) -> void:
@@ -511,6 +567,11 @@ func s_fight_state(data: Dictionary) -> void:
 		return
 	latest_fight = data.get("view", {}).duplicate(true)
 	fight_state.emit(latest_fight)
+	# 战斗事件(伤害/暴击/闪避/奥义…)必须转发 — 此前被丢弃,
+	# 客户端永远看不到攻击动画与伤害数字, 血条变化也失去反馈语境
+	var evs: Array = data.get("events", [])
+	if not (evs as Array).is_empty():
+		fight_events.emit((evs as Array).duplicate(true))
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -518,6 +579,7 @@ func s_kicked(data: Dictionary) -> void:
 	if is_server:
 		return
 	var reason: String = str(data.get("reason", ""))
+	last_kick = data.duplicate(true)
 	if reason == "version":
 		auto_reconnect = false
 		_want_connection = false
@@ -622,6 +684,11 @@ func leave_room() -> void:
 	my_seat = -1
 	latest_view = {}
 	latest_fight = {}
+
+
+## 退出本场对局但留在房间(座位 AI 代管; 双方都退则对局自动结束)。
+func leave_match() -> void:
+	_c_send("c_game_leave", {})
 
 
 func disconnect_all() -> void:
@@ -762,7 +829,7 @@ func _c_send(event: String, data: Dictionary) -> void:
 		return
 	if event == "c_hello":
 		rpc_id(1, "c_hello", MsgC.PROTOCOL_VERSION, _session_token, _client_id(),
-				_client_skin(), _client_card())
+				_client_skin(), _client_card(), _name())
 		return
 	# 握手(welcome)完成前, 房间操作排队——服务器必须先知道座位归属
 	if not _welcomed:
@@ -814,6 +881,8 @@ func _client_card() -> String:
 
 
 func _client_id() -> String:
+	if client_id_override != "":
+		return client_id_override   # E2E 双客户端: 单进程内区分身份
 	var gs := get_node_or_null("/root/GameSettings")
 	if gs != null:
 		return str(gs.client_id)
@@ -821,11 +890,10 @@ func _client_id() -> String:
 
 
 func _name() -> String:
-	# 兼容无 autoload 的 E2E 环境
+	# 兼容无 autoload 的 E2E 环境; 空昵称兜底(旧档可能存过空串)
 	var gs := get_node_or_null("/root/GameSettings")
-	if gs != null:
-		return str(gs.nickname)
-	return "玩家"
+	var nk := str(gs.nickname).strip_edges() if gs != null else ""
+	return nk if nk != "" else "玩家"
 
 
 func _flush(out: Array) -> void:

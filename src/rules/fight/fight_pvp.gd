@@ -1,5 +1,5 @@
-## 联机格斗对战纯规则 v3(回合制): 5 回合, 每回合双方各自『二选一』抽牌 →
-## 玩家之间对战(无怪), 先胜 3 回合获胜。
+## 联机格斗对战纯规则 v4(回合制): 共 5 回合, 每回合双方各自『二选一』抽牌 →
+## 玩家之间对战(无怪), 五回合打满后胜场多者赢。
 ## 抽牌与本地格斗试炼同源并满足联机语义:
 ## - 双方从同一副 52 张牌中各自独立抽取 — 一张牌被抽走即从牌库移除,
 ##   对方永远不会抽到同一张(稀有金框 200+ 编码在落牌时剥离);
@@ -15,10 +15,9 @@ const FightGd = preload("res://src/rules/fight/fight_mode.gd")
 const CardsGd = preload("res://src/rules/cards.gd")
 
 const ROUNDS := 5
-const WIN_SCORE := 3          # 先胜 3 回合获胜(5 回合两日决胜)
 const TURN_SECONDS := 20
 const PICK_SECONDS := 30
-const SPECIAL_RATE := 0.22    # 每回合附带奇物第三选项概率(与本地一致)
+const SPECIAL_RATE := 0.30    # 每回合附带奇物第三选项概率(与本地一致)
 const RARE_RATE := 0.12       # 稀有普通牌(金框, 200+ 编码)
 
 
@@ -51,7 +50,8 @@ static func new_state(fighters: Array, names: Dictionary) -> Dictionary:
 	var per := {}
 	for seat in fighters:
 		per[seat] = {
-			"slots": [], "specials": [], "specials_left": [0, 1, 2, 3, 4, 5, 6, 7],
+			"slots": [], "specials": [],
+			"specials_left": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
 			"pair": [], "bonus_relic": -1, "pairs_left": 1,
 			"locked": -1, "fury_carry": 0, "done": true,
 		}
@@ -70,11 +70,21 @@ static func new_state(fighters: Array, names: Dictionary) -> Dictionary:
 		"round_winner": -1,
 		"winner": -1,
 		"log": [],
+		"left": {},
 	}
 
 
 static func is_fighter(st: Dictionary, seat: int) -> bool:
 	return (st["fighters"] as Array).has(seat)
+
+
+## 玩家退出本场: 标记 + 对局日志(留下的人可见"AI 代管"提示)
+static func mark_left(st: Dictionary, seat: int) -> void:
+	if bool((st["left"] as Dictionary).get(seat, false)):
+		return
+	st["left"][seat] = true
+	_log(st, TranslationServer.translate("%s 退出对局 — AI 代管接管")
+			% str(st["names"].get(seat, "?")))
 
 
 static func foe_of(st: Dictionary, seat: int) -> int:
@@ -149,10 +159,17 @@ static func derive_fighter(per: Dictionary) -> Dictionary:
 		stats["def"] = int(int(stats["def"]) * 0.5)
 		stats["mres"] = int(int(stats["mres"]) * 0.5)
 		stats["atk"] = int(int(stats["atk"]) * 2.0)
+	if sps.has(11):  # 巨人腰带
+		stats["max_hp"] = int(int(stats["max_hp"]) * 1.3)
 	stats["vamp"] = float(stats.get("vamp", 0.0)) + (0.20 if sps.has(3) else 0.0)
 	stats["thorns"] = 0.30 if sps.has(4) else 0.0
+	stats["mirror"] = 0.40 if sps.has(10) else 0.0   # 魔镜: 反弹法术 40%
+	stats["pierce"] = 0.5 if sps.has(12) else 0.0    # 破甲獠牙: 无视 50% 护甲
+	stats["fury_mul"] = 1.5 if sps.has(13) else 1.0  # 昂扬战鼓: 怒气 +50%
 	stats["first"] = sps.has(5)
 	stats["regen"] = sps.has(7)
+	stats["evade"] = 0.06 + (0.04 if str(stats.get("skill_kind", "fire")) == "frost"
+			else 0.0) + (0.10 if sps.has(14) else 0.0)   # 四叶草: 闪避 +10%
 	return stats
 
 
@@ -224,7 +241,7 @@ static func _begin_round_battle(st: Dictionary) -> void:
 	var b := {
 		"hp": {}, "max_hp": {}, "shield": {}, "stats": {}, "combo": {},
 		"guard": {}, "chilled": {}, "skill_cd": {}, "first_used": {},
-		"fury": {},
+		"fury": {}, "streak": {}, "enraged": {}, "burn_turns": {},
 		"turn": -1, "battle_round": 0,
 	}
 	for seat in st["fighters"]:
@@ -241,6 +258,10 @@ static func _begin_round_battle(st: Dictionary) -> void:
 		b["chilled"][seat] = false
 		b["skill_cd"][seat] = 0
 		b["first_used"][seat] = false
+		b["streak"][seat] = 0
+		b["enraged"][seat] = false
+		b["burn_turns"][seat] = 0
+		# 闪避率: 基础 6% + 冰霜技能流 +4% + 四叶草 +10%(在 derive_fighter 汇总)
 		# 稀有牌积攒的怒气带入本场, 用后清零
 		b["fury"][seat] = mini(int(per["fury_carry"]), 100)
 		per["fury_carry"] = 0
@@ -269,11 +290,31 @@ static func apply_action(st: Dictionary, seat: int, action: String,
 		return {"ok": false, "error": "skill_cd", "events": []}
 	if action == "ult" and int(b["fury"][seat]) < 100:
 		return {"ok": false, "error": "no_fury", "events": []}
-	b["battle_round"] = int(b["battle_round"]) + 1
 	var foe := foe_of(st, seat)
-	var evs := _resolve(st, seat, foe, action, rng)
+	var evs: Array = []
+	# 点燃(烈焰技能): 行动者回合开始先吃灼烧伤害
+	if int(b.get("burn_turns", {}).get(seat, 0)) > 0:
+		b["burn_turns"][seat] = int(b["burn_turns"][seat]) - 1
+		var bd := maxi(int(int(b["max_hp"][seat]) * 0.04), 1)
+		b["hp"][seat] = int(b["hp"][seat]) - bd
+		evs.append(_ev(seat, seat, "burn", bd))
+		if int(b["hp"][seat]) <= 0:
+			b["hp"][seat] = 0
+			_end_round(st, foe)
+			return {"ok": true, "error": "", "events": evs}
+	b["battle_round"] = int(b["battle_round"]) + 1
+	evs = _resolve(st, seat, foe, action, rng)
 	if action != "ult":
-		b["fury"][seat] = mini(int(b["fury"][seat]) + 4, 100)   # 基础积攒
+		# 基础积攒(昂扬战鼓 ×1.5)
+		var fmul: float = float(b["stats"][seat].get("fury_mul", 1.0))
+		b["fury"][seat] = mini(int(b["fury"][seat]) + int(4 * fmul), 100)
+	# 战场风向(不确定性): 8% 概率随机一方士气大涨 +15 怒气
+	if rng.randf() < 0.08:
+		var lucky: int = [seat, foe][rng.randi() % 2]
+		var lmul: float = float(b["stats"][lucky].get("fury_mul", 1.0))
+		var gain := int(15 * lmul)
+		b["fury"][lucky] = mini(int(b["fury"][lucky]) + gain, 100)
+		evs.append(_ev(lucky, lucky, "surge", gain))
 	# 击倒对方 → 胜; 荆棘反杀自己 → 对方胜(都不再轮转)
 	if int(b["hp"][foe]) <= 0:
 		b["fury"][seat] = mini(int(b["fury"][seat]) + 30, 100)   # 击倒奖励
@@ -287,11 +328,17 @@ static func apply_action(st: Dictionary, seat: int, action: String,
 
 
 static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
-		rng: RandomNumberGenerator) -> Array:
+			rng: RandomNumberGenerator) -> Array:
 	var evs: Array = []
 	var b: Dictionary = st["battle"]
 	var a: Dictionary = b["stats"][actor]
 	var f: Dictionary = b["stats"][foe]
+	# 狂暴(每人每回合一次): 生命 < 25% 时攻击永久 +25% — 劣势翻盘机制
+	for s in [actor, foe]:
+		if not bool(b["enraged"][s]) 				and int(b["hp"][s]) < int(int(b["max_hp"][s]) * 0.25):
+			b["enraged"][s] = true
+			b["stats"][s]["atk"] = int(int(b["stats"][s]["atk"]) * 1.25)
+			evs.append(_ev(s, s, "enrage", 0))
 	if action != "skill" and int(b["skill_cd"][actor]) > 0:
 		b["skill_cd"][actor] = int(b["skill_cd"][actor]) - 1
 	# 泉涌回血(受击积怒气统一放命中结算后)
@@ -306,6 +353,13 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 	b["guard"][foe] = false
 	match action:
 		"attack":
+			# 闪避: 攻击可被躲开(技能必中) — 目标侧移, 无伤害, 连击不断但不涨
+			if rng.randf() < float(f.get("evade", 0.0)):
+				b["fury"][foe] = mini(int(b["fury"][foe]) + 6, 100)
+				evs.append(_ev(actor, foe, "evade", 0))
+				b["fury"][actor] = mini(int(b["fury"][actor])
+						+ int(4 * float(a.get("fury_mul", 1.0))), 100)
+				return evs
 			var crit: bool = rng.randf() < float(a["crit_rate"])
 			if bool(a.get("first", false)) and not bool(b["first_used"][actor]):
 				crit = true
@@ -313,34 +367,56 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 			var dmg := int(float(a["atk"]) * rng.randf_range(0.9, 1.1))
 			if crit:
 				dmg = int(dmg * float(a["crit_dmg"]))
-			dmg = _hit(b, actor, foe, dmg, _mitigate(int(f["def"])), guard_on)
+			# 破甲獠牙: 无视一半护甲
+			var atk_def: int = int(int(f["def"]) * 0.5) 					if float(a.get("pierce", 0.0)) > 0.0 else int(f["def"])
+			# 连击: 连续进攻每层 +4% 伤害(封顶 10 层), 防御重置
+			var streak: int = int(b["streak"][actor])
+			dmg = int(dmg * (1.0 + 0.04 * mini(streak, 10)))
+			b["streak"][actor] = mini(streak + 1, 99)
+			dmg = _hit(b, actor, foe, dmg, _mitigate(atk_def), guard_on)
 			evs.append(_ev(actor, foe, "crit" if crit else "dmg", dmg))
+			if int(b["streak"][actor]) >= 3:
+				evs.append(_ev(actor, actor, "comboup",
+						int(b["streak"][actor])))
 			_vamp(b, actor, dmg, evs)
-			b["fury"][actor] = mini(int(b["fury"][actor]) + 12, 100)
+			b["fury"][actor] = mini(int(b["fury"][actor])
+					+ int(12 * float(a.get("fury_mul", 1.0))), 100)
 		"skill":
-			var dmg := maxi(int(float(a["skill"]) * rng.randf_range(0.9, 1.2)), 1)
+			# 技能差异化(与本地试炼同源): 烈焰高伤+点燃 / 冰霜冻结 / 圣光回复
 			var kind := str(a.get("skill_kind", "fire"))
-			match kind:
-				"frost":
-					dmg = int(dmg * 0.85)
-				"light":
-					dmg = int(dmg * 0.75)
-			dmg = _hit(b, actor, foe, dmg, _mitigate(int(f["mres"])), guard_on)
+			var mul := 1.5 if kind == "fire" 					else (1.0 if kind == "frost" else 0.8)
+			var dmg := maxi(int(float(a["skill"]) * mul * rng.randf_range(0.9, 1.2)), 1)
+			dmg = int(dmg * (1.0 + 0.04 * mini(int(b["streak"][actor]), 10)))
+			b["streak"][actor] = mini(int(b["streak"][actor]) + 1, 99)
+			var sk_mit: float = _mitigate(int(f["mres"])) if kind != "fire" 					else _mitigate(int(int(f["mres"]) * 0.5))   # 烈焰无视一半魔抗
+			dmg = _hit(b, actor, foe, dmg, sk_mit, guard_on)
 			match kind:
 				"frost":
 					b["chilled"][foe] = true
 					evs.append(_ev(actor, foe, "chill", 0))
+					var fmul2: float = float(a.get("fury_mul", 1.0))
+					b["fury"][actor] = mini(int(b["fury"][actor]) + int(5 * fmul2), 100)
 				"light":
-					var hl := maxi(int(dmg * 0.3), 1)
+					var hl := maxi(int(dmg * 0.4), 1)
 					b["hp"][actor] = mini(int(b["hp"][actor]) + hl,
 							int(b["max_hp"][actor]))
 					evs.append(_ev(actor, actor, "heal", hl))
+					var fmul3: float = float(a.get("fury_mul", 1.0))
+					b["fury"][actor] = mini(int(b["fury"][actor]) + int(10 * fmul3), 100)
+				"fire":
+					# 点燃: 对方回合开始灼烧 2 跳(每跳 4% 生命)
+					b["burn_turns"][foe] = 2
 			evs.append(_ev(actor, foe, "skill", dmg))
+			if int(b["streak"][actor]) >= 3:
+				evs.append(_ev(actor, actor, "comboup",
+						int(b["streak"][actor])))
 			_vamp(b, actor, dmg, evs)
 			b["skill_cd"][actor] = 2
-			b["fury"][actor] = mini(int(b["fury"][actor]) + 8, 100)
+			var fmul4: float = float(a.get("fury_mul", 1.0))
+			b["fury"][actor] = mini(int(b["fury"][actor]) + int(8 * fmul4), 100)
 		"defend":
-			b["guard"][actor] = true
+			b["streak"][actor] = 0   # 防御重置连击(攻守取舍)
+			b["guard"][actor] = true   # 格挡: 下一次受击减免 80%
 			var heal := maxi(int(b["max_hp"][actor]) / 25, 3)
 			b["hp"][actor] = mini(int(b["hp"][actor]) + heal,
 					int(b["max_hp"][actor]))
@@ -349,30 +425,38 @@ static func _resolve(st: Dictionary, actor: int, foe: int, action: String,
 			# 奥义: 2.2 倍攻击必中(无视减伤) + 回复 15% 生命, 怒气清零
 			var dmg := maxi(int(float(a["atk"]) * 2.2), 1)
 			dmg = _hit(b, actor, foe, dmg, 1.0, false)
+			b["streak"][actor] = 0
 			b["fury"][actor] = 0
 			var uhl := maxi(int(int(b["max_hp"][actor]) * 0.15), 1)
 			b["hp"][actor] = mini(int(b["hp"][actor]) + uhl,
 					int(b["max_hp"][actor]))
 			evs.append(_ev(actor, actor, "heal", uhl))
 			evs.append(_ev(actor, foe, "ult", dmg))
-	# 顺子追击
-	if action != "defend" and bool(a.get("straight", false)) \
-			and int(b["battle_round"]) % 3 == 0 and int(b["hp"][foe]) > 0:
+	# 顺子追击(破甲獠牙同样生效)
+	if action != "defend" and bool(a.get("straight", false)) 			and int(b["battle_round"]) % 3 == 0 and int(b["hp"][foe]) > 0:
+		var st_def: int = int(int(f["def"]) * 0.5) 				if float(a.get("pierce", 0.0)) > 0.0 else int(f["def"])
 		var d2 := _hit(b, actor, foe, int(float(a["atk"]) * 0.7),
-				_mitigate(int(f["def"])), false)
+				_mitigate(st_def), false)
 		evs.append(_ev(actor, foe, "dmg", d2))
 		_vamp(b, actor, d2, evs)
-	# 荆棘: 反弹物理伤害
-	if action != "defend" and float(f.get("thorns", 0.0)) > 0.0 \
-			and int(b["hp"][actor]) > 0 and evs.size() > 0:
-		var taken := 0
+	# 荆棘: 反弹物理伤害 / 魔镜: 反弹法术伤害
+	if action != "defend" and int(b["hp"][actor]) > 0 and evs.size() > 0:
+		var taken_phys := 0
+		var taken_spell := 0
 		for e in evs:
 			if int(e["target"]) == actor and str(e["kind"]) in ["dmg", "crit", "skill"]:
-				taken += int(e["v"])
-		if taken > 0:
-			var back := maxi(int(taken * float(f["thorns"])), 1)
-			b["hp"][actor] = int(b["hp"][actor]) - back
-			evs.append(_ev(foe, actor, "thorns", back))
+				if str(e["kind"]) == "skill":
+					taken_spell += int(e["v"])
+				else:
+					taken_phys += int(e["v"])
+		var back_total := 0
+		if taken_phys > 0 and float(f.get("thorns", 0.0)) > 0.0:
+			back_total += maxi(int(taken_phys * float(f["thorns"])), 1)
+		if taken_spell > 0 and float(f.get("mirror", 0.0)) > 0.0:
+			back_total += maxi(int(taken_spell * float(f["mirror"])), 1)
+		if back_total > 0 and int(b["hp"][actor]) > 0:
+			b["hp"][actor] = int(b["hp"][actor]) - back_total
+			evs.append(_ev(foe, actor, "thorns", back_total))
 	if int(b["hp"][actor]) <= 0 and int(b["hp"][foe]) > 0:
 		b["hp"][actor] = 0
 	return evs
@@ -390,7 +474,7 @@ static func _hit(b: Dictionary, actor: int, foe: int, dmg: int,
 		dmg = int(dmg * 0.8)
 		b["chilled"][actor] = false
 	if guard_on:
-		dmg = int(dmg * 0.5)
+		dmg = int(dmg * 0.2)   # 格挡: 减免 80% 伤害
 	dmg = maxi(int(dmg * mit_mul), 1)
 	# 玉障护盾优先吸收
 	var sh: int = int(b["shield"][foe])
@@ -417,7 +501,7 @@ static func _ev(who: int, target: int, kind: String, v: int) -> Dictionary:
 	return {"who": who, "target": target, "kind": kind, "v": v}
 
 
-## 回合结束: 胜者 +1 分; 先胜 3 分者终局
+## 回合结束: 胜者 +1 分; 不设提前终结 — 五回合打满后按胜场数定胜负
 static func _end_round(st: Dictionary, winner: int) -> void:
 	var b: Dictionary = st["battle"]
 	b["hp"][winner] = maxi(int(b["hp"][winner]), 1)
@@ -428,10 +512,6 @@ static func _end_round(st: Dictionary, winner: int) -> void:
 		st["names"][winner], int(st["round_num"]),
 		int(st["score"].get(st["fighters"][0], 0)),
 		int(st["score"].get(st["fighters"][1], 0))])
-	if int(st["score"][winner]) >= WIN_SCORE:
-		st["phase"] = "over"
-		st["winner"] = winner
-		_log(st, TranslationServer.translate("★ %s 赢得整场格斗对战!") % st["names"][winner])
 
 
 ## round_end 展示完毕 → 下一回合(比分未达标时)
@@ -439,13 +519,15 @@ static func advance_round(st: Dictionary, rng: RandomNumberGenerator) -> bool:
 	if str(st["phase"]) != "round_end":
 		return false
 	if int(st["round_num"]) >= ROUNDS:
-		# 五回合打满: 按比分(平分加赛已由先胜3规则避免; 极端平局判先手方)
+		# 五回合打满: 胜场多者赢(每回合必有胜者, 5 局不会平; 极端兜底判先手方)
 		var fa: int = st["fighters"][0]
 		var fb: int = st["fighters"][1]
 		var sa: int = int(st["score"].get(fa, 0))
 		var sb: int = int(st["score"].get(fb, 0))
 		st["phase"] = "over"
 		st["winner"] = fa if sa >= sb else fb
+		_log(st, TranslationServer.translate("★ %s 赢得整场格斗对战! (比分 %d:%d)") % [
+			st["names"][int(st["winner"])], maxi(sa, sb), mini(sa, sb)])
 		return true
 	st["round_num"] = int(st["round_num"]) + 1
 	open_round(st, rng)
@@ -464,11 +546,11 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 		"names": (st["names"] as Dictionary).duplicate(true),
 		"round_num": int(st["round_num"]),
 		"rounds_total": ROUNDS,
-		"win_score": WIN_SCORE,
 		"score": (st["score"] as Dictionary).duplicate(),
 		"round_winner": int(st["round_winner"]),
 		"winner": int(st["winner"]),
 		"log": (st["log"] as Array).duplicate(),
+		"left": (st["left"] as Dictionary).duplicate(),
 		"turn": int(st["battle"].get("turn", -1)) if phase == "battle" else -1,
 		"turn_seconds": TURN_SECONDS,
 		"pick_seconds": PICK_SECONDS,
@@ -508,6 +590,7 @@ static func view(st: Dictionary, my_seat: int) -> Dictionary:
 		v["shield"] = (b["shield"] as Dictionary).duplicate()
 		v["fury"] = (b["fury"] as Dictionary).duplicate()
 		v["skill_cd"] = (b["skill_cd"] as Dictionary).duplicate()
+		v["streak"] = (b["streak"] as Dictionary).duplicate()
 		v["my_turn"] = int(b["turn"]) == my_seat and phase == "battle"
 		v["hands"] = {}
 		v["combo"] = {}

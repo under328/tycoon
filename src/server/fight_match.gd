@@ -11,6 +11,7 @@ var kind := "fight"
 var state: Dictionary
 var seat_peer: Array = []      # 长度4: 座位 → peer id(AI 为 -1)
 var seat_online: Array = []    # 长度4: 座位 → 人类是否在线(观战者也计)
+var seat_left := {}            # 座位 → true=已退出本场(人留在房间, AI 代管)
 var ai_delay_ms := 600
 var phase_delay_ms := 2600     # round_end/over 展示时长
 
@@ -33,11 +34,33 @@ func _init(seed_v: int, fighters: Array, names: Dictionary, peers: Array,
 	_arm(now_ms)
 
 
-## 该座位当前是否由 AI 代管(AI 座位或离线人类)。
+## 退出本场对局(人留在房间): 座位转 AI 代管, 并在对局日志留下提示。
+func leave(seat: int) -> void:
+	seat_left[seat] = true
+	FightPvpGd.mark_left(state, seat)
+
+
+func has_left(seat: int) -> bool:
+	return bool(seat_left.get(seat, false))
+
+
+## 所有真人(含观战者)都已退出本场 → 对局应自动结束。
+## 观战者不计入: 只有格斗者才算"对局中的人"。
+func all_humans_left() -> bool:
+	for s in 4:
+		if int(seat_peer[s]) >= 0 and not bool(seat_left.get(s, false)) \
+				and FightPvpGd.is_fighter(state, s):
+			return false
+	return true
+
+
+## 该座位当前是否由 AI 代管(AI 座位或离线人类或已退出本场)。
 func is_bot_seat(seat: int) -> bool:
 	if seat < 0 or seat >= 4:
 		return false
 	if int(seat_peer[seat]) < 0:
+		return true
+	if bool(seat_left.get(seat, false)):
 		return true
 	return not bool(seat_online[seat])
 

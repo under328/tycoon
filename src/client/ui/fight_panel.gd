@@ -184,8 +184,11 @@ func _ready() -> void:
 	add_child(battle_box)
 
 	avatar = AvatarScript.new()
-	avatar.custom_minimum_size = Vector2(140, 140)
-	avatar.size = Vector2(140, 140)
+	# 战斗形象 = 玩家装备皮肤本体(与所选头像同一套像素画, 无徽章底盘/描金边框)
+	avatar.skin_id = Wallet.equipped_skin
+	avatar.frameless = true
+	avatar.custom_minimum_size = Vector2(160, 160)
+	avatar.size = Vector2(160, 160)
 	battle_box.add_child(avatar)
 	var pname := AppTheme.make_label(16, AppTheme.WHITE)
 	pname.text = str(GameSettings.nickname)
@@ -301,7 +304,6 @@ func _ready() -> void:
 
 	Responsive.watch(self, _relayout)
 	_render()
-	Audio.play_bgm("table")
 
 
 func _process(delta: float) -> void:
@@ -765,7 +767,7 @@ func _intent_text() -> String:
 		return ""
 	match str(fm.enemy.get("intent", "attack")):
 		"heavy":
-			return "💥 重击(防御可减!)"
+			return "💥 重击(防御格挡80%+反击!)"
 		"spell":
 			return "🔥 法术(魔抗可减!)"
 		"charge":
@@ -778,11 +780,17 @@ func _refresh_actions() -> void:
 	var cd := fm.skill_cd()
 	var kind := str(fm.stats.get("skill_kind", "fire"))
 	var icon := "🔥" if kind == "fire" else ("❄" if kind == "frost" else "✟")
-	var label := "火球" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
+	var label := "烈焰" if kind == "fire" else ("冰霜" if kind == "frost" else "圣光")
 	act_skill.disabled = cd > 0
 	act_ult.disabled = fm.fury < 100
 	act_skill.text = ("%s %s" % [icon, label]) if cd <= 0 \
 			else (tr("%s 冷却 %d") % [icon, cd])
+	# 技能差异化说明(悬停/长按可读)
+	act_skill.tooltip_text = {
+		"fire": "烈焰: 高伤害(×1.5)并点燃, 敌方回合开始灼烧 2 跳",
+		"frost": "冰霜: 中伤害并冻结, 敌方下次攻击 -20%",
+		"light": "圣光: 伤害略低但回复 40% 伤害生命, 怒气 +10",
+	}.get(kind, "")
 
 
 func _on_action(action: String) -> void:
@@ -830,7 +838,7 @@ func _run_events(evs: Array) -> void:
 			_sfx("crit")
 		"skill":
 			var sk := str(ev.get("skill_kind", "fire"))
-			var stxt: String = str({"fire": "火球", "frost": "冰霜",
+			var stxt: String = str({"fire": "烈焰", "frost": "冰霜",
 					"light": "圣光"}.get(sk, "技能"))
 			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, Color("7ec8ff"))
 			_sfx("exchange")
@@ -853,7 +861,7 @@ func _run_events(evs: Array) -> void:
 			_floater(tr("+%d") % int(ev["v"]), _px(0.17), _py(0.30), Color("7dd87d"))
 			_sfx("pop")
 		"defend":
-			_floater("防御", _px(0.17), _py(0.30), Color("7ec8ff"))
+			_floater(tr("🛡 格挡 80% + 回复"), _px(0.17), _py(0.30), Color("7ec8ff"), 20)
 		"ult":
 			_floater(tr("奥义 -%d") % int(ev["v"]), _px(0.68), _py(0.30), AppTheme.GOLD)
 			_shake(12.0)
@@ -880,6 +888,25 @@ func _run_events(evs: Array) -> void:
 		"burn":
 			_floater("🔥 灼烧 -%d" % int(ev["v"]), _px(0.17), _py(0.32), Color("ff8850"))
 			_sfx("hurt")
+		"ignite":
+			_floater(tr("🔥 点燃!"), _px(0.68), _py(0.24), Color("ff8850"))
+			_sfx("exchange")
+		"burn_e":
+			_floater("🔥 灼烧 -%d" % int(ev["v"]), _px(0.68), _py(0.32), Color("ff8850"))
+			_sfx("hurt")
+		"evade":
+			_floater(tr("闪避!"), _px(0.17), _py(0.26), Color("9fd8ff"), 26)
+			_sfx("pass")
+		"slip":
+			_floater(tr("敌人踉跄! 无出手"), _px(0.68), _py(0.26), Color("7dd87d"), 20)
+			_sfx("pop")
+		"surge":
+			_floater(tr("⚡ 战意涌动 +%d") % int(ev["v"]), _px(0.17), _py(0.24),
+					Color("ffd166"), 20)
+			_sfx("turn")
+		"storm":
+			_floater(tr("✨ 灵感风暴! 必暴"), _px(0.17), _py(0.24), Color("ffd166"), 20)
+			_sfx("crit")
 		"chilled":
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
@@ -1110,6 +1137,7 @@ func _show_endless_choice() -> void:
 		Audio.play("win")
 		_close_overlay()
 		fm.start_next_floor()   # R5 通关后 advance_round 会提前返回, 必须开新层
+		Wallet.note_endless(fm.floor_num)   # 成就: 无尽最高层
 		_busy = false
 		_render())
 	row.add_child(go)

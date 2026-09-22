@@ -34,7 +34,7 @@ const ROGUE_MODS := [
 	{"id": "no_exchange", "name": "免战之约", "glyph": "免", "cat": "规则", "rar": "common",
 		"desc": "本局跳过换牌阶段, 开局直接亮牌开打"},
 	{"id": "score_negate", "name": "福祸反转", "glyph": "反", "cat": "结算", "rar": "common",
-		"desc": "本局身份积分正负反转, 垫底反而得分"},
+		"desc": "本局结算身份对调: 大富豪与大贫民互换, 富豪与贫民互换"},
 	{"id": "eight_gift", "name": "八喜临门", "glyph": "喜", "cat": "触发", "rar": "common",
 		"desc": "本局打出 8 切时, 立即从死牌堆摸 1 张"},
 ]
@@ -303,6 +303,9 @@ static func _do_next_round(st: Dictionary) -> Dictionary:
 ## 首局每人均等 25%; 此后按上一局身份加权 —
 ## 大富豪 40% / 富豪 30% / 贫民 20% / 大贫民 10% (种子确定性, 可回放)
 static func _roll_rogue_picker(st: Dictionary, round_idx: int) -> int:
+	# 本地肉鸽: 命运卡永远由玩家(座位0)自选, 天选者代选仅用于联机
+	if bool(st["cfg"].get("rogue_picker_local", false)):
+		return 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(str(st["seed"], ":picker:", round_idx))
 	if round_idx == 0:
@@ -369,8 +372,14 @@ static func _do_rogue_pick(st: Dictionary, idx: int, seat: int = -1) -> Dictiona
 			if (st["hands"][s2] as Array).has(CardsGd.DIAMOND_3):
 				holder = s2
 				break
-		st["turn"] = holder if holder >= 0 else int(st["seed"]) % SEATS
-		st["must_include"] = CardsGd.DIAMOND_3  # 首局: 首手必须含 ♦3
+		if holder >= 0:
+			st["turn"] = holder
+			st["must_include"] = CardsGd.DIAMOND_3  # 首局: 首手必须含 ♦3
+		else:
+			# ♦3 进了死牌(疾风迅雷/缩地成寸缩手牌时常见): 随机首出、无 ♦3 限制,
+			# 否则首出者出牌/pass 均非法 → 整局死锁(与 new_match 非肉鸽路径同款兜底)
+			st["turn"] = int(st["seed"]) % SEATS
+			st["must_include"] = -1
 		return _ok(st)
 	# 次局起: 强制交换(『混沌换牌』张数随机 1~3)
 	var n_rich := 2
@@ -460,7 +469,13 @@ static func _finish_player(st: Dictionary, seat: int) -> Dictionary:
 			"double_stakes":
 				mult = 2
 			"score_negate":
-				mult = -1
+				# 『福祸反转』: 结算身份对调(大富豪↔大贫民, 富豪↔贫民)。
+				# 旧版"积分正负反转"会鼓励全员摆烂垫底白拿分, 对局失去目标;
+				# 改为强强互换身份, 积分照常按新身份结算。
+				var flipped := [0, 0, 0, 0]
+				for s2 in SEATS:
+					flipped[s2] = {0: 3, 3: 0, 1: 2, 2: 1}.get(int(ids[s2]), int(ids[s2]))
+				ids = flipped
 		for s in SEATS:
 			deltas[s] = ScoringGd.round_delta(int(ids[s])) * mult
 			st["scores"][s] = int(st["scores"][s]) + deltas[s]

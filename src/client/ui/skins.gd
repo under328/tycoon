@@ -18,6 +18,9 @@ const SKINS := [
 	{"id": "skin_dball", "name": "龙珠战士", "price": 160},
 	{"id": "skin_ninja", "name": "木叶忍者", "price": 160},
 	{"id": "skin_rx", "name": "RX骑士", "price": 160},
+	{"id": "skin_p5", "name": "怪盗J", "price": 200},
+	{"id": "skin_gundam", "name": "高达", "price": 200},
+	{"id": "skin_ppg", "name": "飞天小女警", "price": 200},
 ]
 
 ## 卡面皮肤(整套牌面+牌背配色主题)
@@ -58,6 +61,18 @@ const CARDS := [
 		"border": Color("3ddc6c"), "red": Color("ff4040"), "black": Color("e8e8f0"),
 		"shadow": Color(0, 0, 0, 0.5), "back": Color("0c0c12"),
 		"speckle": Color(0.25, 0.9, 0.45, 0.08)},
+	{"id": "card_p5", "motif": "p5", "name": "女神异闻录", "price": 200, "face": Color("1b1b24"),
+		"border": Color("ff3355"), "red": Color("ff3355"), "black": Color("f2f2f8"),
+		"shadow": Color(0, 0, 0, 0.55), "back": Color("12060e"),
+		"speckle": Color(1.0, 0.3, 0.42, 0.10)},
+	{"id": "card_gundam", "motif": "gundam", "name": "机动战士", "price": 200, "face": Color("f2f4f8"),
+		"border": Color("2858a8"), "red": Color("d84040"), "black": Color("1a2438"),
+		"shadow": Color(0.12, 0.18, 0.32, 0.4), "back": Color("1a2c54"),
+		"speckle": Color(0.2, 0.4, 0.8, 0.10)},
+	{"id": "card_ppg", "motif": "ppg", "name": "飞天小女警", "price": 200, "face": Color("fff0f6"),
+		"border": Color("e868a8"), "red": Color("e84a78"), "black": Color("302838"),
+		"shadow": Color(0.4, 0.12, 0.24, 0.35), "back": Color("6a1c44"),
+		"speckle": Color(0.9, 0.45, 0.65, 0.12)},
 ]
 
 
@@ -69,16 +84,21 @@ static func palette(card_id: String) -> Dictionary:
 
 
 ## 程序化头像 v2: 皮肤色底盘 + 内环珠纹 + 肩部衣领 + 头部细节 + 描金外环。
-static func draw_avatar(ci: CanvasItem, skin_id: String, center: Vector2, r: float) -> void:
+## frame=false 只画人物本体(无底盘/珠纹/外环) — 战斗场景大形象与头像同源。
+static func draw_avatar(ci: CanvasItem, skin_id: String, center: Vector2, r: float,
+		frame := true) -> void:
 	var theme := _skin_theme(skin_id)
-	ci.draw_circle(center, r, theme["bg"])
-	for i in 12:
-		var ang := TAU * i / 12.0
-		ci.draw_circle(center + Vector2.from_angle(ang) * r * 0.86,
-				r * 0.045, Color(GOLD, 0.5))
-	# 精修像素头像(32x32 合成器); 未知皮肤回退旧矢量画法
-	if AvatarPix.draw(ci, skin_id, center, r * 0.94):
-		ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
+	if frame:
+		ci.draw_circle(center, r, theme["bg"])
+		for i in 12:
+			var ang := TAU * i / 12.0
+			ci.draw_circle(center + Vector2.from_angle(ang) * r * 0.86,
+					r * 0.045, Color(GOLD, 0.5))
+	# 精修像素头像(32x32 合成器); 未知皮肤回退旧矢量画法。
+	# 无框模式人物本体略放大(1.02)铺满控件, 有框模式留出珠纹/外环空间(0.94)
+	if AvatarPix.draw(ci, skin_id, center, r * (1.02 if not frame else 0.94)):
+		if frame:
+			ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
 		return
 	var shoulder := PackedVector2Array([
 		center + Vector2(-r * 0.78, r), center + Vector2(-r * 0.5, r * 0.52),
@@ -105,7 +125,8 @@ static func draw_avatar(ci: CanvasItem, skin_id: String, center: Vector2, r: flo
 			_head_tengu(ci, head_c, head_r)
 		_:
 			_head_monomo(ci, head_c, head_r, theme["skin"], theme["hair"])
-	ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
+	if frame:
+		ci.draw_arc(center, r * 0.97, 0, TAU, 40, Color(GOLD, 0.75), r * 0.06, true)
 
 
 static func _skin_theme(skin_id: String) -> Dictionary:
@@ -130,6 +151,18 @@ static func _skin_theme(skin_id: String) -> Dictionary:
 			return {"bg": Color("30141c"), "cloth": Color("5a2020"),
 				"collar": Color("2a0a0a"), "skin": Color("e0a08a"),
 				"hair": Color("1c1c2a")}
+		"skin_p5":
+			return {"bg": Color("180a12"), "cloth": Color("1a1a24"),
+				"collar": Color("c92a44"), "skin": Color("f2e2d4"),
+				"hair": Color("181420")}
+		"skin_gundam":
+			return {"bg": Color("0e1a34"), "cloth": Color("e8ecf4"),
+				"collar": Color("2858a8"), "skin": Color("e8ecf4"),
+				"hair": Color("e8ecf4")}
+		"skin_ppg":
+			return {"bg": Color("2a1430"), "cloth": Color("7ac0e8"),
+				"collar": Color("4890c8"), "skin": Color("f8e2d8"),
+				"hair": Color("f8e078")}
 	return {"bg": Color("182038"), "cloth": Color("3a4a6a"),
 		"collar": Color("1a2438"), "skin": Color("e8dcc8"),
 		"hair": Color("3a3428")}

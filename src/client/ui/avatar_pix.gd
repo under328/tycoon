@@ -6,7 +6,8 @@ extends RefCounted
 
 const GRID := 32
 const ART_IDS := ["skin_default", "skin_aka", "skin_ao", "skin_kitsu",
-		"skin_oiran", "skin_tengu", "skin_dball", "skin_ninja", "skin_rx"]
+		"skin_oiran", "skin_tengu", "skin_dball", "skin_ninja", "skin_rx",
+		"skin_p5", "skin_gundam", "skin_ppg"]
 
 ## 每角色调色板: o描边 s皮肤 S皮肤暗 b腮红 w眼白 p瞳 m嘴/红 h发 H发高光
 ## a 配件主色 A 配件暗 c 衣 C 衣暗 l 领/内衬 g 金 r 红
@@ -68,6 +69,27 @@ const PALETTES := {
 		"a" = Color("3ddc6c"), "A" = Color("1fa848"), "c" = Color("14141c"),
 		"C" = Color("0e0e14"), "l" = Color("b8c0c8"), "g" = Color("e0a83c"),
 		"r" = Color("ff4040")},
+	# 怪盗J(P5): 蓬松黑长卷发 + 白色眼罩面具 + 黑风衣 + 红手套/领巾
+	"skin_p5": {"o" = Color("0c0810"), "s" = Color("f2e2d4"), "S" = Color("d4bca8"),
+		"b" = Color("f0a8b0"), "w" = Color("f8f6f0"), "p" = Color("2a2028"),
+		"m" = Color("b86868"), "h" = Color("181420"), "H" = Color("342c40"),
+		"a" = Color("f8f6f0"), "A" = Color("d8d4d0"), "c" = Color("1a1a24"),
+		"C" = Color("101018"), "l" = Color("c92a44"), "g" = Color("e0a83c"),
+		"r" = Color("c92a44")},
+	# 高达(RX-78): 白盔 + 黄 V 字天线 + 蓝面甲 + 绿复眼 + 红下巴 + 白胸甲蓝腹
+	"skin_gundam": {"o" = Color("0e0e16"), "s" = Color("e8ecf4"), "S" = Color("c0c8d8"),
+		"b" = Color("e8ecf4"), "w" = Color("f8f6f0"), "p" = Color("0e0e16"),
+		"m" = Color("000000"), "h" = Color("e8ecf4"), "H" = Color("f8fafc"),
+		"a" = Color("f2c838"), "A" = Color("c89a10"), "c" = Color("2858a8"),
+		"C" = Color("1a3c78"), "l" = Color("3ddc6c"), "g" = Color("e0a83c"),
+		"r" = Color("d84040")},
+	# 飞天小女警(泡泡): 金色双马尾 + 超大眼(蓝瞳) + 蓝裙子 + 元气腮红
+	"skin_ppg": {"o" = Color("3a2838"), "s" = Color("f8e2d8"), "S" = Color("e8c8bc"),
+		"b" = Color("f8b0c0"), "w" = Color("f8faff"), "p" = Color("58a8e0"),
+		"m" = Color("d86078"), "h" = Color("f8e078"), "H" = Color("fdf0b8"),
+		"a" = Color("7ac0e8"), "A" = Color("4890c8"), "c" = Color("7ac0e8"),
+		"C" = Color("4890c8"), "l" = Color("f8faff"), "g" = Color("e0a83c"),
+		"r" = Color("e84a78")},
 }
 
 static var _cache := {}
@@ -109,6 +131,12 @@ static func _grid(skin_id: String) -> Dictionary:
 			_comp_ninja(g)
 		"skin_rx":
 			_comp_rx(g)
+		"skin_p5":
+			_comp_p5(g)
+		"skin_gundam":
+			_comp_gundam(g)
+		"skin_ppg":
+			_comp_ppg(g)
 		_:
 			_comp_momoso(g)
 	_outline(g)
@@ -448,3 +476,115 @@ static func _comp_rx(g: Dictionary) -> void:
 	_px(g, 9, 25, "A")
 	_rect(g, 9, 30, 22, 31, "C")
 
+## 怪盗J(P5 主角): 蓬松黑长卷发包脸 + 白色眼罩面具 + 黑风衣红领巾
+static func _comp_p5(g: Dictionary) -> void:
+	_ell(g, 16, 14, 7, 7.5, "s")
+	_rect(g, 14, 21, 17, 25, "S")
+	_rect(g, 10, 25, 21, 31, "c")
+	_rect(g, 8, 28, 23, 31, "c")
+	_rect(g, 10, 25, 21, 26, "l")            # 红领巾
+	# 蓬松长卷发: 大发团压顶 + 两侧长发披到肩(波浪缘)
+	_ell(g, 16, 8.5, 8.2, 5.4, "h")
+	_rect(g, 7, 9, 9, 24, "h")
+	_rect(g, 22, 9, 24, 24, "h")
+	_px(g, 6, 12, "h")
+	_px(g, 6, 16, "h")
+	_px(g, 25, 12, "h")
+	_px(g, 25, 16, "h")
+	_px(g, 6, 20, "h")
+	_px(g, 25, 20, "h")
+	_px(g, 7, 6, "H")
+	_px(g, 16, 4, "H")
+	_px(g, 24, 6, "H")
+	_px(g, 8, 11, "H")
+	_px(g, 23, 11, "H")
+	# 刘海锯齿压眉
+	_px(g, 11, 12, "h")
+	_px(g, 14, 11, "h")
+	_px(g, 17, 12, "h")
+	_px(g, 20, 11, "h")
+	# 白色眼罩面具(横贯双眼, 尖角眼缘) + 深色瞳缝
+	_rect(g, 10, 14, 21, 17, "a")
+	_px(g, 9, 15, "a")
+	_px(g, 22, 15, "a")
+	_rect(g, 12, 15, 14, 16, "A")
+	_rect(g, 17, 15, 19, 16, "A")
+	_px(g, 11, 14, "w")
+	_px(g, 19, 14, "w")
+	_px(g, 15, 19, "S")
+	_rect(g, 15, 20, 16, 20, "m")
+	_px(g, 10, 19, "b")
+	_px(g, 21, 19, "b")
+	_rect(g, 9, 30, 22, 31, "C")
+
+
+## 高达(RX-78-2 头像): 白盔体 + 黄 V 天线 + 蓝面甲 + 绿复眼 + 红下巴 + 白胸甲
+static func _comp_gundam(g: Dictionary) -> void:
+	_rect(g, 14, 21, 17, 24, "C")            # 颈
+	_rect(g, 10, 25, 21, 31, "h")            # 白胸甲
+	_rect(g, 8, 28, 23, 31, "h")
+	_rect(g, 9, 30, 22, 31, "c")             # 蓝腹
+	_rect(g, 15, 25, 16, 28, "c")            # 蓝领口
+	# 盔体(白)先画, V 字天线压在其上
+	_ell(g, 16, 12.5, 7.4, 7.6, "h")
+	# 黄色 V 字天线(额前, 中央双柱 + 两侧斜刃)
+	_rect(g, 15, 0, 16, 5, "a")
+	_rect(g, 16, 0, 16, 5, "A")
+	for side: Array in [[12, 8, 1], [19, 8, -1]]:
+		var x0: int = int(side[0])
+		var y0: int = int(side[1])
+		for i in 4:
+			var xx := x0 + i if int(side[2]) > 0 else x0 - i
+			_rect(g, xx, y0 - i, xx, y0 - i + 1, "a")
+	_px(g, 12, 9, "a")
+	_px(g, 19, 9, "a")
+	# 额心红线(盔体分缝)
+	_rect(g, 15, 7, 16, 9, "S")
+	# 绿色大复眼 + 眼内高光
+	_rect(g, 11, 13, 13, 16, "l")
+	_rect(g, 18, 13, 20, 16, "l")
+	_px(g, 12, 14, "w")
+	_px(g, 19, 14, "w")
+	# 蓝面甲(口鼻区) + 红下巴
+	_rect(g, 12, 18, 19, 20, "c")
+	_rect(g, 14, 21, 17, 21, "r")
+	_rect(g, 11, 17, 20, 17, "H")            # 盔缘高光
+	_px(g, 10, 12, "H")
+	_px(g, 21, 12, "H")
+
+
+## 飞天小女警(泡泡): 大圆头 + 金色双马尾 + 超大蓝瞳 + 蓝裙
+static func _comp_ppg(g: Dictionary) -> void:
+	_ell(g, 16, 14, 8, 7.8, "s")             # 大圆头(比常规大一圈)
+	_rect(g, 14, 22, 17, 25, "S")
+	_rect(g, 11, 26, 20, 31, "c")            # 蓝裙子
+	_rect(g, 10, 25, 21, 26, "a")            # 浅蓝肩带
+	# 齐刘海(弧形) + 双马尾(垂在头两侧)
+	_ell(g, 16, 8.5, 8.0, 4.4, "h")
+	_rect(g, 8, 9, 9, 22, "h")
+	_rect(g, 22, 9, 23, 22, "h")
+	_px(g, 7, 12, "h")
+	_px(g, 24, 12, "h")
+	_px(g, 7, 16, "h")
+	_px(g, 24, 16, "h")
+	_rect(g, 9, 6, 12, 7, "H")
+	_px(g, 19, 6, "H")
+	# 发带弧线
+	_px(g, 10, 5, "H")
+	_px(g, 21, 5, "H")
+	# 超大眼睛(PGG 风格): 大眼白 + 彩色瞳 + 黑点高光
+	_ell(g, 12, 15, 3.0, 3.4, "w")
+	_ell(g, 19.6, 15, 3.0, 3.4, "w")
+	_ell(g, 12, 15.4, 1.5, 1.8, "p")
+	_ell(g, 19.6, 15.4, 1.5, 1.8, "p")
+	_px(g, 11, 13, "w")
+	_px(g, 18, 13, "w")
+	# 元气笑嘴 + 圆腮红
+	_rect(g, 14, 20, 17, 20, "m")
+	_rect(g, 13, 19, 14, 19, "m")
+	_px(g, 17, 19, "m")
+	_px(g, 9, 19, "b")
+	_px(g, 10, 20, "b")
+	_px(g, 21, 19, "b")
+	_px(g, 20, 20, "b")
+	_rect(g, 11, 30, 20, 31, "A")            # 裙摆深色

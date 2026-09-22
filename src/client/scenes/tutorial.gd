@@ -44,6 +44,7 @@ func _ready() -> void:
 	bg.color = AppTheme.BG  # 不透明全屏页: 不透出主菜单背景
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	Responsive.page_bleed(self, AppTheme.BG)   # 避让条露出同色, 页面内外一致
 
 
 	_title = _label(34, AppTheme.GOLD)
@@ -103,6 +104,7 @@ func _ready() -> void:
 
 
 ## 多设备自适应: 内容列(800 宽)水平居中, 平板加高时整块下移居中, 关闭锚右上。
+## 紧凑档(手机): 图示整体 0.82 缩放、正文上移 — 正文末行/页码点/翻页钮互不重叠。
 func _relayout() -> void:
 	var w := size.x
 	var h := size.y
@@ -115,17 +117,32 @@ func _relayout() -> void:
 	var sq := h < 660.0
 	_title.custom_minimum_size = Vector2(w, 50)
 	_title.size = Vector2(w, 50)
-	_fig.position = Vector2(cx, (96.0 if sq else 140.0) + dy)
-	_fig.size = Vector2(col_w, (290.0 if sq else 300.0))
-	_body.position = Vector2(cx, (402.0 if sq else 470.0) + dy)
-	_body.custom_minimum_size = Vector2(col_w, 130)
-	_body.size = Vector2(col_w, 130)
-	_body.add_theme_font_size_override("font_size", 21 if Responsive.is_touch() else 19)
-	for i in _dots.size():
-		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
-				(502.0 if sq else 618.0) + dy)
-	_prev_btn.position = Vector2(w / 2.0 - 300.0, (522.0 if sq else 650.0) + dy)
-	_next_btn.position = Vector2(w / 2.0 + 120.0, (522.0 if sq else 650.0) + dy)
+	if sq:
+		_fig.position = Vector2(cx, 86.0)
+		_fig.size = Vector2(col_w, 300.0)
+		_fig.scale = Vector2(0.82, 0.82)
+		_body.position = Vector2(cx, 368.0)
+		_body.custom_minimum_size = Vector2(col_w, 110)
+		_body.size = Vector2(col_w, 110)
+		_body.add_theme_font_size_override("font_size", 18)
+		for i in _dots.size():
+			_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
+					492.0)
+		_prev_btn.position = Vector2(w / 2.0 - 300.0, 518.0)
+		_next_btn.position = Vector2(w / 2.0 + 120.0, 518.0)
+	else:
+		_fig.position = Vector2(cx, 140.0 + dy)
+		_fig.size = Vector2(col_w, 300.0)
+		_fig.scale = Vector2.ONE
+		_body.position = Vector2(cx, 470.0 + dy)
+		_body.custom_minimum_size = Vector2(col_w, 130)
+		_body.size = Vector2(col_w, 130)
+		_body.add_theme_font_size_override("font_size", 21 if Responsive.is_touch() else 19)
+		for i in _dots.size():
+			_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
+					618.0 + dy)
+		_prev_btn.position = Vector2(w / 2.0 - 300.0, 650.0 + dy)
+		_next_btn.position = Vector2(w / 2.0 + 120.0, 650.0 + dy)
 	_close_lbl.position = Vector2(w - 110.0, 24)
 
 
@@ -140,6 +157,9 @@ func _close() -> void:
 
 func _show(p: int) -> void:
 	page = p
+	# 首页禁用"上一页", 末页"下一页"变"关闭"(与其他说明页一致)
+	_prev_btn.disabled = p <= 0
+	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = PAGES[p][0]
 	_body.text = PAGES[p][1]
 	for i in _dots.size():

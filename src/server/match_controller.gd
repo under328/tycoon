@@ -11,6 +11,7 @@ const CardsGd = preload("res://src/rules/cards.gd")
 var state: Dictionary
 var seat_peer: Array = []      # 座位 → peer id（AI 为 -1）
 var seat_online: Array = []    # 座位 → 人类是否在线
+var seat_left := {}            # 座位 → true=已退出本场(人还在房间, 座位 AI 代管)
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
 
@@ -30,11 +31,30 @@ func _init(game_state: Dictionary, peers: Array, online: Array,
 	_arm(now_ms)
 
 
-## 该座位当前是否由 AI 代管（空位 AI 或离线人类）。
+## 退出本场对局(人留在房间): 座位转 AI 代管。
+func leave(seat: int) -> void:
+	seat_left[seat] = true
+
+
+func has_left(seat: int) -> bool:
+	return bool(seat_left.get(seat, false))
+
+
+## 所有真人都已退出本场 → 对局应自动结束。
+func all_humans_left() -> bool:
+	for s in 4:
+		if int(seat_peer[s]) >= 0 and not bool(seat_left.get(s, false)):
+			return false
+	return true
+
+
+## 该座位当前是否由 AI 代管（空位 AI / 离线人类 / 已退出本场的人类）。
 func is_bot_seat(seat: int) -> bool:
 	if seat < 0 or seat >= 4:
 		return false
 	if int(seat_peer[seat]) < 0:
+		return true
+	if bool(seat_left.get(seat, false)):
 		return true
 	return not bool(seat_online[seat])
 

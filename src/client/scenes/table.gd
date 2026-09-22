@@ -55,6 +55,11 @@ var _timer_shown := -1           # 倒计时已显示的整数秒(文字门控)
 var _auto_pass_done := false     # 本回合已自动"不要"(防重复)
 var _my_follow_ms := -1.0        # 本地跟牌计时(30s 自动不要)
 var _pulse: Tween = null       # "轮到你"状态文字呼吸脉冲
+var _rev_lbl: Label = null     # 革命状态徽标(图标+文字, 脉冲显眼)
+var _rev_pulse: Tween = null
+var _pass_wait := -1.0         # "要不起"自动不要倒计时(>0=进行中, 秒)
+var _pass_wait_shown := -1
+var pass_lbl: Label = null     # 倒计时大数字(54321)
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
 var self_panel: Control
@@ -82,6 +87,9 @@ var counter_toggle: Button = null
 var _counter_played := {}       # 点数值 -> 已出张数(本局累计)
 var _counter_totals := {}       # 点数值 -> 总张数(王受带王与命运卡影响)
 var _counter_round := -1        # 记牌器归属局号(跨局重置; 本地/联机统一驱动)
+var _counter_mod := ""          # 记牌器基数归属的命运卡(命运卡揭示后重算基数)
+var _counter_charged := false   # 记牌器次卡本局已扣(一场对局只扣一次)
+var _counter_hinted := false    # 记牌器未激活提示只弹一次
 var _rec_actions: Array = []    # 回放录制: 本局动作序列(仅本地局)
 var _recording := false         # 回放录制开关
 var replay_data: Dictionary = {} # 回放数据(非空 = 只读回放模式)
@@ -152,7 +160,9 @@ func _ready() -> void:
 func _start_replay() -> void:
 	_recording = false
 	var rogue_re: bool = bool(replay_data.get("rogue", false))
-	state = GameStateGd.new_match({"rogue": rogue_re}, int(replay_data.get("seed", 0)))
+	state = GameStateGd.new_match(
+			{"rogue": rogue_re, "rogue_picker_local": true},
+			int(replay_data.get("seed", 0)))
 	_replay_actions = (replay_data.get("actions", []) as Array).duplicate()
 	_replay_idx = 0
 	_replay_wait = 0.8
@@ -186,6 +196,19 @@ func _process(delta: float) -> void:
 		_emoji_cd -= delta
 	if _chat_cd > 0.0:
 		_chat_cd -= delta
+	# "要不起"5 秒倒计时: 大数字每秒跳字(54321), 归零自动"不要"。
+	# 本地对局内设置页打开时随驱动一起暂停; 联机对局照走(服务器超时不受本页控制)。
+	if _pass_wait > 0.0 and (mode == "online" or _settings_page == null):
+		_pass_wait -= delta
+		var pw_cur := int(ceil(maxf(_pass_wait, 0.0)))
+		if pw_cur != _pass_wait_shown:
+			_pass_wait_shown = pw_cur
+			if pass_lbl != null:
+				pass_lbl.text = str(pw_cur)
+			_sfx("tick")
+		if _pass_wait <= 0.0:
+			_cancel_pass_wait()
+			_auto_pass()
 	# 本地对局: 跟牌超过 30 秒自动"不要"(领出时无法 Pass, 不适用)
 	if mode == "local" and visible and not state.is_empty() \
 			and str(state["phase"]) == "play" and int(state["turn"]) == 0 \
@@ -199,19 +222,37 @@ func _process(delta: float) -> void:
 				_auto_pass()
 	else:
 		_my_follow_ms = -1.0
-	# 在线模式回合倒计时(仅整数秒变化时更新文字, 避免每帧重排)
-	if mode == "online" and _turn_remain > 0.0:
-		_turn_remain -= delta
-		if _turn_total > 0:
-			var remain := maxf(_turn_remain, 0.0)
-			var cur := int(ceil(remain))
-			if cur != _timer_shown:
-				_timer_shown = cur
+	# ⏱ 显示优先级: "要不起"5 秒快倒 > 普通 20 秒回合倒计时
+	# (规格: 正常 20s、末 5s 红色放大强调, 归零服务器自动代出;
+	#  要不起 5s, 归零自动"不要")
+	if mode == "online" and (_turn_remain > 0.0 or _pass_wait > 0.0):
+		if _pass_wait <= 0.0:
+			_turn_remain -= delta   # 联机回合倒计时: 此前从未递减(恒显满秒)
+		var remain: float = maxf(_pass_wait, 0.0) if _pass_wait > 0.0 \
+			else maxf(_turn_remain, 0.0)
+		var cur := int(ceil(remain))
+		if cur != _timer_shown:
+			_timer_shown = cur
+			# 归零即清空: 对方超时托管最长还需一个回合窗口,
+			# "⏱ 0" 不能滞留屏幕(任务反馈: 0 一直显示不消失)
+			if cur <= 0:
+				timer_label.text = ""
+			else:
 				timer_label.text = "⏱ %d" % cur
 				timer_label.add_theme_color_override("font_color",
-						AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
+					AppTheme.RED if remain <= 5.0 else AppTheme.WHITE)
+				if remain <= 5.0:
+					timer_label.reset_size()
+					timer_label.pivot_offset = timer_label.size / 2.0
+					timer_label.scale = Vector2(1.3, 1.3)
+					var punch := timer_label.create_tween()
+					punch.tween_property(timer_label, "scale", Vector2.ONE, 0.2)
 				if remain <= 10.0 and cur >= 1:
 					_sfx("tick")   # 剩余 <10s: 每秒提示音
+	elif mode == "online":
+		# 倒计时已归零: 立即清空, 不残留 "⏱ 0"
+		if timer_label != null and timer_label.text != "":
+			timer_label.text = ""
 	# 本地换牌阶段: 30s 倒计时(剩余 <10s 每秒提示音), 超时托管自动返还
 	if mode == "local" and str(state.get("phase", "")) == "exchange" 			and _turn_remain > 0.0 and _my_return_pending():
 		_turn_remain -= delta
@@ -257,7 +298,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_settings_page._close()
 			return
 		if _rogue_dlg != null:
-			_close_rogue_reveal()
+			# 选卡面板是 draft 阶段唯一操作入口, ESC 不关闭(防软锁); 只关揭示弹窗
+			if str(_rogue_dlg.get_meta("kind", "")) != "choice":
+				_close_rogue_reveal()
 			return
 		if _leave_dlg != null:
 			_close_leave_dialog()
@@ -271,7 +314,9 @@ func _new_match() -> void:
 	for child in fx_layer.get_children():
 		child.queue_free()  # 关闭上一场的结算面板/特效
 	# 肉鸽模式: 引擎启用命运卡(每局二选一), 普通模式不受影响
-	state = GameStateGd.new_match({"rogue": rogue}, -1) if rogue 			else GameStateGd.new_match({}, -1)
+	state = GameStateGd.new_match(
+			{"rogue": rogue, "rogue_picker_local": true} if rogue
+			else {}, -1)
 	state["names"] = [str(GameSettings.nickname), "AI·甲", "AI·乙", "AI·丙"]
 	selected.clear()
 	# 重置视听状态(上场的革命/阶段/桌面/手牌缓存全部作废)
@@ -285,6 +330,9 @@ func _new_match() -> void:
 	_voice_fin = -1
 	_voice_last1 = {}
 	_counter_round = -1
+	_counter_mod = ""
+	_counter_charged = false
+	_counter_hinted = false
 	# 回放录制: 本地局(非回放模式)从开局起采集全部动作
 	_recording = replay_data.is_empty()
 	_rec_actions = [{"t": "start", "rogue": rogue}]
@@ -330,12 +378,8 @@ func _advance() -> void:
 		if phase == "play":
 			var seat_to_act := int(state["turn"])
 			if seat_to_act == 0 and not auto_pilot:
-				# 停靠在玩家回合: 压不过也自动"不要"(无需等玩家手动)
-				if not (state["lead"] as Dictionary).is_empty():
-					var act: Dictionary = BotPlayerGd.decide(state, 0, GameSettings.ai_level)
-					if str(act.get("t")) == "pass":
-						_auto_pass()
-						continue
+				# 停靠在玩家回合(压不过时由 _refresh_view 的 5 秒倒计时
+				# 自动"不要" — 不再在此瞬间代打, 玩家看得见倒计时)
 				_vibrate(40)  # 轮到你(移动端触感)
 				break  # 等玩家操作(托管中则 AI 代打)
 			_refresh()
@@ -353,6 +397,26 @@ func _advance() -> void:
 			print("[adv] t=%d seat=%d applied ok=%s" % [Time.get_ticks_msec(), seat_to_act,
 					str(r["ok"])])
 			if not bool(r["ok"]):
+				# AI 决策与规则校验不一致的兜底(修"有时卡住无法出牌"):
+				# 领出改出最小单张(须含♦3时优先♦3), 跟牌改出"不要";
+				# 兜底也非法才停摆报错 — 牌局不再因一次非法动作冻结。
+				var fb: Dictionary = {"t": "pass", "seat": seat_to_act}
+				if (state["lead"] as Dictionary).is_empty():
+					var hand_fb: Array = (state["hands"][seat_to_act] as Array).duplicate()
+					CardsGd.sort_cards(hand_fb)
+					var mi := int(state.get("must_include", -1))
+					var lead_card: int = mi if (mi >= 0 and hand_fb.has(mi)) \
+							else (int(hand_fb[0]) if not hand_fb.is_empty() else -1)
+					if lead_card >= 0:
+						fb = {"t": "play", "seat": seat_to_act, "cards": [lead_card]}
+				var rfb := GameStateGd.apply(state, fb)
+				if bool(rfb["ok"]):
+					push_warning("local table: AI 动作已回退(%s)" % str(r["error"]))
+					if _recording:
+						_rec_actions.append(fb.duplicate())
+					_detect_local_eight_cut(fb, rfb["state"])
+					state = rfb["state"]
+					continue
 				var tr := FileAccess.open("C:/Users/Administrator/AppData/Local/Temp/adv_err.txt", FileAccess.WRITE)
 				if tr != null:
 					tr.store_line("AI illegal seat=%d err=%s hand=%s lead=%s" % [seat_to_act,
@@ -465,6 +529,7 @@ func _local_apply(action: Dictionary) -> Dictionary:
 		_rec_actions.append(action.duplicate())
 	if bool(r["ok"]) and int(action.get("seat", -1)) == 0 			and str(action["t"]) == "play" 			and (action["cards"] as Array).size() == 4:
 		Wallet.note_mission("m_quad")  # 我方四条=炸弹(本规则集 4 张组合仅四条)
+		Wallet.note_quad()   # 成就统计: 累计四条次数
 	if bool(r["ok"]) and str(action["t"]) == "pass":
 		Audio.say("pass", _seat_pitch(int(action.get("seat", 0))))  # AI 过牌播报
 	return r
@@ -484,6 +549,7 @@ func _human_apply(action: Dictionary) -> void:
 		return
 	if str(action["t"]) == "play" and (action["cards"] as Array).size() == 4:
 		Wallet.note_mission("m_quad")  # 我方四条
+		Wallet.note_quad()   # 成就统计: 累计四条次数
 	_detect_local_eight_cut(action, r["state"])
 	state = r["state"]
 	selected.clear()
@@ -494,6 +560,7 @@ func _human_apply(action: Dictionary) -> void:
 func _on_play_pressed() -> void:
 	if not replay_data.is_empty():
 		return   # 回放只读
+	_cancel_pass_wait()   # 手动操作: 取消"要不起"自动不要
 	_sfx("click")
 	# 换牌阶段: 确认返还所选牌
 	var cur_view: Dictionary = _current_view()
@@ -548,17 +615,40 @@ func _on_hint_pressed() -> void:
 func _on_pass_pressed() -> void:
 	if not replay_data.is_empty():
 		return   # 回放只读
+	_cancel_pass_wait()   # 手动"不要": 取消倒计时
 	_sfx("click")
 	if mode == "online":
 		Audio.say("pass")
+		# 与本地一致: 不要 → 立即取消选牌高亮(牌面恢复未选中状态)
+		selected.clear()
+		_refresh()
 		net.pass_turn()
 		return
 	_human_apply({"t": "pass", "seat": 0})
 
 
+## "要不起"自动不要: 5 秒倒计时(大数字 54321 每秒跳字), 结束自动出"不要"。
+## 联机/本地统一 — 不再一到手就瞬间代打, 玩家有反应与反悔的窗口。
+func _start_pass_wait() -> void:
+	_pass_wait = 5.0
+	_pass_wait_shown = -1
+	if pass_lbl != null:
+		pass_lbl.visible = true
+
+
+func _cancel_pass_wait() -> void:
+	if _pass_wait < 0.0:
+		return
+	_pass_wait = -1.0
+	_pass_wait_shown = -1
+	if pass_lbl != null:
+		pass_lbl.visible = false
+
+
 ## 自动"不要": 本地须直改状态——它恰在 AI 移交回合的刷新中触发,
 ## 此时 advancing=true 会拦掉 _human_apply; 联机走网络不受限。
 func _auto_pass() -> void:
+	_cancel_pass_wait()
 	_sfx("pass")
 	Audio.say("pass")
 	if mode == "online":
@@ -596,12 +686,17 @@ func _on_leave_pressed() -> void:
 
 
 func _do_leave() -> void:
-	left_room = true   # 主动退房: 大厅复位到入口页(对局结束回房则保持房间页)
-	if net != null:
-		net.leave_room()
+	if mode == "online":
+		# 联机: 退出本场但留在房间 → 返回房间页(座位保留, 本场由 AI 代管;
+		# 全员退出则服务器自动收尾)。left_room=false → 大厅回房间页
+		left_room = false
+		if net != null:
+			net.leave_match()
+		finished.emit()
+		return
+	left_room = true   # 本地: 返回菜单(托管继续)
 	# 本地模式中途返回菜单: 托管继续(牌桌保留), 重新进入可继续本局
-	if mode == "local" and not state.is_empty() \
-			and str(state["phase"]) != "game_end":
+	if not state.is_empty() and str(state["phase"]) != "game_end":
 		auto_pilot = true
 		advancing = false
 		_advance()
@@ -623,6 +718,7 @@ func _show_leave_dialog() -> void:
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dlg.add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条(与弹窗内一致)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dlg.add_child(center)
@@ -643,7 +739,7 @@ func _show_leave_dialog() -> void:
 	box.add_child(title)
 	var desc := AppTheme.make_label(15, AppTheme.DIM)
 	desc.text = "返回后本局由 AI 托管继续, 从首页可回到本局。" if local \
-			else "离开后你的座位由 AI 代管(弃局), 并返回大厅。"
+			else "离开后你的本场对局由 AI 代管, 你将返回房间页。全员退出时对局自动结束。"
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(desc)
 	var row := HBoxContainer.new()
@@ -702,38 +798,39 @@ func _show_rogue_flow() -> void:
 		_show_rogue_reveal()
 
 
-## 二选一: 两张命运卡并排, 点击选定并应用
+## 二选一: 两张命运卡并排, 点击选定并应用。
+## 面板铺满中央出牌区(draft 阶段出牌区为空, 正好承载):
+## 首行「命运二选一 · 第 N 局」, 下方两张候选卡并排(选定者可点, 其余见等待提示)。
 func _show_rogue_choice() -> void:
 	if _rogue_dlg != null and is_instance_valid(_rogue_dlg):
 		return   # 已在选卡(联机每次视图广播都会触发, 勿重建)
+	_refresh()   # draft 屏座位信息(昵称/积分)先就位 — 此前开局横条弹出时信息区全空
 	var v := _current_view()
 	var picker: int = int(v.get("rogue_picker", -1))
 	var my := int(v.get("my_seat", 0))
 	var choices: Array = v.get("rogue_choices", [])
 	Audio.say("rogue_choice")   # 天选者揭晓
 	var online_pick: bool = mode == "online" and picker != my
-	# 出牌区上方的横条: 选定者可点卡, 其余玩家看到等待提示;
-	# 不再使用全屏遮罩, 避免与顶部玩家信息框重叠
-	var strip := PanelContainer.new()
-	var sb := AppTheme.flat(AppTheme.PANEL, Color(AppTheme.GOLD, 0.85), 12, 2)
-	sb.content_margin_left = 20
-	sb.content_margin_right = 20
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 12
-	strip.add_theme_stylebox_override("panel", sb)
+	var overlay := Control.new()
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP   # 吸收点击: 选卡期间误点出牌区不出错
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	var cap := AppTheme.make_label(21, AppTheme.GOLD)
+	cap.text = tr("命运二选一 · 第 %d 局") % (int(v.get("round", 0)) + 1)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_add_text_shadow(cap)
+	box.add_child(cap)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
-	strip.add_child(row)
-	var cap := AppTheme.make_label(18, AppTheme.GOLD)
-	cap.text = "命运二选一
-第 %d 层" % (int(v.get("round", 0)) + 1)
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	row.add_child(cap)
+	box.add_child(row)
 	if online_pick:
 		var wait := AppTheme.make_label(15, AppTheme.DIM)
-		wait.text = "等待 %s
-选择命运卡…" % _seat_name(v, picker)
+		wait.text = tr("等待 %s 选择命运卡…") % _seat_name(v, picker)
 		wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		row.add_child(wait)
 	else:
@@ -747,13 +844,14 @@ func _show_rogue_choice() -> void:
 					break
 			var idx := i
 			var rar := str(meta.get("rar", "common"))
-			var rar_col: Color = Color("ffd166") if rar == "legend" 				else (Color("b070e0") if rar == "epic" else Color.WHITE)
+			var rar_col: Color = Color("ffd166") if rar == "legend" 					else (Color("b070e0") if rar == "epic" else Color.WHITE)
 			var rar_tag: String = str({"legend": "★ 传说", "epic": "◆ 史诗",
 					"common": ""}.get(rar, ""))
 			var pick := AppTheme.make_button(
 					"%s【%s】%s
-%s" % [rar_tag, meta.get("glyph", "?"), meta.get("name", ""),
-					meta.get("desc", "")], Vector2(286, 88), 13)
+%s" % [rar_tag, meta.get("glyph", "?"),
+					meta.get("name", ""), meta.get("desc", "")],
+					Vector2(286, 92), 13)
 			pick.add_theme_color_override("font_color", rar_col)
 			pick.pressed.connect(func() -> void:
 				Audio.play("win")
@@ -771,8 +869,8 @@ func _show_rogue_choice() -> void:
 			row.add_child(pick)
 		if mode != "online" and Wallet.item_count("item_fate_dice") > 0:
 			var dice := AppTheme.make_button(
-					"🎲 重抽 (持有 %d)" % Wallet.item_count("item_fate_dice"),
-					Vector2(150, 88), 13)
+					tr("🎲 重抽 (持有 %d)") % Wallet.item_count("item_fate_dice"),
+					Vector2(190, 40), 13)
 			dice.pressed.connect(func() -> void:
 				Audio.play("click")
 				if Wallet.consume_item("item_fate_dice"):
@@ -780,22 +878,32 @@ func _show_rogue_choice() -> void:
 					_rogue_dlg.queue_free()
 					_rogue_dlg = null
 					_show_rogue_choice())
-			row.add_child(dice)
-	_rogue_dlg = strip
-	add_child(strip)
-	_position_rogue_strip.call_deferred()
+			var dice_cc := CenterContainer.new()
+			dice_cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			dice_cc.add_child(dice)
+			box.add_child(dice_cc)
+	_rogue_dlg = overlay
+	overlay.set_meta("kind", "choice")   # 与揭示弹窗区分: 选卡面板可被阶段变化回收
+	add_child(overlay)
+	_sync_rogue_overlay.call_deferred()
 
 
-## 命运二选一横条定位: 出牌区上方水平居中(顶栏之下, 不压座位信息)
-func _position_rogue_strip() -> void:
-	if _rogue_dlg == null or not is_instance_valid(_rogue_dlg):
+## 选卡面板回收: 命运卡已定(阶段离开 draft)后, 非选卡玩家的面板不再残留
+func _close_rogue_strip() -> void:
+	if _rogue_dlg != null and is_instance_valid(_rogue_dlg) 			and str(_rogue_dlg.get_meta("kind", "")) == "choice":
+		_rogue_dlg.queue_free()
+		_rogue_dlg = null
+
+
+## 命运二选一面板定位: 铺满中央出牌区(field_panel), 随 _relayout 同步
+func _sync_rogue_overlay() -> void:
+	if _rogue_dlg == null or not is_instance_valid(_rogue_dlg) 			or str(_rogue_dlg.get_meta("kind", "")) != "choice":
 		return
-	_rogue_dlg.reset_size()
-	var sz: Vector2 = _rogue_dlg.size
-	var fx: float = field_panel.position.x
-	var fw: float = field_panel.size.x
-	var fy: float = maxf(field_panel.position.y - sz.y - 10.0, 96.0)
-	_rogue_dlg.position = Vector2(fx + (fw - sz.x) * 0.5, fy)
+	_rogue_dlg.position = field_panel.position
+	_rogue_dlg.size = field_panel.size
+	var cc: Control = _rogue_dlg.get_child(0)
+	cc.position = Vector2.ZERO
+	cc.size = _rogue_dlg.size
 
 
 
@@ -846,7 +954,10 @@ func _show_rogue_reveal(picked_idx := -1) -> void:
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
 	var cap := AppTheme.make_label(15, AppTheme.DIM)
-	cap.text = "命运卡 · 第 %d 局 · %s类效果" % [int(state["round"]) + 1,
+	# 联机模式 table.state 为空 → 局号取自服务器视图(本地取本地 state)
+	var round_no := (int(_current_view().get("round", 0)) if mode == "online"
+			else int(state["round"])) + 1
+	cap.text = "命运卡 · 第 %d 局 · %s类效果" % [round_no,
 			str(meta.get("cat", ""))]
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(cap)
@@ -889,23 +1000,29 @@ func _close_rogue_reveal() -> void:
 	_advance()
 
 
-## 场内命运卡标签(该局生效中常显)
+## 场内命运卡提示(该局生效中常显): 借出牌区顶部提示行承载 —
+## 独立横幅在手机顶部会与对家信息框/牌背扇重叠, 统一收进出牌区内
 func _update_rogue_lbl() -> void:
-	if rogue_lbl == null:
-		return
+	if rogue_lbl != null:
+		rogue_lbl.visible = false
 	var v := _current_view()
 	var mod_id := str(v.get("rogue_mod", ""))
-	var show := mod_id != "" and _rogue_dlg == null \
-			and str(v.get("phase", "")) in ["play", "exchange"]
-	rogue_lbl.visible = show
-	if show:
-		var meta := {}
-		for m in GameStateGd.ROGUE_MODS:
-			if str(m["id"]) == mod_id:
-				meta = m
-				break
-		rogue_lbl.text = "【%s】%s — %s" % [meta.get("glyph", ""), meta.get("name", ""),
-				meta.get("desc", "")]
+	if field_hint == null or mod_id == "":
+		return
+	var ph := str(v.get("phase", ""))
+	if ph != "play" and ph != "exchange":
+		return
+	var meta := {}
+	for m in GameStateGd.ROGUE_MODS:
+		if str(m["id"]) == mod_id:
+			meta = m
+			break
+	if meta.is_empty():
+		return
+	var txt := "【%s】%s" % [meta.get("name", ""), meta.get("desc", "")]
+	if int(v.get("must_include", -1)) >= 0:
+		txt += " · 首手含♦3"
+	field_hint.text = txt
 
 
 ## ESC 关闭命运卡弹窗(在 _unhandled_input 的 leave_dlg 分支旁)
@@ -920,16 +1037,20 @@ func _bind_net() -> void:
 		if str(view["phase"]) == "draft" \
 				and (_rogue_dlg == null or not is_instance_valid(_rogue_dlg)):
 			_show_rogue_choice()
-		# 回合变化 → 重置倒计时
+		# 回合变化 → 提示音/震动; 出牌阶段的每条新视图都重置本地倒计时 —
+		# 服务器每次状态变化都会重新武装回合窗口(含同一座位赢墩续领/8切续领),
+		# 若只在换人时重置, 倒计时归零后 "⏱ 0" 会永久滞留屏幕中央不再消失。
 		var new_turn := int(view["turn"])
 		if new_turn != _last_turn_seat:
 			_last_turn_seat = new_turn
 			if str(view["phase"]) == "play" and new_turn >= 0:
-				_turn_total = float(int(view["rules"]["turn_seconds"]))
-				_turn_remain = _turn_total
 				if new_turn == int(view["my_seat"]):
 					_sfx("turn")
 					_vibrate(40)
+		if str(view["phase"]) == "play" and new_turn >= 0:
+			_turn_total = float(int(view["rules"]["turn_seconds"]))
+			_turn_remain = _turn_total
+			_timer_shown = -1
 		_refresh())
 	net.game_event.connect(_on_game_event)
 	net.errored.connect(func(code: String, msg: String) -> void:
@@ -962,6 +1083,7 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 	elif event == "played":
 		if int(data.get("seat", -1)) == int(net.latest_view.get("my_seat", -1)) 				and (data.get("combo", {}) as Dictionary).get("cards", []).size() == 4:
 			Wallet.note_mission("m_quad")
+			Wallet.note_quad()   # 成就统计: 累计四条次数
 		if bool(data.get("eight_cut", false)):
 			_counter_note_played((data.get("combo", {}) as Dictionary).get("cards", []))
 			_spawn_fx("eight_cut")
@@ -1076,6 +1198,13 @@ func _build_ui() -> void:
 	info_label.position = Vector2(20, 12)
 	add_child(info_label)
 	_add_text_shadow(info_label)
+	# 革命徽标: 图标+红字, 左上角信息行下方, 显眼脉冲
+	_rev_lbl = _make_label(21, AppTheme.RED)
+	_rev_lbl.text = "🔥 革命!"
+	_rev_lbl.position = Vector2(84, 44)
+	_rev_lbl.visible = false
+	_add_text_shadow(_rev_lbl)
+	add_child(_rev_lbl)
 	# 肉鸽命运卡标签(顶部居中下移, 避开对家面板与计时器)
 	rogue_lbl = _make_label(14, AppTheme.GOLD)
 	rogue_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
@@ -1151,21 +1280,43 @@ func _build_ui() -> void:
 	field_panel.custom_minimum_size = Vector2(640, 248)
 	add_child(field_panel)
 
+	# "要不起"自动不要倒计时大数字(居中悬浮于出牌区, 5→1 每秒跳字)
+	pass_lbl = _make_label(64, AppTheme.RED)
+	pass_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	pass_lbl.add_theme_constant_override("shadow_offset_x", 2)
+	pass_lbl.add_theme_constant_override("shadow_offset_y", 2)
+	pass_lbl.visible = false
+	add_child(pass_lbl)
+
 	field_hint = _make_label(16, AppTheme.DIM)
 	field_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	field_hint.position = Vector2(20, 6)
 	field_hint.custom_minimum_size = Vector2(600, 24)
-	# 记牌器开关(顶栏)
+	# 记牌器开关(顶栏): 道具门控 — 日卡当日生效或持有次卡才能开启
 	counter_toggle = _button("记牌")
 	counter_toggle.custom_minimum_size = Vector2(84, 44)
 	counter_toggle.toggle_mode = true
-	counter_toggle.button_pressed = GameSettings.card_counter
+	counter_toggle.button_pressed = GameSettings.card_counter \
+			and Wallet.counter_active()
+	counter_toggle.tooltip_text = "记牌器(商城可购日卡/次卡)" \
+			if Wallet.counter_active() else "记牌器未激活 — 商城购买后可用"
 	counter_toggle.pressed.connect(func() -> void:
 		Audio.play("click")
+		if not Wallet.counter_active():
+			counter_toggle.set_pressed_no_signal(false)
+			_flash_error("记牌器未激活 — 请到商城购买「记牌器·日卡/次卡」")
+			return
 		GameSettings.card_counter = counter_toggle.button_pressed
 		GameSettings.save_settings()
 		_update_counter(_current_view()))
 	add_child(counter_toggle)
+	# 右上三钮(记牌/规则/设置)构建期即统一尺寸与字号(_relayout 按屏重排)
+	var top_w0 := 64.0 if Responsive.is_touch() else 72.0
+	var top_h0 := 34.0 if Responsive.is_touch() else 36.0
+	for b: Button in [counter_toggle, rules_btn, settings_btn]:
+		b.custom_minimum_size = Vector2(top_w0, top_h0)
+		b.size = Vector2(top_w0, top_h0)
+		b.add_theme_font_size_override("font_size", 16 if Responsive.is_touch() else 15)
 	# 记牌器 HUD(出牌区底部一行)
 	counter_lbl = _make_label(13, Color("9fd8e8"))
 	counter_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
@@ -1417,7 +1568,8 @@ func _make_seat_panel(idx: int) -> Array:
 	lb.scroll_active = false
 	lb.fit_content = true   # 高度贴合文本(信息框上下居中, 不留空腔)
 	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb.custom_minimum_size = Vector2(96 if Responsive.is_touch() else 84, 0)
+	# 宽度保证【大富豪/大贫民】称号 + 6 字昵称(含省略号)一行放下
+	lb.custom_minimum_size = Vector2(186 if Responsive.is_touch() else 164, 0)
 	lb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	lb.add_theme_font_size_override("normal_font_size",
 			16 if Responsive.is_touch() else 14)
@@ -1600,13 +1752,20 @@ func _relayout() -> void:
 		rogue_lbl.position = Vector2(w / 2.0 - 300.0, 96.0)
 		rogue_lbl.custom_minimum_size = Vector2(340.0, 0)
 		rogue_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# 对家(上中, 按面板实宽居中) + 其牌背扇
-	_seat_panels[1].position = Vector2(w / 2.0 - (84.0 if touch else 77.0), 8)
-	_opp_hands[1].position = Vector2(w / 2.0 + 60, 44)
-	# 上家(左) 与 下家(右, 面板贴右缘)
+	if _rev_lbl != null:
+		# 上家牌列(x 30..70)右侧, 信息行下方 — 不与牌背扇重叠
+		_rev_lbl.position = Vector2(84, 44)
+	if pass_lbl != null:
+		# 倒计时大数字: 出牌区中央偏下(让开已出的牌面行)
+		pass_lbl.position = Vector2(field_panel.position.x + field_panel.size.x * 0.5 - 36.0,
+				field_panel.position.y + field_panel.size.y * 0.52)
+	# 对家(上中, 按面板实宽居中; 信息牌微左移) + 其牌背扇(右移上移与信息牌并排不重叠)
+	_seat_panels[1].position = Vector2(w / 2.0 - (128.0 if touch else 117.0), 8)
+	_opp_hands[1].position = Vector2(w / 2.0 + (150.0 if touch else 140.0), 12)
+	# 上家(左) 与 下家(右, 面板右缘留 36px, 整体左移不再贴边)
 	_seat_panels[2].position = Vector2(16, h * 0.41)
 	_opp_hands[2].position = Vector2(30, 50)
-	_seat_panels[0].position = Vector2(w - (182.0 if touch else 170.0), h * 0.41)
+	_seat_panels[0].position = Vector2(w - (292.0 if touch else 270.0), h * 0.41)
 	_opp_hands[0].position = Vector2(w - 150, 108)
 	# 操作行(先定位: 手牌让位) — 卡底不得压按钮; 且不与左侧聊天行重叠
 	var ops_y := h - ops_h - 14.0
@@ -1614,25 +1773,34 @@ func _relayout() -> void:
 	if compact:
 		ops_x = w - 16.0 - ops_w   # 紧凑档右锚实宽, 4 触屏钮不溢出屏幕
 	ops_row.position = Vector2(ops_x, ops_y)
-	# 手牌区
+	# 手牌区: 左缘让开自己信息面板(牌多时自动重叠压缩, 不压信息框)
 	var hand_y := ops_y - 6.0 - 18.0 - card_h
-	hand_box.position = Vector2(w - 1014, hand_y)
-	hand_box.size = Vector2(1010, 28.0 + card_h)
+	var hand_x := maxf(w - 1014.0, 272.0)
+	hand_box.position = Vector2(hand_x, hand_y)
+	hand_box.size = Vector2(w - hand_x - 6.0, 28.0 + card_h)
 	# 中央出牌区(水平居中; 顶不越过手牌抬起位)
 	var field_x := (w - field_w) / 2.0
 	var field_y: float = minf(204.0 + (h - 720.0) * 0.5, hand_y + 12.0 - field_h)
 	field_panel.position = Vector2(field_x, field_y)
 	field_panel.custom_minimum_size = Vector2(field_w, field_h)
 	field_panel.size = Vector2(field_w, field_h)
-	field_box.position = Vector2(20, 12)
-	field_box.size = Vector2(field_w - 40, field_h - 46)
+	# 手机(触屏)出牌区只有一行牌: 下移到顶部提示行(本局规则/命运卡横幅)之下,
+	# 不再与首行出牌的座位昵称重叠; PC 保持双行紧凑布局
+	var field_top := 44.0 if touch else 12.0
+	field_box.position = Vector2(20, field_top)
+	field_box.size = Vector2(field_w - 40, field_h - field_top - 34)
+	if trick_lbl != null:
+		trick_lbl.position = Vector2(20, 22.0 if touch else 30.0)
 	_trim_field()   # 宽度/行容量变化后重新裁剪
 	# 紧凑档: 两侧座位面板上移至顶部带(避开出牌区), 牌背列上移至顶角(避开面板)
 	if compact:
 		_seat_panels[2].position = Vector2(16, 220)
-		_seat_panels[0].position = Vector2(w - 284, 220)
+		_seat_panels[0].position = Vector2(w - (292.0 if touch else 270.0), 220)
+		# 左上/右上角防重叠: 回合文字右移到上家牌背扇右侧(x≥64),
+		# 下家牌背扇下移到 记牌/规则/设置 三钮之下(y≥52)
+		info_label.position = Vector2(64, 12)
 		_opp_hands[2].position = Vector2(16, 8)
-		_opp_hands[0].position = Vector2(w - 56, 8)
+		_opp_hands[0].position = Vector2(w - 50, 52)
 	# 底部: 自己面板 / 状态 / 错误
 	self_panel.position = Vector2(16, h - 164)
 	var status_y := h - 224.0
@@ -1647,6 +1815,12 @@ func _relayout() -> void:
 	# 联机聊天(仅联机创建): 表情后固定左侧区(440..848), 与右锚操作行解耦;
 	# 紧凑时输入行挪到顶部空带。发送钮尺寸在入树后补设(入树前赋值不生效)
 	chat_btn.size = Vector2(64, 48) if touch else Vector2(56, 36)
+	# 手机紧凑视口放不下聊天输入行(顶部与对家信息框重叠): 整行隐藏 —
+	# 快捷回复/表情仍可从左下 😀 面板发送(聊天历史屏手机上一并隐藏)
+	var chat_ok: bool = mode == "online" and not (touch and compact)
+	chat_log.visible = chat_ok
+	chat_edit.visible = chat_ok
+	chat_btn.visible = chat_ok
 	chat_log.position = Vector2(16, 120.0 if compact else h - 258.0)
 	# 表情展开时聊天输入/发送右移让位(表情区 60..468)
 	var chat_ex := 480.0 if _emoji_open else 440.0
@@ -1667,7 +1841,7 @@ func _relayout() -> void:
 		chat_btn.position.y -= _kbd_shift
 		if emoji_popup != null:
 			emoji_popup.position.y -= _kbd_shift
-	_position_rogue_strip.call_deferred()
+	_sync_rogue_overlay.call_deferred()
 
 
 var _sel_round := -1      # 选牌状态归属的手局号(手局变化即清除, 防跨手残留)
@@ -1699,16 +1873,32 @@ func _refresh_view(view: Dictionary) -> void:
 			or not view.has("round") or not view.has("rounds_total"):
 		return  # 服务器 view 尚未就绪, 跳过本帧刷新
 	var phase: String = view["phase"]
+	if phase != "draft":
+		_close_rogue_strip()
+	# 记牌器次卡计费: 首次进入出牌阶段时消耗(回放只读不计费)
+	if phase == "play" and replay_data.is_empty():
+		_charge_counter_once()
 
 	# 回合制展示: 一回合 = 3 局 → "第 X 回合 第 Y/Z 局"
 	var hand := int(view["round"]) + 1              # 全局第几局(1..hands_total)
 	var hands_total := int(view["rounds_total"])
 	var round_idx := ceili(hand / 3.0)              # 每回合 3 局
 	var rounds_total := ceili(hands_total / 3.0)
-	info_label.text = "第 %d/%d 回合 · 第 %d/%d 局    %s" % [
+	info_label.text = "第 %d/%d 回合 · 第 %d/%d 局" % [
 		round_idx, rounds_total, hand, hands_total,
-		"革命!" if bool(view["revolution"]) else "",
 	]
+	# 革命徽标: 生效期间红字脉冲(替代原先混在回合文字里的"革命!")
+	var show_rev: bool = bool(view["revolution"]) and phase != "game_end"
+	if _rev_lbl != null:
+		_rev_lbl.visible = show_rev
+		if show_rev and (_rev_pulse == null or not _rev_pulse.is_valid()):
+			_rev_pulse = create_tween().set_loops()
+			_rev_pulse.tween_property(_rev_lbl, "modulate:a", 0.5, 0.6)
+			_rev_pulse.tween_property(_rev_lbl, "modulate:a", 1.0, 0.6)
+		elif not show_rev and _rev_pulse != null and _rev_pulse.is_valid():
+			_rev_pulse.kill()
+			_rev_pulse = null
+			_rev_lbl.modulate.a = 1.0
 
 	var my := int(view["my_seat"])
 	# 对手按相对方位入座: 右=下家, 上=对家, 左=上家
@@ -1722,10 +1912,14 @@ func _refresh_view(view: Dictionary) -> void:
 	avatar_me.skin_id = _skin_for(view, my)
 	_refresh_opp_hands(view)
 
-	# 记牌器跨局重置: 局号变化(本地/联机统一)即重建基数, 修掉跨局累计错数
+	# 记牌器跨局重置: 局号变化(本地/联机统一)即重建基数, 修掉跨局累计错数;
+	# 肉鸽命运卡在 draft 阶段才敲定(同局内局号不变) → 命运卡变化也重算基数,
+	# 否则 王者归来/无王之地 等发牌类规则的王的基数沿用 draft 期的预设值
 	var rnd := int(view.get("round", -1))
-	if rnd != _counter_round:
+	var mod_id := str(view.get("rogue_mod", ""))
+	if rnd != _counter_round or mod_id != _counter_mod:
 		_counter_round = rnd
+		_counter_mod = mod_id
 		_counter_reset(view)
 	_refresh_field(view)
 	_refresh_hand(view)
@@ -1770,14 +1964,17 @@ func _refresh_view(view: Dictionary) -> void:
 
 	var lead: Dictionary = view["lead"]
 	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
-	# 轮到你但压不过 → 自动"不要"(每回合一次; 手动选牌也没意义)
+	# 离开自己的回合/出牌阶段即取消"要不起"倒计时
+	if phase != "play" or not my_turn:
+		_cancel_pass_wait()
+	# 轮到你但压不过 → 5 秒倒计时后自动"不要"(联机本地一致; 不再瞬间跳过,
+	# 给玩家看清局面/手动操作的时间, 期间大数字 54321 提示)
 	if my_turn and not lead.is_empty() and str(view["phase"]) == "play":
 		if not _auto_pass_done:
 			_auto_pass_done = true
 			var act: Dictionary = BotPlayerGd.decide_from_view(view)
 			if str(act.get("t")) == "pass":
-				_auto_pass()
-				return
+				_start_pass_wait()
 	elif not my_turn:
 		_auto_pass_done = false
 	# 轮到你: 状态文字金色呼吸脉冲(移动端视线不在屏幕中央也能注意到)
@@ -1795,7 +1992,10 @@ func _refresh_view(view: Dictionary) -> void:
 		_turn_remain = -1.0
 		timer_label.text = ""
 	if phase == "play":
-		if my_turn:
+		if my_turn and _pass_wait > 0.0:
+			status_label.text = "要不起 — 倒计时结束自动不要"
+			status_label.add_theme_color_override("font_color", AppTheme.GOLD)
+		elif my_turn:
 			status_label.text = "轮到你出牌" + ("（需同牌型更大）" if not lead.is_empty() else "")
 			status_label.add_theme_color_override("font_color", AppTheme.GREEN)
 		else:
@@ -1827,7 +2027,7 @@ func _refresh_view(view: Dictionary) -> void:
 	btn_pass.visible = my_turn and not lead.is_empty()
 	btn_rematch.visible = mode == "local" and phase == "game_end"
 	btn_leave.visible = true
-	btn_leave.text = "返回大厅" if mode == "online" else "返回菜单"
+	btn_leave.text = "返回房间" if mode == "online" else "返回菜单"
 
 	# 终局演出（一次性）
 	if phase == "game_end" and not _end_shown \
@@ -1920,9 +2120,14 @@ func _refresh_opp_hands(view: Dictionary) -> void:
 			if pal_id != "":
 				cv.palette_id = pal_id
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			cv.custom_minimum_size = Vector2(40, 56)
-			cv.size = Vector2(40, 56)
-			cv.position = Vector2(0, k * 11) if vert else Vector2(k * 12, 0)
+			# 牌背扇尺寸随设备: 手机缩小一档(顶部角位空间紧张, 13 张不压按钮/面板)
+			var bw := 34.0 if Responsive.is_touch() else 40.0
+			var bh := 48.0 if Responsive.is_touch() else 56.0
+			var vpitch := 9.0 if Responsive.is_touch() else 11.0
+			var hpitch := 10.0 if Responsive.is_touch() else 12.0
+			cv.custom_minimum_size = Vector2(bw, bh)
+			cv.size = Vector2(bw, bh)
+			cv.position = Vector2(0, k * vpitch) if vert else Vector2(k * hpitch, 0)
 			box.add_child(cv)
 		box.visible = n > 0
 
@@ -1964,7 +2169,7 @@ func _round_end_text(view: Dictionary) -> String:
 	if mod == "double_stakes":
 		parts.append("命运卡: 结算×2")
 	elif mod == "score_negate":
-		parts.append("命运卡: 正负反转")
+		parts.append("命运卡: 身份互换")
 	return "  ".join(parts)
 
 
@@ -1989,11 +2194,23 @@ func _rogue_mod_id_safe() -> String:
 	return ""
 
 
+## 记牌器次卡计费: 每场对局首次进入出牌阶段时消耗 1 张(日卡当日免计费)。
+## 无任何可用道具时只提示一次, 不再弹错。
+func _charge_counter_once() -> void:
+	if _counter_charged:
+		return
+	_counter_charged = true
+	if not Wallet.consume_counter_use() and not _counter_hinted:
+		_counter_hinted = true
+		_flash_error("记牌器未激活 — 请到商城购买「记牌器·日卡/次卡」")
+
+
 func _update_counter(view: Dictionary) -> void:
 	if counter_lbl == null:
 		return
 	var phase := str(view.get("phase", ""))
-	counter_lbl.visible = GameSettings.card_counter \
+	# 道具门控: 未购记牌器(日卡/次卡)时不显示
+	counter_lbl.visible = GameSettings.card_counter and Wallet.counter_active() \
 			and (phase == "play" or phase == "exchange")
 	if not counter_lbl.visible:
 		return
@@ -2188,7 +2405,7 @@ func _trim_field() -> void:
 	var box_w: float = field_box.size.x
 	if box_w < 60.0:
 		return
-	var max_lines := 1 if (Responsive.is_touch() and size.x < 1100.0) else 2
+	var max_lines := 1 if (Responsive.is_touch() and size.y < 660.0) else 2
 	# 从最新(末尾)往回逐手模拟折行, 数出容量内能保留的手数
 	var kept: Array = []
 	var x := 0.0

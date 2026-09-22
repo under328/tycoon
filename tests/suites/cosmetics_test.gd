@@ -10,9 +10,11 @@ const GameStateGd = preload("res://src/rules/game_state.gd")
 const RoomManagerGd = preload("res://src/server/room_manager.gd")
 
 const NEW_SKINS := ["skin_dball", "skin_ninja", "skin_rx"]
+const NEWEST_SKINS := ["skin_p5", "skin_gundam", "skin_ppg"]
 const NEW_CARDS := ["card_dball", "card_ninja", "card_rx"]
+const NEWEST_CARDS := ["card_p5", "card_gundam", "card_ppg"]
 const KNOWN_MOTIFS := ["washi", "sumi", "hi", "umi", "wukong", "cyber",
-		"dball", "ninja", "rx"]
+		"dball", "ninja", "rx", "p5", "gundam", "ppg"]
 
 
 func run(t) -> void:
@@ -39,11 +41,12 @@ func _registry(t) -> void:
 	var skin_ids: Array = []
 	for s in SkinsLib.SKINS:
 		skin_ids.append(str(s["id"]))
-	for id in NEW_SKINS:
+	for id in NEW_SKINS + NEWEST_SKINS:
 		t.expect(skin_ids.has(id), "新皮肤 %s 已上架" % id)
 		for s in SkinsLib.SKINS:
 			if str(s["id"]) == id:
-				t.expect_eq(int(s["price"]), 160, "%s 定价 160 钻" % id)
+				t.expect_eq(int(s["price"]), 200 if (NEWEST_SKINS as Array).has(id)
+						else 160, "%s 定价正确" % id)
 	var card_ids: Array = []
 	for c in SkinsLib.CARDS:
 		card_ids.append(str(c["id"]))
@@ -51,11 +54,12 @@ func _registry(t) -> void:
 				"black", "shadow", "back", "speckle"]:
 			t.expect((c as Dictionary).has(key), "卡面 %s 缺字段 %s" % [c["id"], key])
 		t.expect(KNOWN_MOTIFS.has(str(c["motif"])), "卡面 %s motif 已实现" % c["id"])
-	for id in NEW_CARDS:
+	for id in NEW_CARDS + NEWEST_CARDS:
 		t.expect(card_ids.has(id), "新卡面 %s 已上架" % id)
 		var pal: Dictionary = SkinsLib.palette(id)
 		t.expect_eq(str(pal["id"]), id, "卡面 %s 可查得调色板" % id)
-		t.expect_eq(int(pal["price"]), 160, "%s 定价 160 钻" % id)
+		t.expect_eq(int(pal["price"]), 200 if (NEWEST_CARDS as Array).has(id)
+				else 160, "%s 定价正确" % id)
 
 
 func _pixel_avatars(t) -> void:
@@ -385,7 +389,7 @@ func _backup_code(t) -> void:
 	w.gold = 777
 	w.diamonds = 42
 	w.local_wins = 9
-	w.local_matches = 33
+	w.local_matches = 20
 	w.unlocked = ["first_win", "wins_10"]
 	w.inventory["item_revive_coin"] = 2
 	w.fight_best = 4
@@ -415,7 +419,7 @@ func _backup_code(t) -> void:
 	t.expect_eq(int(w.gold), 777, "金币恢复")
 	t.expect_eq(int(w.diamonds), 42, "钻石恢复")
 	t.expect_eq(int(w.local_wins), 9, "胜场恢复")
-	t.expect_eq(int(w.local_matches), 33, "场次恢复")
+	t.expect_eq(int(w.local_matches), 20, "场次恢复")
 	t.expect_eq(int(w.unlocked.size()), 2, "成就恢复")
 	t.expect_eq(int(w.fight_best), 4, "格斗纪录恢复")
 	t.expect_eq(int(w.item_count("item_revive_coin")), 2, "库存恢复")

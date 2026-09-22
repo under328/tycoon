@@ -10,17 +10,17 @@ const Responsive = preload("res://src/client/theme/responsive.gd")
 const FightModeGd = preload("res://src/rules/fight/fight_mode.gd")
 
 const PAGES := [
-	["花色与属性", "你的扑克就是你的装备, 数值越大属性越强:", 0],
+	["花色与属性", "你的扑克就是你的装备, 数值越大属性越强:", 0, 40],
 	["牌型协同", "每张牌都有小幅单卡加成(♠物攻+4·暴击+5% / ♥生命 / ♦防抗 / ♣技能, 点数越高越多);
-组合自动触发套装加成(越大越强), 不满 5 张也可判型:", 1],
+组合自动触发套装加成(越大越强), 不满 5 张也可判型:", 1, 58],
 	["五张变身", "集满 5 张装备牌即触发『变身』: 光环随主花色变色,
-全属性 +5%, 冲刺距离更远, 下一层重置后重新集满再次变身:", 6],
-	["回合流程", "共 5 回合: 每回合先『二选一』抽 1 张牌, 再战斗:", 2],
-	["战斗操作", "回合制三选操作; 怪物意图公示, 见招拆招:", 3],
-	["连击与奥义", "连击加成 + 怒气大招 + 完美格挡, 三重爽点:", 4],
-	["稀有卡与无尽", "金框稀有卡 + 通关后无尽挑战:", 5],
+全属性 +5%, 冲刺距离更远, 下一层重置后重新集满再次变身:", 6, 58],
+	["回合流程", "共 5 回合: 每回合先『二选一』抽 1 张牌, 再战斗:", 2, 40],
+	["战斗操作", "回合制三选操作; 怪物意图公示, 见招拆招:", 3, 40],
+	["连击与奥义", "连击加成 + 怒气大招 + 完美格挡, 三重爽点:", 4, 40],
+	["稀有卡与无尽", "金框稀有卡 + 通关后无尽挑战:", 5, 40],
 	["奇物图鉴", "格斗途中拾得的奇物会收录于此(每局最多带 2 件);
-本地面板与联机对战都可收集, 集齐全部 8 件:", 7],
+本地面板与联机对战都可收集, 共 15 件(每局最多带 2 件):", 7, 58],
 ]
 
 var page := 0
@@ -43,6 +43,7 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
+	Responsive.page_bleed(self, AppTheme.BG)   # 避让条露出同色, 页面内外一致
 
 
 	_title = _label(32, AppTheme.GOLD)
@@ -61,7 +62,7 @@ func _ready() -> void:
 	add_child(_body)
 
 	_fig = Control.new()
-	_fig.position = Vector2(160, 252)
+	_fig.position = Vector2(160, 240)
 	_fig.custom_minimum_size = Vector2(960, 290)
 	add_child(_fig)
 
@@ -110,11 +111,19 @@ func _relayout() -> void:
 	var cx := (w - 960.0) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
 	var sq := h < 660.0
+	_title.position = Vector2(0, 20.0 if sq else 46.0)
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (60.0 if sq else 104.0) + dy)
-	_body.size = Vector2(960, 130)
-	_fig.position = Vector2(cx, (190.0 if sq else 252.0) + dy)
+	_body.position = Vector2(cx, (68.0 if sq else 104.0) + dy)
+	var body_h: float = float(PAGES[page][3])
+	_body.size = Vector2(960, body_h)
+	# 图示整体上移: 起点紧跟正文实际预留高度(短正文页图鉴大幅上移);
+	# 矮屏按剩余高度等比缩小, 底部不压页码点/按钮
+	var fig_y := _body.position.y + body_h + 18.0
+	var dots_y := (h - 132.0 if sq else 610.0) + dy
+	var fs := minf(1.0, maxf(dots_y - 14.0 - fig_y, 120.0) / 330.0)
+	_fig.scale = Vector2(fs, fs)
+	_fig.position = Vector2(cx + (960.0 - 960.0 * fs) * 0.5, fig_y)
 	_fig.size = Vector2(960, (260.0 if sq else 290.0))
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
@@ -135,6 +144,7 @@ func _show(p: int) -> void:
 	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = tr(PAGES[p][0])
 	_body.text = tr(PAGES[p][1])
+	_body.size = Vector2(960, float(PAGES[p][3]))
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_build_fig(int(PAGES[p][2]))
@@ -213,7 +223,8 @@ func _build_fig(kind: int) -> void:
 				var meta: Dictionary = FightModeGd.TIERS[str(tiers[i])]
 				_text("%d. %s — %s" % [i + 1, meta["name"], meta["desc"]],
 						Vector2(200, 16 + i * 32), AppTheme.WHITE, 15)
-			_text("牌型在选牌与战斗界面实时显示", Vector2(280, 240),
+			# 说明放 8 行列表之下(行距 32 → 末行 240, 说明原位 240 与之重叠)
+			_text("牌型在选牌与战斗界面实时显示", Vector2(280, 268),
 					AppTheme.GOLD, 15)
 		2:  # 回合流程
 			var steps := [
@@ -231,8 +242,8 @@ func _build_fig(kind: int) -> void:
 		3:  # 战斗操作
 			var rows := [
 				["⚔ 攻击", "物理伤害, 可暴击(♠ 越多越频繁/越痛)"],
-				["✨ 技能", "♣ 法术伤害, 冷却 2 回合; ♣ 张数定流派: 火球/冰霜/圣光"],
-				["🛡 防御", "本回合减伤 60% 并回血 — 盯紧怪物意图再决定!"],
+				["✨ 技能", "♣ 法术伤害(高于普攻), 冷却 2 回合; ♣ 张数定流派: 烈焰(高伤+点燃)/冰霜(冻结)/圣光(回复)"],
+				["🛡 防御", "格挡 80% 伤害 + 少量回血; 预读重击触发完美格挡反击!"],
 				["意图公示", "怪物头顶公示下一手: ⚔攻击 / 💥重击 / 🔥法术 / ⚡蓄力必杀"],
 				["⚡ 蓄力", "蓄力回合不攻击且承伤+50% — 全力输出的机会!"],
 				["BOSS 必杀", "BOSS 蓄力后释放组别专属技能: 缠绕吸血/暗影尖啸/烈焰灼烧/极寒冰冻/亡者回复"],
@@ -277,8 +288,9 @@ func _build_fig(kind: int) -> void:
 				nm.text = str(suits[i][0])
 				nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 				hbb.add_child(nm)
+			# 说明放两行面板之下(行 1 面板 170..270, 说明原位 202 与之重叠)
 			_text("变身: 全属性 +5% · 冲刺更远 · 下一层重新集满再变身",
-					Vector2(140, 202), AppTheme.GOLD, 16)
+					Vector2(140, 282), AppTheme.GOLD, 16)
 		5:  # 稀有卡与无尽
 			var rows := [
 				["金框稀有卡", "候选 12% 出现, 装备后生命上限永久 +8% + 奖励怒气"],
@@ -294,7 +306,7 @@ func _build_fig(kind: int) -> void:
 		7:  # 奇物图鉴: 获得过才点亮(本地面板/联机对战拾取都计数)
 			for i in FightModeGd.SPECIALS.size():
 				_relic_chip(Vector2(20 + (i % 4) * 236,
-						8 + int(i / 4.0) * 140), i,
+						8 + int(i / 4.0) * 112), i,
 						int(Wallet.relic_seen.get(i, 0)) > 0)
 
 
@@ -311,7 +323,7 @@ func _relic_chip(pos: Vector2, sp_id: int, seen: bool) -> void:
 	sb.content_margin_bottom = 6
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.position = pos
-	panel.custom_minimum_size = Vector2(224, 124)
+	panel.custom_minimum_size = Vector2(224, 104)
 	_fig.add_child(panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 2)
@@ -328,7 +340,7 @@ func _relic_chip(pos: Vector2, sp_id: int, seen: bool) -> void:
 	var ds := _label(11, Color("c8a8e0") if seen else AppTheme.DIM)
 	ds.text = str(meta["desc"])
 	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ds.custom_minimum_size = Vector2(200, 40)
+	ds.custom_minimum_size = Vector2(200, 28)
 	v.add_child(ds)
 	if seen:
 		var cc := _label(11, AppTheme.GOLD)

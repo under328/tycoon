@@ -27,17 +27,27 @@ var stats = null                 # StatsLib
 var ai_delay_ms := 600
 var phase_delay_ms := 2200
 var _rng := RandomNumberGenerator.new()
+## 身份簿: client_id → 最近一次上报的昵称(持久化 user://identity.json)。
+## 重装后游客 id 由设备稳定 ID 派生而不变 → 凭它免备份码找回昵称。
+var identity_book: Dictionary = {}
+
+const IDENTITY_PATH := "user://identity.json"
 
 
 func _init() -> void:
 	_rng.randomize()
 	stats = StatsGd.new()
+	var f := FileAccess.open(IDENTITY_PATH, FileAccess.READ)
+	if f != null:
+		var parsed = JSON.parse_string(f.get_as_text())
+		if parsed is Dictionary:
+			identity_book = parsed
 
 
 # ---------------------------------------------------------------- 连接与会话
 
 func hello(peer: int, ver: int, token: String, client_id: String = "",
-		skin_id: String = "", card_id: String = "") -> Array:
+		skin_id: String = "", card_id: String = "", nick: String = "") -> Array:
 	var out := []
 	# 有人回到房间而对局已结束(game_end) → 立即收尾该局:
 	# 否则重入者会收到上局 game_end 视图, 看到"上局结算界面"而非新局。
@@ -49,11 +59,23 @@ func hello(peer: int, ver: int, token: String, client_id: String = "",
 	if skin_id != "":
 		peer_skin[peer] = skin_id
 	if ver != MsgC.PROTOCOL_VERSION:
+		# 版本不一致: 带上双方协议版本, 客户端能给出明确指引(常见于一方未更新)
 		out.append({"peer": peer, "event": "s_kicked",
-				"data": {"reason": "version"}})
+				"data": {"reason": "version", "server_ver": MsgC.PROTOCOL_VERSION,
+						"client_ver": int(ver)}})
 		return out
 	if client_id != "":
 		peer_client[peer] = client_id
+		# 身份簿: 实名上报即记录; 默认昵称(重装后)则回执找回
+		var saved_nick := str(identity_book.get(client_id, ""))
+		if nick != "" and nick != "玩家":
+			if saved_nick != nick:
+				identity_book[client_id] = nick
+				_save_identity_book()
+		elif (nick == "" or nick == "玩家") and saved_nick != "" \
+				and saved_nick != "玩家":
+			out.append({"peer": peer, "event": "s_identity",
+					"data": {"nickname": saved_nick}})
 	# 已在房间的 peer(如 quick_match 先于 hello 到达): 直接回报正确座位
 	var known_code = peer_room.get(peer, "")
 	if known_code != "":
@@ -154,7 +176,7 @@ func create_room(peer: int, name: String, rules: Dictionary, client_id: String =
 	var out := []
 	if _in_live_match(peer):
 		out.append({"peer": peer, "event": "s_error",
-				"data": {"code": "in_game", "msg": "对局进行中"}})
+				"data": {"code": "in_game", "msg": "你所在的对局尚未结束"}})
 		return out
 	if rooms.size() >= MAX_ROOMS:
 		out.append({"peer": peer, "event": "s_error",
@@ -183,10 +205,12 @@ func join_room(peer: int, name: String, code: String, client_id: String = "",
 	var out := []
 	if _in_live_match(peer):
 		out.append({"peer": peer, "event": "s_error",
-				"data": {"code": "in_game", "msg": "对局进行中"}})
+				"data": {"code": "in_game", "msg": "你所在的对局尚未结束"}})
 		return out
 	if client_id != "":
 		peer_client[peer] = client_id
+	if client_id == "":
+		client_id = str(peer_client.get(peer, ""))   # join 载荷缺 id 时用 hello 登记的
 	if skin_id != "":
 		peer_skin[peer] = skin_id
 	var room = rooms.get(code)
@@ -194,9 +218,66 @@ func join_room(peer: int, name: String, code: String, client_id: String = "",
 		out.append({"peer": peer, "event": "s_error",
 				"data": {"code": "no_room", "msg": "房间不存在"}})
 		return out
+	# 同一玩家(client_id)的离线座位直接归位 — 否则"退出→重进"会开出第二个
+	# 座位(旧的显示 离线·AI 代管), 同人出现两次。对局中的座位也归位:
+	# 主动退出后重进拿回自己的座位, 而不是被 in_game 拒之门外。
+	var reseat: int = room.seat_of_client(client_id)
+	if reseat >= 0 and not bool(room.seats[reseat]["online"]):
+		if peer_room.has(peer) and str(peer_room[peer]) != room.code:
+			_leave_room(peer, out)   # 从别的房间正确退出后再归位本房
+		var sd: Dictionary = room.seats[reseat]
+		peer_room.erase(int(sd["peer"]))   # 旧 peer 仍占用则顶替
+		sd["peer"] = peer
+		sd["online"] = true
+		sd["offline_ms"] = 0
+		if name != "":
+			sd["name"] = name
+		if skin_id != "":
+			sd["skin_id"] = skin_id
+		if card_id != "":
+			sd["card_id"] = card_id
+		if room.match_ctl != null:
+			room.match_ctl.seat_peer[reseat] = peer
+			room.match_ctl.seat_online[reseat] = true
+		peer_room[peer] = room.code
+		out.append({"peer": peer, "event": "s_room_state",
+				"data": room.state_for(reseat)})
+		# 已退出本场者只归位到房间页, 不补发对局视图(否则会被重新拉回
+		# 牌桌/竞技场, 且其操作全被 left 拒绝 → 卡在游戏界面进不了房间)
+		if room.match_ctl != null and not room.match_ctl.has_left(reseat):
+			out.append(_view_msg(room, reseat))
+		_bcast_room_state(out, room)
+		return out
 	if room.match_ctl != null:
+		# 对局进行中: 普通/肉鸽允许朋友接管一个 AI 座位加入共享对局
+		# (命运卡由当前天选者代选, 其余与同桌完全同步); 格斗对战座位固定, 拒绝。
+		if str(room.settings.get("mode", "")) != "fight":
+			var bot_seat := -1
+			for s in 4:
+				var sd0 = room.seats[s]
+				if sd0 != null and bool(sd0["bot"]):
+					bot_seat = s
+					break
+			if bot_seat >= 0:
+				if peer_room.has(peer) and str(peer_room[peer]) != room.code:
+					_leave_room(peer, out)
+				var token: String = room.claim_bot_seat(bot_seat, peer, name,
+						client_id, skin_id, card_id)
+				room.match_ctl.seat_peer[bot_seat] = peer
+				room.match_ctl.seat_online[bot_seat] = true
+				if room.match_ctl.state.has("names") 						and (room.match_ctl.state["names"] as Array).size() == 4:
+					room.match_ctl.state["names"][bot_seat] = name
+				room.match_ctl.state["names"] = room.match_ctl.state["names"]
+				peer_room[peer] = room.code
+				var rs: Dictionary = room.state_for(bot_seat)
+				rs["session_token"] = token
+				out.append({"peer": peer, "event": "s_room_state", "data": rs})
+				out.append(_view_msg(room, bot_seat))   # 立即进入共享对局
+				_bcast_room_state(out, room)
+				return out
 		out.append({"peer": peer, "event": "s_error",
-				"data": {"code": "in_game", "msg": "对局进行中"}})
+				"data": {"code": "in_game",
+						"msg": "该房间对局进行中, 对局结束后可加入"}})
 		return out
 	_leave_room(peer, out)
 	var seat: int = room.sit(peer, name, client_id, skin_id, card_id)
@@ -251,7 +332,13 @@ func emoji(peer: int, id: int, now_ms: int = -1) -> Array:
 	var seat: int = room.seat_of_peer(peer)
 	if seat < 0:
 		return out
-	_bcast_event(out, room, "s_emoji", {"seat": seat, "id": clampi(id, 0, 7)})
+	# 表情包贴纸(id 100..107)原样透传; 普通表情仍限 0..7
+	var eid := id
+	if id >= 100:
+		eid = 100 + clampi(id - 100, 0, 7)
+	else:
+		eid = clampi(id, 0, 7)
+	_bcast_event(out, room, "s_emoji", {"seat": seat, "id": eid})
 	return out
 
 
@@ -377,7 +464,8 @@ func rogue_pick(peer: int, idx: int) -> Array:
 
 ## 格斗对战: 选牌(候选/槽位/跳过由 data 携带; 仅格斗者座位合法)
 func fight_pick(peer: int, data: Dictionary) -> Array:
-	return _fight_action(peer, "pick", data)
+	var out := _fight_action(peer, "pick", data)
+	return out
 
 
 ## 格斗对战: 回合行动 attack/skill/defend(仅当前回合格斗者合法)
@@ -394,6 +482,10 @@ func _fight_action(peer: int, kind: String, payload) -> Array:
 				"data": {"code": "no_match", "msg": "没有进行中的格斗对局"}})
 		return out
 	var seat: int = room.seat_of_peer(peer)
+	if room.match_ctl.has_left(seat):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "left_match", "msg": "已退出本场对局"}})
+		return out
 	var r: Dictionary
 	if kind == "pick":
 		var data: Dictionary = payload
@@ -455,6 +547,10 @@ func _game_action(peer: int, action: Dictionary, now_ms: int) -> Array:
 		return out
 	var seat: int = room.seat_of_peer(peer)
 	var ctl = room.match_ctl
+	if ctl.has_left(seat):
+		out.append({"peer": peer, "event": "s_error",
+				"data": {"code": "left_match", "msg": "已退出本场对局"}})
+		return out
 	action["seat"] = seat
 	var r: Dictionary = ctl.human_apply(action, now_ms)
 	if not bool(r["changed"]):
@@ -462,6 +558,46 @@ func _game_action(peer: int, action: Dictionary, now_ms: int) -> Array:
 				"data": {"code": str(r.get("error", "invalid")), "msg": "非法操作"}})
 		return out
 	_after_state_change(out, room, r)
+	return out
+
+
+## 退出本场对局(人留在房间): 座位转 AI 代管; 全员退出 → 立即收尾。
+## 返回房间页的玩家收到 room_state(座位仍在, 可等下一局)。
+func game_leave(peer: int) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl == null:
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	if seat < 0:
+		return out
+	room.match_ctl.leave(seat)
+	# 对局内系统提示: 留在牌桌的玩家从聊天栏看到"XX 退出了对局(AI 代管)"
+	var seat_data = room.seats[seat]
+	var nm: String = str(seat_data["name"]) if seat_data != null else ""
+	_bcast_event(out, room, "s_chat", {"seat": seat,
+			"text": TranslationServer.translate("退出了对局（AI 代管）")
+					+ (" · " + nm if nm != "" else "")})
+	if room.match_ctl.all_humans_left():
+		room.end_match()
+	_bcast_room_state(out, room)
+	return out
+
+
+## 格斗: 退出本场(留在房间); 双方都退出 → 立即收尾。
+func fight_leave(peer: int) -> Array:
+	var out := []
+	var room = _room_of(peer)
+	if room == null or room.match_ctl == null \
+			or str(room.match_ctl.kind) != "fight":
+		return out
+	var seat: int = room.seat_of_peer(peer)
+	if seat < 0:
+		return out
+	room.match_ctl.leave(seat)
+	if room.match_ctl.all_humans_left():
+		room.end_match()
+	_bcast_room_state(out, room)
 	return out
 
 
@@ -561,7 +697,8 @@ func _bcast_views(out: Array, room) -> void:
 		return
 	var ctl = room.match_ctl
 	for s in 4:
-		if _human_online(room, s):
+		# 已退出本场(left)的座位不再收对局视图 — 防止客户端被重新拉回牌桌
+		if _human_online(room, s) and not ctl.has_left(s):
 			out.append(_view_msg(room, s))
 
 
@@ -577,10 +714,11 @@ func _view_msg(room, seat: int) -> Dictionary:
 	return {"peer": int(room.seats[seat]["peer"]), "event": "s_game_view", "data": data}
 
 
-## 格斗对战广播: 全房在线人类(格斗者+观战者)都收到按座位裁剪的战斗视图
+## 格斗对战广播: 全房在线人类(格斗者+观战者)都收到按座位裁剪的战斗视图。
+## 已退出本场(left)的座位不再广播 — 否则其客户端会被重新拉回竞技场。
 func _bcast_fight(out: Array, room, events: Array) -> void:
 	for s in 4:
-		if _human_online(room, s):
+		if _human_online(room, s) and not room.match_ctl.has_left(s):
 			out.append({"peer": int(room.seats[s]["peer"]), "event": "s_fight_state",
 					"data": {"view": room.match_ctl.view_for(s),
 							"events": events}})
@@ -630,8 +768,19 @@ func _room_of(peer: int):
 	return rooms.get(code)
 
 
+## net_node 路由用: peer → 所在房间(不在任何房间返回 null)。
+func room_of_peer(peer: int):
+	return _room_of(peer)
+
+
 func _seat_of(room, peer: int) -> int:
 	return room.seat_of_peer(peer)
+
+
+func _save_identity_book() -> void:
+	var f := FileAccess.open(IDENTITY_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(identity_book))
 
 
 ## --soak: 创建 N 个全机器人压测房间(对局结束自动续局)

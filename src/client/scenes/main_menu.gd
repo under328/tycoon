@@ -449,6 +449,7 @@ func _show_mode_select() -> void:
 		if ev is InputEventMouseButton and ev.pressed:
 			_close_mode_select())
 	dlg.add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条(与弹窗内一致)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -614,6 +615,7 @@ func _show_signin(sign_btn: Button, prof_btn: Button = null) -> void:
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dlg.add_child(dim)
+	Responsive.expand_to_viewport(dim)   # 遮罩延伸到避让条(与弹窗内一致)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE

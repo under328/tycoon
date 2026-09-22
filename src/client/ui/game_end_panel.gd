@@ -99,7 +99,8 @@ func setup(view: Dictionary, seat_namer: Callable, reward: Dictionary = {}) -> v
 			for a in achs:
 				names.append(str(a["name"]))
 			var al := AppTheme.make_label(17, AppTheme.GOLD)
-			al.text = "🏆 成就解锁: %s" % " · ".join(PackedStringArray(names))
+			al.text = "🏆 成就解锁: %s (+%d钻石)" % [" · ".join(PackedStringArray(names)),
+					achs.size() * 2]
 			al.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			box.add_child(al)
 

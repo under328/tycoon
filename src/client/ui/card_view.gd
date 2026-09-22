@@ -180,7 +180,11 @@ func _draw() -> void:
 
 func _draw_face() -> void:
 	draw_style_box(_sb["face"], Rect2(Vector2.ZERO, size))
-	if card < 0 or card > 53:
+	# 王(含肉鸽『王者归来』的扩展王 54/55): 统一走 JOKER 花牌绘制
+	if CardsGd.is_joker(card):
+		_draw_joker()
+		return
+	if card < 0:
 		return
 	# 全部元素按牌面高度等比缩放(标准 100 高 → s=1.0)
 	var s := size.y / 100.0
@@ -197,9 +201,6 @@ func _draw_face() -> void:
 			6.0 * s, Color(Wafu.GOLD, 0.5))
 	var ink: Color = _pal["red"] if CardsGd.is_red(card) else _pal["black"]
 	var rank: String = CardsGd.rank_label(card)
-	if CardsGd.is_joker(card):
-		_draw_joker()
-		return
 	# 主题中心纹样: J/QK 纹章水印, 数字牌纹环
 	var motif := str(_pal.get("motif", "washi"))
 	var c0 := size / 2.0
@@ -271,6 +272,14 @@ func _heart_points(scale: float, flip := false) -> PackedVector2Array:
 	return pts
 
 
+## 任意尺寸爱心(主题纹环/纹章共用): 复用心形参数曲线
+func _draw_heart_shape(pos: Vector2, r: float, ink: Color) -> void:
+	var moved := PackedVector2Array()
+	for p in _heart_points(r):
+		moved.append(pos + p)
+	draw_colored_polygon(moved, ink)
+
+
 func _draw_heart(pos: Vector2, r: float, ink: Color) -> void:
 	var moved := PackedVector2Array()
 	for p in _heart_points(r):
@@ -303,9 +312,9 @@ func _draw_club(pos: Vector2, r: float, ink: Color) -> void:
 
 
 ## JOKER 花牌: 各主题专属像素画(达摩/仙鹤/狐面/河童)。
-## 大王(53)带描金放射光芒, 小王(52)素面 —— 便于玩家区分。
+## 大王(53/55)带描金放射光芒, 小王(52/54)素面 —— 便于玩家区分。
 func _draw_joker() -> void:
-	var big := card == 53
+	var big := card == 53 or card == 55
 	var motif := str(_pal.get("motif", "washi"))
 	# 主题夜空底: 牌背色系竖向渐变
 	var base: Color = _pal["back"]
@@ -343,6 +352,12 @@ func _draw_joker() -> void:
 			_pixel_art(PIX_NINJA, _pix_pal_ninja(), c, size)
 		"rx":
 			_pixel_art(PIX_RX, _pix_pal_rx(), c, size)
+		"p5":
+			_pixel_art(PIX_MASK, _pix_pal_p5(), c, size)
+		"gundam":
+			_pixel_art(PIX_GUNDAM, _pix_pal_gundam(), c, size)
+		"ppg":
+			_pixel_art(PIX_PPG, _pix_pal_ppg(), c, size)
 		_:
 			_pixel_art(PIX_DARUMA, _pix_pal_daruma(), c, size)
 	# 角标: JOKER
@@ -409,6 +424,20 @@ func _pix_pal_ninja() -> Dictionary:
 func _pix_pal_rx() -> Dictionary:
 	return {"B": Color("1a1a24"), "G": Color("3ddc6c"), "R": Color("ff4040"),
 		"S": Color("b8c0c8"), "T": Color("8a94a4"), "W": Color("d8fce4")}
+
+
+func _pix_pal_p5() -> Dictionary:
+	return {"W": Color("f8f6f0"), "B": Color("181420")}
+
+
+func _pix_pal_gundam() -> Dictionary:
+	return {"W": Color("e8ecf4"), "Y": Color("f2c838"), "G": Color("3ddc6c"),
+		"B": Color("2858a8"), "R": Color("d84040")}
+
+
+func _pix_pal_ppg() -> Dictionary:
+	return {"H": Color("f8e078"), "W": Color("f8faff"), "P": Color("58a8e0"),
+		"M": Color("d86078"), "R": Color("f8b0c0")}
 
 
 const PIX_DARUMA := [
@@ -535,6 +564,55 @@ const PIX_NINJA := [
 	"DD........DD",
 ]
 
+## 女神异闻录: 白色半脸眼罩(尖角眼缘 + 深色瞳缝)
+const PIX_MASK := [
+	"............",
+	"..WWW..WWW..",
+	".WWWWWWWWWW.",
+	"WWWWWWWWWWWW",
+	"WWBWWWWWWBWW",
+	"WWBWWWWWWBWW",
+	".WWWWWWWWWW.",
+	".WWWWWWWWWW.",
+	"..WWWWWWWW..",
+	"...WW..WW...",
+	"............",
+	"............",
+]
+
+## 高达: 白盔 + 黄天线 + 绿复眼 + 蓝面甲 + 红下巴
+const PIX_GUNDAM := [
+	".....YY.....",
+	".....YY.....",
+	".Y..WWWW..Y.",
+	".YY.WWWW.YY.",
+	".WWWWWWWWWW.",
+	"WWWWWWWWWWWW",
+	"WWGGWWWWGGWW",
+	"WWGGWWWWGGWW",
+	".WWBBBBBBWW.",
+	".WWWWRRWWWW.",
+	"..WWWWWWWW..",
+	"............",
+]
+
+## 飞天小女警(泡泡): 金发圆头 + 超大蓝瞳 + 元气笑 + 腮红
+const PIX_PPG := [
+	"..HHHHHHHH..",
+	".HHHHHHHHHH.",
+	"HHHHHHHHHHHH",
+	"HHWWWWWWWWHH",
+	"HWWPPWWWWPPH",
+	"HWWPPWWWWPPH",
+	"HWWWWWWWWWWH",
+	".HWWWWWWWWH.",
+	"..WWMMMMWW..",
+	"..RWWWWWWR..",
+	"....HHHH....",
+	"............",
+]
+
+
 ## RX骑士头盔: 银缘黑盔 + 额心红晶 + 双绿复眼 + 银口栅(银缘勾轮廓, 防融进深色卡底)
 const PIX_RX := [
 	"....TTTT....",
@@ -612,6 +690,27 @@ func _draw_center_ring(motif: String, c: Vector2, r: float, col: Color) -> void:
 				c + Vector2(0, -r * 0.3), c + Vector2(r * 0.18, 0),
 				c + Vector2(0, r * 0.3), c + Vector2(-r * 0.18, 0),
 			]), Color(_pal["red"], col.a))
+		"p5":  # 五角星 + 锐利芒点(叛逆星纹)
+			var star := PackedVector2Array()
+			for i in 10:
+				var ang := TAU * i / 10.0 - PI * 0.5
+				var rr := r if i % 2 == 0 else r * 0.45
+				star.append(c + Vector2.from_angle(ang) * rr)
+			star.append(star[0])
+			draw_colored_polygon(star, Color(col, col.a * 0.8))
+			draw_polyline(star, Color(_pal["red"], col.a * 0.9), 1.6, true)
+		"gundam":  # V 字翼 + 中心圆(合金纹章)
+			draw_circle(c, r * 0.30, col)
+			draw_arc(c, r * 0.62, 0, TAU, 30, col, 2.0, true)
+			for side in [-1.0, 1.0]:
+				draw_colored_polygon(PackedVector2Array([
+					c + Vector2(0, -r * 0.55), c + Vector2(side * r * 0.85, r * 0.35),
+					c + Vector2(side * r * 0.55, r * 0.45),
+				]), col)
+		"ppg":  # 爱心 + 气泡(元气环)
+			_draw_heart_shape(c + Vector2(0, -r * 0.12), r * 0.62, col)
+			for p: Vector2 in [Vector2(-1, -0.6), Vector2(1, -0.6), Vector2(0, 1)]:
+				draw_circle(c + p * r * 0.62, r * 0.12, Color(col, col.a * 0.6))
 		_:  # washi 樱花五瓣
 			for i in 5:
 				var ang := TAU * i / 5.0 - PI * 0.5
@@ -730,6 +829,24 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 				c + Vector2(0, -s * 0.62), c + Vector2(s * 0.12, -s * 0.45),
 				c + Vector2(0, -s * 0.3), c + Vector2(-s * 0.12, -s * 0.45),
 			]), Color(_pal["red"], col.a))
+		"p5":  # 眼罩面具纹章: 白色横贯面罩 + 瞳缝
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(-s * 0.95, -s * 0.1), c + Vector2(s * 0.95, -s * 0.1),
+				c + Vector2(s * 0.7, s * 0.35), c + Vector2(-s * 0.7, s * 0.35),
+			]), col)
+			draw_circle(c + Vector2(-s * 0.3, s * 0.05), s * 0.1, Color(_pal["face"], 0.85))
+			draw_circle(c + Vector2(s * 0.3, s * 0.05), s * 0.1, Color(_pal["face"], 0.85))
+		"gundam":  # V 翼纹章: 金色双刃 + 中心珠
+			for side in [-1.0, 1.0]:
+				draw_colored_polygon(PackedVector2Array([
+					c + Vector2(0, -s * 0.8), c + Vector2(side * s * 0.9, s * 0.45),
+					c + Vector2(side * s * 0.45, s * 0.5),
+				]), col)
+			draw_circle(c + Vector2(0, s * 0.2), s * 0.16, Color(_pal["red"], col.a))
+		"ppg":  # 爱心纹章 + 双翼点
+			_draw_heart_shape(c, s * 0.95, col)
+			draw_circle(c + Vector2(-s * 1.05, -s * 0.2), s * 0.14, col)
+			draw_circle(c + Vector2(s * 1.05, -s * 0.2), s * 0.14, col)
 		_:
 			var body := PackedVector2Array([
 				c + Vector2(-s * 0.7, s * 0.1), c + Vector2(-s * 0.2, -s * 0.35),
@@ -757,6 +874,13 @@ func _draw_crest(motif: String, c: Vector2, s: float, col: Color) -> void:
 			draw_line(c + Vector2(s * 0.15, s * 0.5),
 					c + Vector2(s * 0.1, s * 0.95), col, s * 0.05, true)
 
+
+## 牌背纹样用爱心(绘制在指定画布上)
+func _draw_heart_shape_on(host: CanvasItem, pos: Vector2, r: float, ink: Color) -> void:
+	var moved := PackedVector2Array()
+	for p in _heart_points(r):
+		moved.append(pos + p)
+	host.draw_colored_polygon(moved, ink)
 
 ## 主题牌背: 和纸=青海波+樱花 / 墨玉=远山月夜 / 绯红=市松纹+焰芯 / 苍海=层浪落日。
 func _draw_back() -> void:
@@ -914,6 +1038,46 @@ func _draw_back_pattern(host: CanvasItem) -> void:
 			host.draw_circle(cr, size.y * 0.14, Color(border_c, 0.28))
 			host.draw_circle(cr, size.y * 0.085, Color(_pal["red"], 0.85))
 			host.draw_circle(cr, size.y * 0.032, Color(_pal["black"], 0.9))
+		"p5":
+			# P5 牌背: 斜切红黑碎片 + 中央白色五角星
+			for i in 6:
+				var xx := size.x * (0.04 + 0.17 * i)
+				host.draw_colored_polygon(PackedVector2Array([
+					Vector2(xx, 0), Vector2(xx + size.x * 0.08, 0),
+					Vector2(xx - size.x * 0.10, size.y), Vector2(xx - size.x * 0.18, size.y),
+				]), Color(_pal["red"], 0.10 + 0.03 * (i % 3)))
+			var c5 := size / 2.0
+			var star := PackedVector2Array()
+			for i in 10:
+				var ang := TAU * i / 10.0 - PI * 0.5
+				var rr := size.y * (0.16 if i % 2 == 0 else 0.07)
+				star.append(c5 + Vector2.from_angle(ang) * rr)
+			host.draw_colored_polygon(star, Color(_pal["face"], 0.75))
+		"gundam":
+			# 高达牌背: 装甲分割线 + 中央红点(照准) + 四角铆钉
+			for i in 4:
+				var yy := size.y * (0.18 + 0.22 * i)
+				host.draw_line(Vector2(size.x * 0.08, yy), Vector2(size.x * 0.92, yy),
+						Color(border_c, 0.25), size.x * 0.02, true)
+			var cg := size / 2.0
+			host.draw_circle(cg, size.y * 0.07, Color(_pal["red"], 0.85))
+			host.draw_circle(cg, size.y * 0.03, Color(_pal["face"], 0.8))
+			for p: Vector2 in [Vector2(0.12, 0.1), Vector2(0.88, 0.1),
+					Vector2(0.12, 0.9), Vector2(0.88, 0.9)]:
+				host.draw_circle(Vector2(size.x * p.x, size.y * p.y),
+						size.x * 0.035, Color(border_c, 0.6))
+		"ppg":
+			# 小女警牌背: 粉底 + 三色心(左上飞散小圆) + 中央大爱心
+			for i in 5:
+				var dot_c: Color = [_pal["red"], Color("7ac0e8"), Color("b8e078")][i % 3]
+				host.draw_circle(Vector2(size.x * (0.2 + 0.15 * i),
+						size.y * (0.16 if i % 2 == 0 else 0.84)),
+						size.x * 0.05, Color(dot_c, 0.5))
+			host.draw_colored_polygon(PackedVector2Array([
+				Vector2(size.x * 0.5, size.y * 0.22), Vector2(size.x * 0.82, size.y * 0.45),
+				Vector2(size.x * 0.5, size.y * 0.8), Vector2(size.x * 0.18, size.y * 0.45),
+			]), Color(_pal["face"], 0.35))
+			_draw_heart_shape_on(host, size / 2.0, size.y * 0.30, Color(_pal["face"], 0.85))
 		_:
 			# 小牌(对手牌背扇 40px): 单环大格纹样, 绘制量 -70%
 			var small := size.x < 60.0

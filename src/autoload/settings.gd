@@ -30,7 +30,9 @@ var voice_on := true            # 语音播报开关(欢乐斗地主式出牌/�
 func _ready() -> void:
 	load_settings()
 	if client_id == "":
-		client_id = "%08x%08x" % [randi(), randi()]
+		# 游客 id 由设备稳定 ID(Windows=机器GUID / Android=SSAID, 重装不变)派生:
+		# 重装后 client_id 不变, 联机时服务器凭它找回昵称(RoomManager 身份簿)
+		client_id = ("d" + str(OS.get_unique_id()).md5_text()).substr(0, 17)
 		save_settings()
 
 
@@ -47,8 +49,6 @@ func load_settings() -> void:
 		var lv := str(cf.get_value("game", "ai_level", ai_level))
 		ai_level = lv if lv in ["easy", "normal"] else "normal"
 		language = str(cf.get_value("game", "language", ""))
-		if language == "":
-			language = detect_language()   # 首启: 跟随系统语言
 		card_counter = bool(cf.get_value("game", "card_counter", card_counter))
 		voice_on = bool(cf.get_value("audio", "voice_on", voice_on))
 		fullscreen = bool(cf.get_value("display", "fullscreen", fullscreen))
@@ -56,6 +56,10 @@ func load_settings() -> void:
 		vibration = bool(cf.get_value("haptics", "vibration", true))
 		window_size = Vector2i(cf.get_value("display", "window_size_x", 0),
 				cf.get_value("display", "window_size_y", 0))
+	# 首启默认简体中文: 无论配置文件是否存在(新装机/旧版存过空值),
+	# 语言为空一律走检测 — 否则 locale 为空会回退英文
+	if language == "":
+		language = detect_language()
 
 
 ## 首启默认中文(仅首次; 此后以玩家设置为准)。

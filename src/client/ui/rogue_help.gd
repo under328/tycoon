@@ -8,16 +8,16 @@ const AppTheme = preload("res://src/client/theme/app_theme.gd")
 const GameStateGd = preload("res://src/rules/game_state.gd")
 const Responsive = preload("res://src/client/theme/responsive.gd")
 
-# 每页: [标题, 正文(bbcode), 图示编号]
+# 每页: [标题, 正文(bbcode), 图示编号, 正文高度(决定图鉴起点, 翻页即时生效)]
 const PAGES := [
 	["肉鸽模式 · 玩法",
 		"规则主体与普通模式[color=#e0a83c]完全一致[/color](换牌/革命/8切/回合制排名)。\n"
 		+ "区别只有一条: 每局开局由本局的[color=#ffd166]『天选者』[/color]代全桌抽选一张[color=#7dd87d]『命运卡』[/color], 全场统一生效。\n"
 		+ "『天选者』判定: 首局每人均等 25% 概率; 此后按上一局身份加权 — [color=#e0a83c]大富豪[/color] 40% / [color=#e0a83c]富豪[/color] 30% / [color=#e0a83c]贫民[/color] 20% / [color=#e0a83c]大贫民[/color] 10%。\n"
-		+ "命运卡共 [color=#b070e0]11 种[/color](见后几页), 分普通/史诗/传说三档稀有度。", 0],
-	["命运卡图鉴 · 发牌与规则", "发牌类与规则类命运卡:", 1],
-	["命运卡图鉴 · 触发与结算", "触发类与结算类命运卡:", 2],
-	["命运卡图鉴 · 我的进度", "本机记录每张命运卡的出现与选用次数:", 3],
+		+ "命运卡共 [color=#b070e0]11 种[/color](见后几页), 分普通/史诗/传说三档稀有度。", 0, 140],
+	["命运卡图鉴 · 发牌与规则", "发牌类与规则类命运卡:", 1, 40],
+	["命运卡图鉴 · 触发与结算", "触发类与结算类命运卡:", 2, 40],
+	["命运卡图鉴 · 我的进度", "本机记录每张命运卡的出现与选用次数:", 3, 40],
 ]
 
 var page := 0
@@ -41,6 +41,7 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
+	Responsive.page_bleed(self, AppTheme.BG)   # 避让条露出同色, 页面内外一致
 
 
 	_title = _label(32, AppTheme.GOLD)
@@ -108,11 +109,20 @@ func _relayout() -> void:
 	var cx := (w - 960.0) / 2.0
 	var dy := maxf(h - 720.0, 0.0) * 0.4
 	var sq := h < 660.0
+	_title.position = Vector2(0, 20.0 if sq else 46.0)
 	_title.custom_minimum_size = Vector2(w, 46)
 	_title.size = Vector2(w, 46)
-	_body.position = Vector2(cx, (60.0 if sq else 104.0) + dy)
-	_body.size = Vector2(960, (132.0 if not sq else 128.0))
-	_fig.position = Vector2(cx, (204.0 if sq else 252.0) + dy)
+	_body.position = Vector2(cx, (68.0 if sq else 104.0) + dy)
+	_body.size = Vector2(960, (128.0 if sq else 140.0))
+	# 图示整体上移: 起点紧跟正文实际高度(短正文页卡片大幅上移, 不留空档);
+	# 矮屏按剩余高度等比缩小, 底部不压页码点/按钮
+	var body_h: float = float(PAGES[page][3])
+	_body.size = Vector2(960, body_h)
+	var fig_y := _body.position.y + body_h + 18.0
+	var dots_y := (h - 132.0 if sq else 610.0) + dy
+	var fs := minf(1.0, maxf(dots_y - 14.0 - fig_y, 120.0) / 330.0)
+	_fig.scale = Vector2(fs, fs)
+	_fig.position = Vector2(cx + (960.0 - 960.0 * fs) * 0.5, fig_y)
 	_fig.size = Vector2(960, (210.0 if sq else 280.0))
 	for i in _dots.size():
 		_dots[i].position = Vector2(w / 2.0 - PAGES.size() * 11.0 + i * 22.0,
@@ -133,9 +143,11 @@ func _show(p: int) -> void:
 	_next_btn.text = ("下一页 ▶" if p < PAGES.size() - 1 else "关 闭")
 	_title.text = tr(PAGES[p][0])
 	_body.text = tr(PAGES[p][1])
+	_body.size = Vector2(960, float(PAGES[p][3]))
 	for i in _dots.size():
 		_dots[i].color = AppTheme.GOLD if i == p else AppTheme.DIM
 	_build_fig(int(PAGES[p][2]))
+	_relayout()
 
 
 func _clear_fig() -> void:
@@ -184,7 +196,7 @@ func _card_small(pos: Vector2, m: Dictionary) -> void:
 	sb.content_margin_bottom = 6
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.position = pos
-	panel.custom_minimum_size = Vector2(300, 116)
+	panel.custom_minimum_size = Vector2(300, 92)
 	_fig.add_child(panel)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
@@ -263,17 +275,17 @@ func _build_fig(kind: int) -> void:
 					"revolution_start", "chaos_exchange", "no_exchange"]
 			for i in ids1.size():
 				var m1: Dictionary = _mod(str(ids1[i]))
-				_card_small(Vector2(20 + (i % 3) * 320, 12 + (i / 3) * 124), m1)
-			_text("发牌类改牌堆构成; 规则类改当局长打法", Vector2(280, 250),
+				_card_small(Vector2(20 + (i % 3) * 320, 8 + (i / 3) * 100), m1)
+			_text("发牌类改牌堆构成; 规则类改当局长打法", Vector2(280, 312),
 					AppTheme.GOLD, 15)
 		2:
 			# 触发类×2 + 结算类×2
 			var ids2 := ["joker_rage", "eight_gift", "double_stakes", "score_negate"]
 			for i in ids2.size():
 				var m2: Dictionary = _mod(str(ids2[i]))
-				_card_small(Vector2(80 + (i % 2) * 440, 12 + (i / 2) * 124), m2)
+				_card_small(Vector2(80 + (i % 2) * 440, 8 + (i / 2) * 100), m2)
 			_text("触发类在对局中实时播报; 结算奖励与普通模式完全一致",
-					Vector2(240, 292), AppTheme.GOLD, 15)
+					Vector2(240, 212), AppTheme.GOLD, 15)
 		3:
 			# 图鉴进度: 全部命运卡的出现/选用计数(双列)
 			for i in GameStateGd.ROGUE_MODS.size():
@@ -301,7 +313,7 @@ func _build_fig(kind: int) -> void:
 				if int(Wallet.mod_seen.get(str(m4["id"]), 0)) > 0:
 					done += 1
 			_text("收集进度 %d/%d — 见齐全部命运卡解锁隐藏成就" % [done,
-					GameStateGd.ROGUE_MODS.size()], Vector2(240, 292),
+					GameStateGd.ROGUE_MODS.size()], Vector2(240, 344),
 					AppTheme.GOLD, 15)
 
 

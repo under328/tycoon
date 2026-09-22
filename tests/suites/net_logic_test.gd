@@ -16,7 +16,56 @@ func run(t) -> void:
 	_chat_rate_limit(t)
 	_room_limit(t)
 	_rejoin_finished_match(t)
+	_rejoin_reclaim_offline_seat(t)
 	_transfer_host(t)
+
+
+## 同一玩家退出后重进: 按 client_id 归位离线座位, 不再出现
+## "离线·AI 代管 + 新入座" 两个同名座位(对局中退出也能拿回座位)。
+func _rejoin_reclaim_offline_seat(t) -> void:
+	# 场景1( 房间页截图缺陷 ): 非对局中连接已断, "离开房间"未送达(c_room_leave
+	# 发不出去), 座位进入 30s 离线宽限 → 同人换连接重进 → 归位原座位
+	var m = _mgr()
+	var out: Array = m.create_room(100, "甲", {})
+	var code := str(_room_state_to(out, 100)["room_code"])
+	m.hello(101, MsgC.PROTOCOL_VERSION, "", "cid-x")
+	m.join_room(101, "玩家", code, "cid-x")
+	m.peer_gone(101)
+	t.expect(bool(m.rooms[code].seats[1]["online"]) == false, "断线后座位离线(宽限期)")
+	out = m.join_room(202, "玩家", code, "cid-x")
+	t.expect_eq(_count(out, "s_error"), 0, "同人重进无错误")
+	var rs: Dictionary = _room_state_to(out, 202)
+	t.expect_eq(int(rs["my_seat"]), 1, "同一玩家归位原座位 1")
+	t.expect(bool(m.rooms[code].seats[1]["online"]), "归位后座位恢复在线")
+	var humans := 0
+	for s in 4:
+		var sd = m.rooms[code].seats[s]
+		if sd != null and not bool(sd["bot"]):
+			humans += 1
+	t.expect_eq(humans, 2, "同人不再占两个座位(甲+玩家)")
+
+	# 场景2: 对局中主动退出(座位保留 AI 代管) → 重进拿回座位并收到私有视图,
+	# 不再被 in_game 拒之门外
+	var m2 = _mgr()
+	var out2: Array = m2.create_room(300, "房主", {}, "cid-300")
+	var code2 := str(_room_state_to(out2, 300)["room_code"])
+	m2.hello(301, MsgC.PROTOCOL_VERSION, "", "cid-301")
+	m2.join_room(301, "玩家", code2, "cid-301")
+	m2.fill_bots(300)
+	m2.start(300, 0)
+	t.expect(m2.rooms[code2].match_ctl != null, "对局进行中")
+	m2.leave(301)
+	t.expect(bool(m2.rooms[code2].seats[1]["online"]) == false, "退出后 AI 代管(离线)")
+	out2 = m2.join_room(401, "玩家", code2, "cid-301")
+	t.expect_eq(_count(out2, "s_error"), 0, "对局中同人重进不再被 in_game 拒绝")
+	t.expect_eq(int(_room_state_to(out2, 401)["my_seat"]), 1, "对局中重进归位座位 1")
+	t.expect(_views(out2).size() >= 1, "归位即收到私有视图(回牌桌)")
+	t.expect(bool(m2.rooms[code2].match_ctl.seat_online[1]), "对局座位恢复在线")
+	# 不同玩家(client_id 不同)重进仍正常入新座, 不受归位影响
+	# 不同玩家(client_id 不同)加入 → 接管一个 AI 座位进入共享对局
+	var out3: Array = m2.join_room(501, "路人", code2, "cid-other")
+	t.expect_eq(_count(out3, "s_error"), 0, "对局中他人加入接管 AI 座位")
+	t.expect(int(_room_state_to(out3, 501)["my_seat"]) >= 0, "对局中他人接管 AI 座位入座")
 
 
 ## 转让房主: 仅房主/真人座位/非自己; 转让后房主权利随 host_seat 走

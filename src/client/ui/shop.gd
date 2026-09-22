@@ -39,6 +39,7 @@ func _ready() -> void:
 	bg.color = AppTheme.BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	Responsive.page_bleed(self, AppTheme.BG)   # 避让条露出同色, 页面内外一致
 
 	# 纵向主排布(容器化自适应: 头行 / 页签行 / 滚动商品区 / 提示行)
 	var touch := Responsive.is_touch()

@@ -44,6 +44,19 @@ func seat_of_peer(peer: int) -> int:
 	return -1
 
 
+## 按 client_id 找同一玩家的座位(退出后重进归位用); 无匹配返回 -1。
+## 只匹配真人座位 — 断线宽限/AI 代管的离线座都能据此找回。
+func seat_of_client(client_id: String) -> int:
+	if client_id == "":
+		return -1
+	for s in SEATS:
+		var seat = seats[s]
+		if seat != null and not bool(seat["bot"]) \
+				and str(seat.get("client_id", "")) == client_id:
+			return s
+	return -1
+
+
 func first_free_seat() -> int:
 	for s in SEATS:
 		if seats[s] == null:
@@ -58,7 +71,7 @@ func sit(peer: int, name: String, client_id: String = "", skin_id: String = "ski
 	if s < 0:
 		return -1
 	seats[s] = {
-		"peer": peer, "name": name, "token": _gen_token(),
+		"peer": peer, "name": _clean_name(name), "token": _gen_token(),
 		"bot": false, "online": true, "client_id": client_id, "skin_id": skin_id,
 		"card_id": card_id, "offline_ms": 0,
 	}
@@ -72,6 +85,26 @@ func sit_bot(skin_id: String = "skin_default") -> int:
 	seats[s] = {"peer": -1, "name": "AI·%d" % (s + 1), "token": "",
 			"bot": true, "online": true, "client_id": "", "skin_id": skin_id}
 	return s
+
+
+## 对局进行中让朋友接管一个 AI 座位(共享对局中途加入):
+## 座位从 AI 转为真人(生成会话 token 供断线重连), 返回新 token。
+func claim_bot_seat(seat: int, peer: int, name: String, client_id: String,
+		skin_id: String = "skin_default", card_id: String = "") -> String:
+	if seat < 0 or seat >= SEATS or seats[seat] == null or not bool(seats[seat]["bot"]):
+		return ""
+	seats[seat] = {
+		"peer": peer, "name": _clean_name(name), "token": _gen_token(),
+		"bot": false, "online": true, "client_id": client_id, "skin_id": skin_id,
+		"card_id": card_id, "offline_ms": 0,
+	}
+	return str(seats[seat]["token"])
+
+
+## 昵称兜底: 旧版客户端可能上报空名 — 座位卡/对局视图不落空
+func _clean_name(name: String) -> String:
+	var nm := name.strip_edges()
+	return nm if nm != "" else "玩家"
 
 
 func _gen_token() -> String:

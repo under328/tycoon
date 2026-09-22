@@ -23,6 +23,8 @@ var _voice_player: AudioStreamPlayer
 var _voice_q: Array = []        # [{key, pitch}]
 var _voice_last_ms := {}        # key -> 上次播报时间(去重)
 var _voice_missing := {}        # 加载失败的 key(测试环境/缺资产时静默跳过)
+var _voice_variants := {}       # base key -> 趣味变体 key 列表(<base>_f1..f3)
+const VOICE_VARIANT_RATE := 0.45   # 趣味变体命中率(基础播报 55% / 变体 45%)
 
 
 func _ready() -> void:
@@ -43,22 +45,24 @@ func _synth_table_tracks() -> void:
 	var rev := Synth.bgm_koto_rev()
 	var rogue := Synth.bgm_rogue()
 	var boss := Synth.bgm_boss()
-	_register_table_tracks.call_deferred(koto, rev, rogue, boss)
+	var fight := Synth.bgm_fight()
+	_register_table_tracks.call_deferred(koto, rev, rogue, boss, fight)
 
 
 func _register_table_tracks(koto: AudioStreamWAV, rev: AudioStreamWAV,
-		rogue: AudioStreamWAV, boss: AudioStreamWAV) -> void:
+		rogue: AudioStreamWAV, boss: AudioStreamWAV, fight: AudioStreamWAV) -> void:
 	_bgm_tracks["table"] = koto
 	_bgm_tracks["table_rev"] = rev
 	_bgm_tracks["rogue"] = rogue
 	_bgm_tracks["boss"] = boss
+	_bgm_tracks["fight"] = fight
 	_table_synth_done = true
 	if _bgm_thread != null:
 		_bgm_thread.wait_to_finish()
 		_bgm_thread = null
 	# 预合成期间有排队的重试请求 → 立即补播
-	if (_bgm_current == "table" or _bgm_current == "table_rev") \
-			and not bgm_player.playing:
+	if (_bgm_current == "table" or _bgm_current == "table_rev" \
+			or _bgm_current == "fight") and not bgm_player.playing:
 		play_bgm(_bgm_current)
 
 
@@ -170,6 +174,8 @@ func stop_voice() -> void:
 ## pitch 做座位差异化变调(1.0 原声); interrupt=true 清队列立即播(革命/胜负
 ## 等关键时刻)。同 key 去重窗口内只播一次; 队列上限 2 旧让新; 走 SFX 总线
 ## 受音效音量控制, 且受 GameSettings.voice_on 开关。
+## 风趣播报: 每个语义 key 若存在 <key>_f1.._f3 趣味配音, 以 45% 概率随机
+## 播放变体(更长更活泼的台词), 让重复播报不千篇一律。
 var game_voice_enabled := true   # 后台托管局静音: 返回菜单后置 false
 
 
@@ -185,13 +191,31 @@ func say(key: String, pitch := 1.0, interrupt := false) -> void:
 	if int(_voice_last_ms.get(key, -100000)) + VOICE_DEDUPE_MS > now:
 		return
 	_voice_last_ms[key] = now
+	# 风趣变体随机: 测试环境无语音资产时 _variants_of 返回空 → 恒播原声
+	var final_key := key
+	var variants := _variants_of(key)
+	if not (variants as Array).is_empty() and randf() < VOICE_VARIANT_RATE:
+		final_key = str(variants[randi() % variants.size()])
 	if interrupt:
 		_voice_q.clear()
 		_voice_player.stop()
 	while _voice_q.size() >= VOICE_Q_MAX:
 		_voice_q.pop_front()
-	_voice_q.append({"key": key, "pitch": pitch})
+	_voice_q.append({"key": final_key, "pitch": pitch})
 	_pump_voice()
+
+
+## 收集某 key 的趣味变体(首次调用时探测文件存在性并缓存)
+func _variants_of(key: String) -> Array:
+	if _voice_variants.has(key):
+		return _voice_variants[key]
+	var out: Array = []
+	for i in range(1, 4):
+		var vk := "%s_f%d" % [key, i]
+		if _voice_stream(vk) != null:
+			out.append(vk)
+	_voice_variants[key] = out
+	return out
 
 
 func _pump_voice() -> void:
@@ -234,7 +258,7 @@ func play_bgm(track: String = "lobby") -> void:
 		return
 	if not _bgm_tracks.has(track):
 		match track:
-			"table", "table_rev", "rogue", "boss":
+			"table", "table_rev", "rogue", "boss", "fight":
 				# 合成未注册(线程仍在跑, 或已结束但 deferred 注册未到) → 只重试,
 				# 不在主线程兜底合成 — 兜底路径在手机上冻结 1-4 秒即 ANR
 				if _bgm_thread != null or not _table_synth_done:
@@ -244,7 +268,8 @@ func play_bgm(track: String = "lobby") -> void:
 				_bgm_tracks[track] = Synth.bgm_boss() if track == "boss" \
 						else (Synth.bgm_koto() if track == "table" \
 						else (Synth.bgm_rogue() if track == "rogue" \
-						else Synth.bgm_fight()))
+						else (Synth.bgm_fight() if track == "fight" \
+						else Synth.bgm_koto_rev())))
 			_:
 				return
 	if _bgm_current == track and bgm_player.playing:

@@ -159,7 +159,7 @@ func _slot_guarantee(t) -> void:
 
 ## ── 特殊牌(10 种奇物) ──
 func _specials(t) -> void:
-	t.expect(FightGd.SPECIALS.size() == 10, "特殊牌共 10 种")
+	t.expect(FightGd.SPECIALS.size() == 15, "特殊牌共 15 种")
 	for i in 8:
 		t.expect(str(FightGd.sp_meta(i)["key"]).begins_with("sp_"),
 				"奇物 %d 目录完整" % i)

@@ -62,6 +62,8 @@ var _cand := {"ips": [], "port": 0, "i": 0, "seq": -1}  # 多地址加入进度
 var kick_btn: Button
 var mode_option: OptionButton
 var help_btn: Button
+var reconnect_btn: Button       # 异常时右上角"重新连接"按钮
+var _conn_problems := false
 var host_btn: Button
 var mode_lbl: Label
 var back_btn: Button
@@ -79,6 +81,9 @@ var _seat_cards: Array = []       # 房间页: 4 张座位卡 {name, tag}
 var _host_panel_wanted := false   # 本机开房信息卡显隐意愿(跨视图管理)
 var _last_room_code := ""
 var _conn_fails := 0
+var _disc_announced := false   # 房间页"可被发现"提示已播报(状态变更时只提示一次)
+var _search_pressed_ms := 0    # 手动搜索按下时刻(0=未在搜索)
+var _search_guided := false    # 本次搜索是否已给过自查指引
 var _loopback_hint := false   # 当前状态栏显示的是回环指引(随环境变化刷新)
 
 
@@ -174,6 +179,12 @@ func _apply_view(v: String) -> void:
 			c.visible = v == "room"
 	if host_panel != null:
 		host_panel.visible = _host_panel_wanted and v == "entry"
+	# 转让按钮不参与双集显隐(可见性跟随房间状态逐座设置), 但换出房间页必须
+	# 收起 — 否则"对局→返回大厅"等不经 _exit_room 的路径(如 return_to_entry)
+	# 会把 👑 残留在入口页
+	if v != "room":
+		for tb: Button in _transfer_btns:
+			tb.visible = false
 	# 左上角按钮: 入口页=回主菜单; 房间页=离开房间
 	back_btn.text = "离开房间" if v == "room" else "← 主菜单"
 	back_btn.visible = true
@@ -209,9 +220,9 @@ func _relayout() -> void:
 	# 宽度不足两栏并排: 取消 center 负位移(否则座位/标题被推出屏幕左缘),
 	# 规则设置从右列改为座位/按钮下方横排两行, 表情栏显式锚定底缘。
 	if _view == "room" and w < 1100.0:
-		room_title_lbl.position = Vector2(150, 22)
-		copy_btn.position = Vector2(minf(330.0, w - 170.0), 14)
-		invite_lbl.position = Vector2(150, 64)
+		room_title_lbl.position = Vector2(190, 22)
+		copy_btn.position = Vector2(minf(400.0, w - 170.0), 14)
+		invite_lbl.position = Vector2(190, 64)
 		for i in 4:
 			_seat_cards[i]["panel"].position = Vector2(40 + i * 160, 116)
 		fill_btn.position = Vector2(40, 290)
@@ -258,6 +269,30 @@ func _auto_connect() -> void:
 	net.auto_reconnect = true
 	net.connect_to(host, port)
 	_arm_loopback_guard()
+
+
+## 右上角"重新连接"按钮显隐: 出现过连接异常(断线/连接失败/被移出)且当前
+## 未连接时点亮; 连接成功后熄灭。
+func _update_reconnect_vis() -> void:
+	if reconnect_btn == null:
+		return
+	var connected: bool = net != null and net._is_connected()
+	if connected:
+		_conn_problems = false
+	reconnect_btn.visible = _conn_problems and not connected
+
+
+## 点击"重新连接": 诊断当前状态 → 清理旧连接 → 按上次地址重连。
+## 若退出前仍在房间(持有 session_token), 连上后凭 token 自动回座。
+func _reconnect_now() -> void:
+	if net != null and net._is_connected():
+		_update_reconnect_vis()
+		return
+	var host: String = net.address if net != null and str(net.address) != "" 			else (AppMode.address if AppMode.address_from_cli else str(GameSettings.host))
+	var port: int = net.port if net != null and int(net.port) > 0 			else (AppMode.port if AppMode.port_from_cli else int(GameSettings.host_port))
+	_set_status("正在诊断连接… 重连 %s:%d" % [host, port], COLOR_DIM)
+	_conn_problems = true
+	_auto_connect()
 
 
 ## 回环地址快速止损: 4 秒仍未连上 → 停止重试并给出联机指引。
@@ -441,6 +476,7 @@ func _refresh_invite(state: Dictionary) -> void:
 ## 房间内专属 UI 的显隐切换
 func _enter_room() -> void:
 	_apply_view("room")
+	_disc_announced = false   # 新房间会话重置"可被发现"提示
 	for b: Button in [fill_btn, start_btn, copy_btn]:
 		b.disabled = false
 	_sync_rules_visibility()
@@ -562,7 +598,8 @@ func show_host_panel(ips: Array) -> void:
 		lines.append(("Tailscale  %s" if ts_set.has(str(ip)) else "局域网  %s") % str(ip))
 	host_ip_value.text = "\n".join(PackedStringArray(lines)) \
 			if lines.size() > 0 else "未检测到局域网/Tailscale 地址"
-	host_hint_lbl.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)"
+	host_hint_lbl.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)
+搜不到时: 在主机防火墙放行本游戏后重试(邀请码加入不受影响)"
 	var ts := Responsive.tailscale_ips()
 	host_dl_btn.visible = ts.is_empty()
 	host_dl_btn.text = "⬇ 异地联机装 Tailscale\n(%s)" % Responsive.platform_label()
@@ -591,16 +628,17 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# 返回主菜单按钮
-	back_btn = create_and_place("← 主菜单", Vector2(20, 16), Vector2(110, 36), 15)
+	# 返回主菜单按钮(声明宽度须≥文本实宽: "← 主菜单"/"离开房间" 文字撑宽,
+	# 实际渲染 ~130px — 声明过小会让标题压在按钮上)
+	back_btn = create_and_place("← 主菜单", Vector2(20, 16), Vector2(150, 36), 15)
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		go_back())
 
-	# 标题
+	# 标题(190 起, 与返回钮右缘留出空隙; 入口/房间两页同位)
 	title_lbl = AppTheme.make_label(28, COLOR_GOLD)
 	title_lbl.text = "联机对战"
-	title_lbl.position = Vector2(150, 22)
+	title_lbl.position = Vector2(190, 22)
 	add_child(title_lbl)
 
 	# 昵称统一使用设置页内配置的昵称(入口页不再提供输入框)
@@ -619,6 +657,8 @@ func _build_ui() -> void:
 	discover_btn.position = Vector2(470, 244)
 	discover_btn.pressed.connect(func() -> void:
 		Audio.play("click")
+		_search_pressed_ms = Time.get_ticks_msec()
+		_set_status(tr("正在搜索同 WiFi 房间…"), COLOR_DIM)
 		_scan_tick())
 	add_child(discover_btn)
 	#   ③ 粘贴邀请码(异地一键加入)
@@ -661,6 +701,15 @@ func _build_ui() -> void:
 		help.closed.connect(func() -> void: help.queue_free())
 		add_child(help))
 	add_child(help_btn)
+
+	# 重新连接(异常时右上角出现): 点击 → 诊断 → 按上次地址重连(凭 token 回房)
+	reconnect_btn = AppTheme.make_button("↻ 重新连接", Vector2(130, 36), 15)
+	reconnect_btn.position = Vector2(950, 22)
+	reconnect_btn.visible = false
+	reconnect_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		_reconnect_now())
+	add_child(reconnect_btn)
 
 	# 附近主机结果列表(搜索按钮已并入主列; 扫描到才有内容)(扫描到才有内容; 每行=一个可加入的房间)
 	found_panel = PanelContainer.new()
@@ -713,10 +762,19 @@ func _build_ui() -> void:
 		sv.add_child(cap)
 		var nm := AppTheme.make_label(17, AppTheme.WHITE)
 		nm.text = "(空位)"
-		nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		nm.custom_minimum_size = Vector2(124, 0)
+		# 省略号截断: 个别设备字体度量偏大, 昵称/标签会把 PanelContainer 撑到
+		# 160+ 并压住相邻座位卡(笔记本实测); 截断后内容最小宽恒 ≤ 槽宽
+		# ⚠ 不可加 autowrap: Godot 4.7 中 autowrap+省略号+自定义最小宽会把
+		# 最小高度算成 1px, 昵称整行隐形(手机房间页"不显示昵称"的根因)
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		nm.clip_text = true
 		sv.add_child(nm)
 		var tag := AppTheme.make_label(13, COLOR_DIM)
+		tag.text = ""
+		tag.custom_minimum_size = Vector2(124, 0)
+		tag.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		tag.clip_text = true
 		sv.add_child(tag)
 		_seat_cards.append({"panel": sp, "name": nm, "tag": tag})
 
@@ -917,7 +975,8 @@ func _build_ui() -> void:
 	hp_box.add_child(host_ip_value)
 	var hp_hint := AppTheme.make_label(14, COLOR_DIM)
 	host_hint_lbl = hp_hint
-	hp_hint.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)"
+	hp_hint.text = "同一 WiFi 的朋友: 联机页点【搜索附近主机】一键加入\n异地朋友: 点【复制邀请码】发给他(含全部地址)
+搜不到时: 在主机防火墙放行本游戏后重试(邀请码加入不受影响)"
 	hp_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hp_hint.custom_minimum_size = Vector2(328, 0)
 	hp_box.add_child(hp_hint)
@@ -933,22 +992,23 @@ func _build_ui() -> void:
 	_reg(_ts_chip, "left")
 	_reg(host_panel, "left", 0.1)
 	_reg(status_label, "left", 0.1)
-	_reg(title_lbl, "center")
 	_reg(host_btn, "center")
 	_reg(discover_btn, "center")
 	_reg(paste_btn, "center")
 	_reg(found_panel, "left", 0.1)
 	_reg(help_btn, "right")
+	_reg(reconnect_btn, "right")
+	_reg(title_lbl, "left")
 
 	# ── 房间页锚定(独立子页面布局; 1280×720 设计基准) ──
-	# 顶部: 离开 | 房号+复制邀请码 | 说明(限宽 660, 与右列留出间隔)
+	# 顶部: 离开(20..130) | 房号(190起, 与按钮留出 60px 空隙防重叠) + 复制邀请码(400) | 说明
 	# 左列: 4 座位卡(40 起步, 间距 10) + 操作按钮行 + 状态行
 	# 右列: 规则设置卡片(金框容器, 内部行自对齐)
 	_reg_room(back_btn, Vector2(20, 16), "left")
 	_reg_room(status_label, Vector2(40, 360), "left")
-	_reg_room(room_title_lbl, Vector2(150, 22), "center")
-	_reg_room(copy_btn, Vector2(330, 14), "center")
-	_reg_room(invite_lbl, Vector2(150, 64), "center")
+	_reg_room(room_title_lbl, Vector2(190, 22), "left")
+	_reg_room(copy_btn, Vector2(400, 14), "left")
+	_reg_room(invite_lbl, Vector2(190, 64), "left")
 	for i in 4:
 		_reg_room(_seat_cards[i]["panel"], Vector2(40 + i * 160, 116), "center")
 	_reg_room(fill_btn, Vector2(40, 290), "center")
@@ -1002,17 +1062,21 @@ func _open_ts_fallback() -> void:
 
 ## ── 局域网发现(同 WiFi 一键加入) ──
 ## 每 3 秒广播一次查询, 主机(游戏端口+2)单播回房间概览; 超时 12s 未回包移除。
-## 本机开房/已进房/整页不可见(首页或牌桌)时不搜 — 空转定时器耗电且无意义。
+## 本机开房时同样扫描(自己房间会出现在列表并标注"本机房间", 便于确认可见性);
+## 已进房/整页不可见(首页或牌桌)时不搜 — 空转定时器耗电且无意义。
 func _scan_tick() -> void:
 	if not is_visible_in_tree():
 		return
+	_update_reconnect_vis()
 	_scan_send()
 	_scan_read()
 	_rebuild_found_rows()
 
 
 func _scan_send() -> void:
-	if _view != "entry" or _host_panel_wanted or auto_create_room:
+	# 入口页正常扫描; 本机开房后(主机在房间页)也保持自查 —
+	# 否则"开房后搜索不到房间"(主机自己的房间永远不会出现在结果里)
+	if _view != "entry" and not _host_panel_wanted:
 		return
 	var dport: int = int(GameSettings.host_port) + LanDisc.PORT_OFFSET
 	if _disc == null:
@@ -1029,13 +1093,27 @@ func _scan_send() -> void:
 	#    对本机所在 /24 逐地址单播 + 本机回环。UDP 无连接一次性发出, 开销可忽略。
 	_disc.set_dest_address("127.0.0.1", dport)
 	_disc.put_packet(q)
+	var subnets := {}
 	for ip in Responsive.local_ips()["lan"]:
 		var p: PackedStringArray = str(ip).split(".")
 		if p.size() != 4:
 			continue
+		var sub: String = "%s.%s.%s" % [p[0], p[1], p[2]]
+		subnets[sub] = true
+		# ③ 子网定向广播: 部分网络只放行子网广播、拦 255.255.255.255
+		_disc.set_dest_address(sub + ".255", dport)
+		_disc.put_packet(q)
 		for h in range(1, 255):
-			_disc.set_dest_address("%s.%s.%s.%d" % [p[0], p[1], p[2], h], dport)
+			_disc.set_dest_address("%s.%d" % [sub, h], dport)
 			_disc.put_packet(q)
+	# ④ 上次直连过的主机网段(与当前不同网段时的兜底 — 按历史 IP 找回)
+	var last: PackedStringArray = str(GameSettings.host).split(".")
+	if last.size() == 4:
+		var sub2: String = "%s.%s.%s" % [last[0], last[1], last[2]]
+		if not subnets.has(sub2):
+			for h in range(1, 255):
+				_disc.set_dest_address("%s.%d" % [sub2, h], dport)
+				_disc.put_packet(q)
 
 
 func _scan_read() -> void:
@@ -1065,8 +1143,19 @@ func _addr_score(ip: String) -> int:
 
 
 func _rebuild_found_rows() -> void:
-	if _view != "entry":
-		found_panel.visible = false   # 房间页不显示附近主机模块
+	# 主机房间页: 不显示附近主机列表(与房间页右列重叠), 改为在状态栏
+	# 提示"本机房间可被发现" — 发现应答里出现自己房间即证明搜索链路可用
+	var own_code := ""
+	if net != null and net.in_room:
+		own_code = str(net.last_room_state.get("room_code", _last_room_code))
+	if _view == "room":
+		found_panel.visible = false
+		var disc_ok := own_code != "" and _found_rooms().has(own_code)
+		if disc_ok != _disc_announced:
+			_disc_announced = disc_ok
+			if disc_ok:
+				_set_status("✓ 本机房间已可被同一 WiFi 的玩家【搜索附近主机】发现",
+						COLOR_GREEN)
 		return
 	var now := Time.get_ticks_msec()
 	for ip in _found.keys():
@@ -1099,10 +1188,13 @@ func _rebuild_found_rows() -> void:
 		var open := bool(rec["open"])
 		var txt := "🏠 %s  %d/%d人  %s" % [code, int(rec["players"]),
 				int(rec["cap"]), str(best["ip"])]
-		if not open:
+		var own := str(code) == own_code and own_code != ""
+		if own:
+			txt += " · 本机房间"
+		elif not open:
 			txt += " · 游戏中"
 		var b := AppTheme.make_button(txt, Vector2(292, 42), 13)
-		b.disabled = not open
+		b.disabled = not open or own
 		var rcode := str(code)
 		var alts: Array = addrs.duplicate(true)
 		b.pressed.connect(func() -> void:
@@ -1112,7 +1204,28 @@ func _rebuild_found_rows() -> void:
 		found_box.add_child(b)
 		_found_rows.append(b)
 		shown += 1
+	# 手动搜索后仍一无所获 → 给出自查指引(8s 后提示一次, 不刷屏)
+	if shown == 0 and _search_pressed_ms > 0:
+		var since: int = Time.get_ticks_msec() - _search_pressed_ms
+		if since > 8000 and not _search_guided:
+			_search_guided = true
+			_set_status(tr("未发现同 WiFi 房间: 请确认两台设备在同一网络(路由器 AP 隔离会拦截发现), 并在防火墙放行本游戏;
+也可让房主点【复制邀请码】, 你点【粘贴邀请码, 一键加入】"),
+					COLOR_DIM)
+			_scan_send()
 	found_panel.visible = shown > 0
+
+
+## 当前发现应答中出现的房间码集合
+func _found_rooms() -> Array:
+	var out: Array = []
+	var now := Time.get_ticks_msec()
+	for ip in _found.keys():
+		if now - int(_found[ip]["seen"]) > LanDisc.TTL_MS:
+			continue
+		for room in _found[ip]["rooms"]:
+			out.append(str(room["code"]))
+	return out
 
 
 ## 点击附近主机: 发现应答本身已证明可达, 直接发起 ENet 连接并自动进房。
@@ -1161,22 +1274,31 @@ func _bind_net() -> void:
 		update_btn.visible = false
 		_conn_fails = 0
 		_loopback_hint = false
-		_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
+		_conn_problems = false
+		_update_reconnect_vis()
+		_update_reconnect_vis()
 		if _auto_join_code != "":
 			var join_code := _auto_join_code
 			_auto_join_code = ""
+			# 带进房意图: 状态明确反映"正在进入房间", 而非泛泛的"已连接"
+			_set_status(tr("已连接 — 正在进入房间 %s …") % join_code, COLOR_GREEN)
 			net.join_room(join_code)  # 粘贴邀请码/发现加入: 连上后自动进房
 			# 6s 未进房 → 明确提示(可能已满员/已开局/版本不一致)
 			get_tree().create_timer(6.0).timeout.connect(func() -> void:
 				if visible and not net.in_room:
-					_set_status("加入房间 %s 失败: 可能已满员、已开局或版本不一致"
-							% join_code, COLOR_RED))
+					_set_status(tr("加入房间 %s 失败: 可能已满员、已开局或版本不一致")
+							% join_code, COLOR_RED)
+					_scan_tick())
+		else:
+			_set_status("已连接! 选一个方式开局吧", COLOR_GREEN)
 		if auto_create_room:
 			auto_create_room = false
 			net.create_room(_gather_rules())  # 本机开房: 连上后自动建房
 	)
 	net.connection_failed.connect(func() -> void:
 		_conn_fails += 1
+		_conn_problems = true
+		_update_reconnect_vis()
 		if _auto_join_code != "" and not _join_alts.is_empty():
 			var nxt: Dictionary = _join_alts.pop_front()
 			_set_status("地址不可达, 尝试备用地址 %s:%d…" % [
@@ -1197,20 +1319,33 @@ func _bind_net() -> void:
 				% [net.address, net.port, _conn_fails], COLOR_RED))
 	net.server_disconnected.connect(func() -> void:
 		_exit_room()
+		_conn_problems = true
+		_update_reconnect_vis()
 		_set_status("与服务器断开, 自动重连中…", COLOR_RED))
 	net.errored.connect(func(code: String, msg: String) -> void:
 		if code != "not_connected":
 			_set_status("错误 %s: %s" % [code, msg], COLOR_RED))
 	net.kicked_off.connect(func(reason: String) -> void:
 		_exit_room()
+		_conn_problems = true
+		_update_reconnect_vis()
 		if reason == "version":
-			_set_status("服务器版本更高, 请更新客户端", COLOR_RED)
-			update_btn.visible = true
+			# 版本不一致: 报出双方协议版本, 指引从主机内置下载页更新
+			var sv := int(net.last_kick.get("server_ver", 0))
+			var cv := int(net.last_kick.get("client_ver", 0))
+			_set_status(("版本不一致: 服务器协议 v%d, 本机 v%d — 请点【发现新版本】更新客户端"
+					% [sv, cv]) if cv > 0 and cv < sv
+					else ("版本不一致(本机协议 v%d 高于服务器 v%d): 请房主先更新游戏"
+					% [cv, sv]) if sv > 0 else "版本不一致 — 请更新客户端", COLOR_RED)
+			update_btn.visible = cv <= sv
 		else:
 			_set_status("已被移出房间(%s)" % reason, COLOR_RED))
 	net.room_state.connect(_on_room_state)
+	# 只有仍身在房间才响应 game_view(开局进场); 退房后迟到的视图广播
+	# 会在这里触发 start_game 把玩家重新拉回牌桌 — "退出后又弹回对局"
 	net.view_changed.connect(func(_view: Dictionary) -> void:
-		start_game.emit())
+		if net.in_room:
+			start_game.emit())
 
 
 func _gather_rules() -> Dictionary:
@@ -1282,7 +1417,9 @@ func _on_room_state(state: Dictionary) -> void:
 				continue
 			if bool(p.get("empty", true)):
 				break
-			nm.text = str(p.get("name", ""))
+			# 昵称兜底: 旧版客户端可能上报过空名 — 显示不落空
+			var nm_txt := str(p.get("name", "")).strip_edges()
+			nm.text = nm_txt if nm_txt != "" else "玩家"
 			nm.add_theme_color_override("font_color", COLOR_WHITE)
 			var bits: Array = []
 			if i == host_seat:

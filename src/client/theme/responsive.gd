@@ -7,7 +7,13 @@ extends RefCounted
 
 
 ## 触控设备(安卓/iOS 及其 Web 导出): 按钮热区下限 44px
+## force_touch: 桌面端模拟手机布局(布局截图/自适应验证用, 上线前恒 false)
+static var force_touch := false
+
+
 static func is_touch() -> bool:
+	if force_touch:
+		return true
 	return OS.has_feature("mobile") or OS.has_feature("web_android") \
 			or OS.has_feature("web_ios")
 
@@ -84,3 +90,29 @@ static func platform_label() -> String:
 static func watch(c: Control, fn: Callable) -> void:
 	c.resized.connect(fn)
 	fn.call_deferred()
+
+
+## ── 避让区一致性 ──
+## 全屏页面挂在已按安全区内缩的父级(主菜单/牌桌)之下, 自身只覆盖安全区 →
+## 刘海/挖孔条露出的是父级画面, 造成"避让区内外不一致"。
+## 不透明页面: 在自己最底层垫一块全视口同色块(_ready 里调用)。
+static func page_bleed(page: Control, color: Color) -> void:
+	var p := page.get_parent() as Control
+	if p == null or page.get_viewport() == null:
+		return
+	var bleed := ColorRect.new()
+	bleed.color = color
+	bleed.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_child(bleed)
+	page.move_child(bleed, 0)
+	bleed.position = -p.position
+	bleed.size = page.get_viewport().get_visible_rect().size
+
+
+## 半透明弹窗: 把遮罩层扩展到全视口(避让条同样被压暗, 与弹窗内视觉一致)。
+static func expand_to_viewport(c: Control) -> void:
+	var p := c.get_parent() as Control
+	if p == null or c.get_viewport() == null:
+		return
+	c.position = -p.position
+	c.size = c.get_viewport().get_visible_rect().size
