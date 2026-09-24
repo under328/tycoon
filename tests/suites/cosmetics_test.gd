@@ -477,5 +477,5 @@ func _fight_mission(t) -> void:
 	var st: Dictionary = w.mission_state("m_fight")
 	t.expect_eq(int(st["progress"]), 1, "格斗层任务进度 1/1")
 	var r: Dictionary = w.claim_mission("m_fight")
-	t.expect_eq(int(r["diamonds"]), 1, "领取 +1 钻")
+	t.expect_eq(int(r["diamonds"]), 2, "领取 +2 钻")
 	w.queue_free()

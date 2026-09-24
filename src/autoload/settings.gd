@@ -86,8 +86,13 @@ func save_settings() -> void:
 	cf.set_value("game", "language", language)
 	cf.set_value("game", "card_counter", card_counter)
 	cf.set_value("display", "fullscreen", fullscreen)
-	cf.set_value("display", "vsync", vsync_enabled)
+	cf.set_value("display", "vsync_enabled", vsync_enabled)
 	cf.set_value("display", "window_size_x", window_size.x)
 	cf.set_value("display", "window_size_y", window_size.y)
 	cf.set_value("haptics", "vibration", vibration)
 	cf.save(SAVE_PATH)
+	# 昵称双写: 镜像进钱包存档, settings.cfg 丢失时(覆盖安装/损坏)可找回
+	if is_inside_tree():
+		var wallet := get_node_or_null("/root/Wallet")
+		if wallet != null:
+			wallet.call("note_nickname", str(nickname).strip_edges())

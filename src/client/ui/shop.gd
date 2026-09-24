@@ -225,6 +225,12 @@ func _special_panel(item: Dictionary) -> Control:
 		"rticket":
 			art.text("选牌重抽 ", AppTheme.WHITE)
 			art.amount("coin", "+1", AppTheme.GOLD)
+		"cday":
+			art.text("当日记牌器 ", AppTheme.WHITE)
+			art.amount("coin", tr("记牌器开放"), AppTheme.GOLD)
+		"conce":
+			art.text("单场记牌器 ", AppTheme.WHITE)
+			art.amount("coin", "×1", AppTheme.GOLD)
 		"clearr":
 			art.text("战绩记录 ", AppTheme.WHITE)
 			art.amount("gem", "一键清零", AppTheme.GOLD)
@@ -304,6 +310,8 @@ func _item_active(id: String, effect: String) -> bool:
 			return Wallet.item_count(id) > 0
 		"rticket":
 			return Wallet.item_count(id) > 0
+		"cday":
+			return Wallet.counter_day_today()
 	return false
 
 

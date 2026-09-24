@@ -184,11 +184,20 @@ def tengu_hat(rig, p, pal):
 
 
 def dball_outfit(rig, p, pal):
-    """龙珠武道服: 蓝内衬 V 领 + 蓝腰带(金扣)"""
+    """龙珠武道服: 蓝色打底衫(V 领可见) + 蓝腰带(金扣) + 腕部蓝束带"""
     neck, hip = p['neck'], p['hip']
     blue = pal.get('blue', hexc('2868c8'))
-    rig.poly([(neck[0] - 6, neck[1]), (neck[0] + 6, neck[1]),
-              (neck[0] + 2, neck[1] + 15), (neck[0] - 2, neck[1] + 15)], blue)
+    # 蓝色打底(肩胸整片, 从橙衣 V 领露出)
+    rig.rrect(neck[0] - 8, neck[1] - 1, neck[0] + 8, neck[1] + 16, 3, blue)
+    # 橙色武道服两襟(V 字包住蓝底)
+    gi = pal.get('suit', hexc('f28020'))
+    gi_d = pal.get('suit_b', hexc('c05810'))
+    rig.poly([(neck[0] - 9, neck[1] - 1), (neck[0] - 3, neck[1] - 1),
+              (neck[0] - 4.5, neck[1] + 15), (neck[0] - 10, neck[1] + 15)], gi)
+    rig.poly([(neck[0] + 9, neck[1] - 1), (neck[0] + 3, neck[1] - 1),
+              (neck[0] + 4.5, neck[1] + 15), (neck[0] + 10, neck[1] + 15)], gi)
+    rig.poly([(neck[0] - 9, neck[1] - 1), (neck[0] - 3, neck[1] - 1),
+              (neck[0] - 3.5, neck[1] + 2)], gi_d)
 
 
 def ninja_outfit(rig, p, pal):
@@ -205,26 +214,43 @@ def ninja_outfit(rig, p, pal):
 
 
 def rx_outfit(rig, p, pal):
-    """RX骑士: 红色胸纹 + 银色腹甲 + 金腰带"""
+    """RX骑士: 黑身 + 绿色胸甲(金色太阳纹章) + 银腹甲 + 金腰带"""
     neck, hip = p['neck'], p['hip']
-    red = pal.get('accent', hexc('d83828'))
+    green = pal.get('chest', hexc('2f8b46'))
+    green_d = shade(green, 0.62)
     silver = pal.get('silver', hexc('b8c0c8'))
-    # 胸 V 纹
-    rig.poly([(neck[0] - 6, neck[1] + 2), (neck[0], neck[1] + 10),
-              (neck[0] + 6, neck[1] + 2), (neck[0] + 4, neck[1] + 5),
-              (neck[0], neck[1] + 13), (neck[0] - 4, neck[1] + 5)], red)
-    # 腹甲(银横纹)
-    ty = R.lerp(hip[1], neck[1], 0.32)
-    rig.rrect(hip[0] - 9, ty - 3, hip[0] + 9, ty + 6, 2, silver)
-    rig.capsule((hip[0] - 8, ty + 1), (hip[0] + 8, ty + 1), 1.0, shade(silver, 0.6))
-    # 金带扣
-    rig.ell(R.lerp(hip[0], neck[0], 0.28) + 4, ty, 2.4, 2.4, GOLD)
+    ty = R.lerp(hip[1], neck[1], 0.30)
+    # 绿色胸甲(梯形大块, 盖住黑躯干)
+    rig.poly([(neck[0] - 9, neck[1] + 1), (neck[0] + 9, neck[1] + 1),
+              (hip[0] + 7, ty + 4), (hip[0] - 7, ty + 4)], green)
+    rig.poly([(neck[0] + 3, neck[1] + 1), (neck[0] + 9, neck[1] + 1),
+              (hip[0] + 7, ty + 4), (hip[0] + 2, ty + 4)], green_d)
+    # 金色太阳纹章(圆心 + 8 放射芒) — RX 胸前标志
+    cx, cy = R.lerp(hip[0], neck[0], 0.55), R.lerp(hip[1], neck[1], 0.55)
+    for i in range(8):
+        a = math.radians(i * 45)
+        rig.capsule((cx + math.cos(a) * 3.2, cy + math.sin(a) * 3.2),
+                    (cx + math.cos(a) * 5.8, cy + math.sin(a) * 5.8), 1.2, GOLD)
+    rig.ell(cx, cy, 3.2, 3.2, GOLD)
+    rig.ell(cx - 0.8, cy - 0.8, 1.4, 1.4, shade(GOLD, 1.4))
+    # 银腹甲(横纹块)
+    ty2 = R.lerp(hip[1], neck[1], 0.12)
+    rig.rrect(hip[0] - 8, ty2 - 3, hip[0] + 8, ty2 + 5, 2, silver)
+    rig.capsule((hip[0] - 7, ty2 + 1), (hip[0] + 7, ty2 + 1), 1.0, shade(silver, 0.6))
+    # 金腰带
+    ty3 = R.lerp(hip[1], neck[1], 0.02)
+    rig.rrect(hip[0] - 9, ty3 - 2, hip[0] + 9, ty3 + 3, 1.6, pal.get('belt', GOLD))
+    rig.ell(hip[0], ty3 + 0.5, 2.2, 2.2, pal.get('crest_gem', hexc('ff5040')))
 
 
 def p5_back(rig, p, pal, t):
-    """怪盗: 黑大衣后摆(燕尾)"""
-    _back_cape(rig, p, pal, length=30, color=shade(pal['suit'], 0.75),
-               sway=math.sin(t * math.tau) * 3)
+    """怪盗: 黑大衣燕尾后摆(红内衬镶边)"""
+    red = pal.get('lining', hexc('c92a44'))
+    sway = math.sin(t * math.tau) * 3
+    # 红内衬(略大一圈, 黑摆之上露出红边)
+    _back_cape(rig, p, pal, length=33, color=shade(red, 0.9), sway=sway)
+    _back_cape(rig, p, pal, length=29, color=shade(pal['suit'], 0.75),
+               sway=sway * 0.8)
 
 
 def p5_outfit(rig, p, pal):
@@ -376,14 +402,15 @@ SPECS = {
         'name': '龙珠战士',
         'pal': {
             'skin': hexc('f2c8a0'), 'skin_b': hexc('d4a880'),
-            'hair': hexc('1c1620'), 'hair_hi': hexc('3c3440'),
+            'hair': hexc('1a1418'), 'hair_hi': hexc('342c38'),
             'suit': hexc('f28020'), 'suit_b': hexc('c05810'),
-            'glove': hexc('2868c8'), 'boot': hexc('2868c8'),
-            'belt': hexc('2868c8'), 'blue': hexc('2868c8'),
-            'accent': GOLD, 'pupil': hexc('241c26'),
+            'fore': hexc('2868c8'), 'fore_b': hexc('1c4c98'),
+            'glove': hexc('f2c8a0'), 'boot': hexc('1c2440'),
+            'boot_trim': hexc('e8b838'), 'belt': hexc('2868c8'),
+            'blue': hexc('2868c8'), 'accent': GOLD, 'pupil': hexc('241c26'),
             'outline': hexc('1a1210'),
         },
-        'hair': lambda rig, p, pal, t: R.hair_spiky(rig, p, pal, spikes=7, reach=1.0),
+        'hair': lambda rig, p, pal, t: R.hair_goku(rig, p, pal, t),
         'face': lambda rig, p, pal: R.face_anime(rig, p, pal, angry=True),
         'outfit': dball_outfit,
         'fx': hexc('ffb028'),
@@ -410,19 +437,22 @@ SPECS = {
     'skin_rx': {
         'name': 'RX骑士',
         'pal': {
-            'helmet': hexc('22222e'), 'skin': hexc('22222e'),
-            'skin_b': hexc('12121c'),
-            'hair': hexc('22222e'), 'suit': hexc('2c2c3a'),
-            'suit_b': hexc('1a1a26'), 'glove': hexc('3a3a4a'),
-            'boot': hexc('26262f'), 'belt': hexc('e0a83c'),
+            'helmet': hexc('1c1c28'), 'skin': hexc('1c1c28'),
+            'skin_b': hexc('101018'),
+            'hair': hexc('1c1c28'), 'suit': hexc('222230'),
+            'suit_b': hexc('14141e'), 'glove': hexc('c8d0d8'),
+            'fore': hexc('222230'), 'fore_b': hexc('14141e'),
+            'boot': hexc('c8d0d8'), 'boot_trim': hexc('14141e'),
+            'belt': hexc('e0a83c'), 'chest': hexc('2f8b46'),
             'grille': hexc('c8d0d8'), 'silver': hexc('c8d0d8'),
-            'accent': hexc('ff4030'), 'crest_gem': hexc('ff5040'),
+            'accent': hexc('e83828'), 'crest_gem': hexc('e83828'),
+            'eye_scale': 1.22,
             'outline': hexc('000000'),
         },
         'helmet': True,
         'hair': None,
         'face': lambda rig, p, pal: R.face_helmet(rig, p, pal,
-            pal['accent'], crest='ridge'),
+            pal['accent'], crest='antenna'),
         'outfit': rx_outfit,
         'fx': hexc('ff4040'),
     },
@@ -435,10 +465,11 @@ SPECS = {
             'fore': hexc('1a1a24'), 'fore_b': hexc('101018'),
             'glove': hexc('c92a44'), 'boot': hexc('101018'),
             'belt': hexc('101018'), 'vest': hexc('3c3c48'),
-            'accent': hexc('c92a44'), 'outline': hexc('060408'),
+            'lining': hexc('c92a44'), 'accent': hexc('c92a44'),
+            'outline': hexc('060408'),
         },
         'back': p5_back,
-        'hair': lambda rig, p, pal, t: R.hair_long(rig, p, pal, t, length=22),
+        'hair': lambda rig, p, pal, t: R.hair_curly(rig, p, pal, t),
         'face': lambda rig, p, pal: R.face_mask_white(rig, p, pal),
         'outfit': p5_outfit,
         'fx': hexc('ff3355'),
@@ -450,14 +481,15 @@ SPECS = {
             'skin_b': hexc('c0c8d8'),
             'hair': hexc('e8ecf4'), 'suit': hexc('e8ecf4'),
             'suit_b': hexc('c0c8d8'), 'glove': hexc('e8ecf4'),
-            'boot': hexc('2858a8'), 'belt': hexc('2858a8'),
-            'blue': hexc('2858a8'), 'red': hexc('d84040'),
+            'fore': hexc('e8ecf4'), 'fore_b': hexc('c0c8d8'),
+            'boot': hexc('2858a8'), 'boot_trim': hexc('d84040'),
+            'belt': hexc('2858a8'), 'blue': hexc('2858a8'), 'red': hexc('d84040'),
             'grille': hexc('2a60b8'), 'accent': hexc('f2c838'),
             'outline': hexc('101828'),
         },
         'helmet': True,
         'hair': None,
-        'face': lambda rig, p, pal: R.face_helmet(rig, p, pal, hexc('3ddc6c'),
+        'face': lambda rig, p, pal: R.face_helmet(rig, p, pal, hexc('f8e048'),
             crest='vfin', chin=hexc('d84040')),
         'outfit': gundam_outfit,
         'fx': hexc('7ad9ff'),
@@ -470,9 +502,11 @@ SPECS = {
             'suit': hexc('7ac0e8'), 'suit_b': hexc('4890c8'),
             'dress': hexc('7ac0e8'), 'dress_b': hexc('4890c8'),
             'pants': hexc('f8e2d8'), 'pants_b': hexc('e8c8bc'),
+            'fore': hexc('f8e2d8'), 'fore_b': hexc('e8c8bc'),
             'glove': hexc('f8e2d8'), 'boot': hexc('1a1626'),
             'belt': hexc('1a1626'), 'pupil': hexc('58a8e0'),
-            'blush': hexc('f8b0c0'), 'outline': hexc('302838'),
+            'band': hexc('58b8e8'), 'blush': hexc('f8b0c0'),
+            'outline': hexc('302838'),
         },
         'hair': lambda rig, p, pal, t: R.hair_pigtails(rig, p, pal, t),
         'face': lambda rig, p, pal: R.face_ppg(rig, p, pal),
@@ -491,11 +525,12 @@ def draw_character(cv, skin_id, pose, t=0.0, scale=1.0, origin=(0.0, 0.0),
     pal = spec['pal']
     rig = Rig(cv, scale, origin)
 
-    # 蒙版配色: 变身白闪时全部颜色向白推进
+    # 蒙版配色: 变身白闪时全部颜色向白推进(非颜色字段原样保留)
     if whiteout > 0.0:
         w = whiteout
         tgt = tint or hexc('ffffff')
-        pal = {k: tuple(int(c + (tgt[i] - c) * w) for i, c in enumerate(v[:3])) + (255,)
+        pal = {k: (tuple(int(c + (tgt[i] - c) * w) for i, c in enumerate(v[:3])) + (255,)
+               if isinstance(v, tuple) else v)
                for k, v in pal.items()}
 
     p = pose

@@ -28,6 +28,7 @@ static func build(st: Dictionary, seat: int) -> Dictionary:
 		"lead": (st["lead"] as Dictionary).duplicate(true),
 		"field": (st["field"] as Array).duplicate(true),
 		"revolution": st["revolution"],
+		"quad_scored": bool(st.get("quad_scored", false)),
 		"scores": (st["scores"] as Array).duplicate(),
 		"identities": (st["identities"] as Array).duplicate(),
 		"last_points": (st["last_points"] as Array).duplicate(),

@@ -23,17 +23,18 @@ const ACH_REWARD_DIAMONDS := 2
 const ACH_ALL_BONUS := 36
 
 ## 每日签到奖励(7 天一循环): streak = 连续签到天数, 取模循环
+## 第 3 天 = 记牌器次卡×1 / 第 6 天 = 5 钻石 / 第 7 天 = 记牌器当日卡
 const SIGN_REWARDS := [
-	{"gold": 60}, {"gold": 90}, {"diamonds": 1}, {"gold": 120},
-	{"gold": 150}, {"diamonds": 2}, {"diamonds": 3},
+	{"gold": 60}, {"gold": 90}, {"item": "item_counter_once"}, {"gold": 120},
+	{"gold": 150}, {"diamonds": 5}, {"counter_day": true},
 ]
 
 ## 每日任务(按日重置): target 达成后可领奖励
 const MISSIONS := [
 	{"id": "m_win", "name": "赢得一场胜利", "target": 1, "reward_diamonds": 2},
 	{"id": "m_play", "name": "完成 2 场对局", "target": 2, "reward_gold": 100},
-	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 1},
-	{"id": "m_fight", "name": "格斗试炼通过 1 层", "target": 1, "reward_diamonds": 1},
+	{"id": "m_quad", "name": "打出一次四条(炸弹)", "target": 1, "reward_diamonds": 2},
+	{"id": "m_fight", "name": "格斗试炼通过 1 层", "target": 1, "reward_diamonds": 2},
 ]
 
 ## 成就目录: cond 在 check_achievements 里按 id 求值(基于持久化统计)
@@ -93,10 +94,10 @@ const SPECIALS := [
 	{"id": "item_revive_coin", "name": "复活币", "price": 160,
 		"currency": "gold", "effect": "revive", "stack": true,
 		"desc": "格斗试炼倒下时自动消耗 1 枚, 以 60% 生命原地复活"},
-	{"id": "item_fate_dice", "name": "命运骰", "price": 60,
+	{"id": "item_fate_dice", "name": "命运骰", "price": 10,
 		"currency": "diamonds", "effect": "fdice", "stack": true,
 		"desc": "肉鸽命运二选一界面可掷骰重抽候选(每次消耗 1 枚)"},
-	{"id": "item_reroll_ticket", "name": "重抽券", "price": 35,
+	{"id": "item_reroll_ticket", "name": "重抽券", "price": 10,
 		"currency": "diamonds", "effect": "rticket", "stack": true,
 		"desc": "格斗选牌界面额外重抽次数 +1 (每次消耗 1 张)"},
 	{"id": "item_clear_record", "name": "清空战绩", "price": 80,
@@ -153,6 +154,8 @@ var quads := 0                 # 累计打出四条次数(成就统计)
 var endless_best := 0          # 无尽挑战历史最高层(成就统计)
 var counter_day := ""          # 记牌器·日卡生效日期(空=未激活)
 var all_ach_bonus := false     # 集齐全部成就的 +36 钻奖励是否已发放
+var nick_saved := ""           # 昵称镜像(settings.cfg 损失时从这里找回)
+var backup_bonus_used := false # 备份奖励码(TYCOON)是否已兑换过
 
 ## 本地战绩统计
 var local_matches := 0
@@ -226,6 +229,8 @@ func _reset_defaults() -> void:
 	endless_best = 0
 	counter_day = ""
 	all_ach_bonus = false
+	nick_saved = ""
+	backup_bonus_used = false
 	local_matches = 0
 	local_wins = 0
 
@@ -234,8 +239,35 @@ func load_wallet() -> void:
 	_reset_defaults()
 	# 主存档优先; 损坏/缺失时回退 .bak 备份
 	if _read_into(save_path):
+		_restore_nickname()
 		return
-	_read_into(save_path + ".bak")
+	if _read_into(save_path + ".bak"):
+		_restore_nickname()
+
+
+## 昵称持久化兜底: settings.cfg 丢失/重置(更新覆盖安装等)时,
+## 从钱包镜像找回最近一次使用的昵称, 免于每次更新重设。
+func _restore_nickname() -> void:
+	var gs := _settings()
+	if gs == null:
+		return
+	var cur := str(gs.nickname).strip_edges()
+	if (cur == "" or cur == "玩家") and nick_saved.strip_edges() != "":
+		gs.nickname = nick_saved.strip_edges()
+		gs.save_settings()
+
+
+## 设置服务可能未就绪(纯规则测试无 autoload): 防御式获取
+func _settings() -> Node:
+	return get_node_or_null("/root/GameSettings")
+
+
+## 昵称变更入口(settings 保存时调用): 镜像进钱包双写持久化
+func note_nickname(nick: String) -> void:
+	if nick_saved == nick:
+		return
+	nick_saved = nick
+	_mark_dirty()
 
 
 func _read_into(path: String) -> bool:
@@ -306,6 +338,8 @@ func _read_into(path: String) -> bool:
 	endless_best = int(cf.get_value("wallet", "endless_best", 0))
 	counter_day = str(cf.get_value("wallet", "counter_day", ""))
 	all_ach_bonus = bool(cf.get_value("wallet", "all_ach_bonus", false))
+	nick_saved = str(cf.get_value("wallet", "nick_saved", ""))
+	backup_bonus_used = bool(cf.get_value("wallet", "backup_bonus_used", false))
 	return true
 
 
@@ -357,6 +391,8 @@ func save_wallet() -> void:
 	cf.set_value("wallet", "endless_best", endless_best)
 	cf.set_value("wallet", "counter_day", counter_day)
 	cf.set_value("wallet", "all_ach_bonus", all_ach_bonus)
+	cf.set_value("wallet", "nick_saved", nick_saved)
+	cf.set_value("wallet", "backup_bonus_used", backup_bonus_used)
 	if cf.save(tmp) == OK:
 		DirAccess.rename_absolute(
 				ProjectSettings.globalize_path(tmp),
@@ -417,6 +453,62 @@ func grant_match_reward(points: int, rank: int, stakes: int = 1,
 			"stakes": stakes, "doubled": doubled, "bonus": bonus,
 			"streak": win_streak, "streak_gold": streak_gold,
 			"achievements": newly}
+
+
+## 备份奖励码: 输入 TYCOON 兑换 +300 钻石, 每个玩家(钱包)仅一次。
+## 返回 {diamonds} 或 {error}。
+func redeem_tycoon_code(code: String) -> Dictionary:
+	if code.strip_edges().to_upper() != "TYCOON":
+		return {"error": "不是有效的备份码"}
+	if backup_bonus_used:
+		return {"error": tr("该奖励码已领取过")}
+	backup_bonus_used = true
+	diamonds += 300
+	diamonds_earned += 300
+	_mark_dirty()
+	balance_changed.emit()
+	return {"diamonds": 300}
+
+
+## 联机对局结算: 按积分计算输赢 — 金币 = 积分 × 2(输家为负, 钱包下限 0);
+## 最终身份钻石: 大富豪 +2 / 富豪 +1 / 贫民 -1 / 大贫民 -2(下限 0)。
+func grant_online_match_reward(points: int, rank: int) -> Dictionary:
+	var gold_delta := points * 2
+	var dia_delta := 0
+	match clampi(rank - 1, 0, 3):
+		0:
+			dia_delta = 2
+		1:
+			dia_delta = 1
+		2:
+			dia_delta = -1
+		3:
+			dia_delta = -2
+	gold = maxi(gold + gold_delta, 0)
+	diamonds = maxi(diamonds + dia_delta, 0)
+	if dia_delta > 0:
+		diamonds_earned += dia_delta
+	local_matches += 1
+	var won: bool = points > 0
+	if won:
+		local_wins += 1
+		win_streak += 1
+	else:
+		win_streak = 0
+	_mission_add("m_play", 1)
+	if won:
+		_mission_add("m_win", 1)
+	var newly := check_achievements()
+	push_history({
+		"day": Time.get_date_string_from_system(),
+		"mode": "联机", "rank": rank, "points": points,
+		"gold": gold_delta, "diamonds": dia_delta,
+	})
+	_mark_dirty()
+	balance_changed.emit()
+	return {"gold": gold_delta, "diamonds": dia_delta, "points": points,
+			"stakes": 2, "doubled": false, "bonus": 0, "streak": win_streak,
+			"streak_gold": 0, "achievements": newly}
 
 
 ## 购买: 成功扣钻石并加入拥有, 返回 true。
@@ -645,7 +737,8 @@ func can_sign_today() -> bool:
 	return sign_day != _today()
 
 
-## 领取今日签到: 奖励入账, 连续/累计计数推进, 返回 {day_index, gold, diamonds}
+## 领取今日签到: 奖励入账(金币/钻石/记牌器道具), 连续/累计计数推进,
+## 返回 {day_index, gold, diamonds, reward_text, achievements}
 func claim_signin() -> Dictionary:
 	if not can_sign_today():
 		return {}
@@ -660,10 +753,31 @@ func claim_signin() -> Dictionary:
 	gold += g
 	diamonds += d
 	diamonds_earned += d
+	# 记牌器类奖励: 次卡入库存 / 日卡当日生效
+	var item_id := str(rw.get("item", ""))
+	if item_id != "":
+		inventory[item_id] = item_count(item_id) + 1
+	if bool(rw.get("counter_day", false)):
+		counter_day = _today()
 	var newly := check_achievements()  # 签到可解锁『风雨无阻』
 	_mark_dirty()
 	balance_changed.emit()
-	return {"day_index": idx, "gold": g, "diamonds": d, "achievements": newly}
+	return {"day_index": idx, "gold": g, "diamonds": d,
+			"reward_text": signin_reward_text(rw), "achievements": newly}
+
+
+## 签到奖励文案(主菜单轨道格与领取提示共用)
+static func signin_reward_text(rw: Dictionary) -> String:
+	var parts: Array = []
+	if int(rw.get("gold", 0)) > 0:
+		parts.append("%d金币" % int(rw["gold"]))
+	if int(rw.get("diamonds", 0)) > 0:
+		parts.append("%d钻石" % int(rw["diamonds"]))
+	if str(rw.get("item", "")) == "item_counter_once":
+		parts.append("记牌器×1")
+	if bool(rw.get("counter_day", false)):
+		parts.append("记牌器1天")
+	return " ".join(PackedStringArray(parts))
 
 
 func _days_shift(day: String, delta: int) -> String:
@@ -864,12 +978,17 @@ func clear_records() -> void:
 
 ## 记牌器当前是否可用: 日卡当日生效, 或持有次卡
 func counter_active() -> bool:
-	return counter_day == _today() or item_count("item_counter_once") > 0
+	return counter_day_today() or item_count("item_counter_once") > 0
+
+
+## 记牌器日卡是否当日生效
+func counter_day_today() -> bool:
+	return counter_day == _today()
 
 
 ## 开局占用记牌器: 日卡当日不限次; 否则消耗 1 张次卡。无可用返回 false。
 func consume_counter_use() -> bool:
-	if counter_day == _today():
+	if counter_day_today():
 		return true
 	return consume_item("item_counter_once")
 
@@ -926,6 +1045,7 @@ func _backup_payload() -> Dictionary:
 		"de": diamonds_earned, "sb": special_bought,
 		"fw": first_win_day, "ddd": double_diamond_day,
 		"mdy": mission_day, "mp": mission_progress, "mc": mission_claimed,
+		"bu": backup_bonus_used,
 	}
 
 
@@ -1019,6 +1139,7 @@ func import_backup(code: String) -> Dictionary:
 	mission_day = str(parsed.get("mdy", ""))
 	mission_progress = parsed.get("mp", {})
 	mission_claimed = parsed.get("mc", {})
+	backup_bonus_used = bool(parsed.get("bu", false))
 	save_wallet()
 	balance_changed.emit()
 	return {"gold": gold, "diamonds": diamonds}

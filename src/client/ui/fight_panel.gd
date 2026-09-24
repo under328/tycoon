@@ -193,7 +193,7 @@ func _ready() -> void:
 	add_child(battle_box)
 
 	avatar = FightSpriteScript.new()
-	# 战斗形象 = 128×128 像素精灵(待机/攻击/技能/防御/奥义/变身动画);
+	# 战斗形象 = 256×256 像素精灵(待机/攻击/技能/防御/奥义/变身动画);
 	# 缺资产时 FightSprite 自动回退程序化头像
 	avatar.skin_id = Wallet.equipped_skin
 	avatar.custom_minimum_size = Vector2(160, 160)

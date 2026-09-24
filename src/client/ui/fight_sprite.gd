@@ -1,5 +1,5 @@
 ## 格斗精灵动画控件: 播放 assets/fight/<skin>/<action>.png 精灵表
-## (128×128/帧, 纵向排列)。缺资产时回退程序化头像(Avatar)。
+## (256×256/帧, 纵向排列)。缺资产时回退程序化头像(Avatar)。
 ## 动作: idle / attack / skill_fire / skill_frost / skill_light /
 ##       defend / ult / transform / hit
 extends Control
@@ -10,7 +10,6 @@ const ACTIONS_FPS := {
 	"idle": 8, "attack": 11, "skill_fire": 10, "skill_frost": 10,
 	"skill_light": 10, "defend": 6, "ult": 10, "transform": 9, "hit": 8,
 }
-const FRAME := 128
 
 var skin_id := "skin_default":
 	set(v):
@@ -53,7 +52,8 @@ static var _sheet_cache := {}
 func _ready() -> void:
 	custom_minimum_size = Vector2(128, 128)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# 256 资产在 <256 控件上缩小时取最近 mip(≈128 级), 保持像素干净不闪烁
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
 	_reload()
 
 
@@ -68,7 +68,9 @@ func _reload() -> void:
 			_tex = load(path)
 		_sheet_cache[key] = _tex
 	if _tex != null:
-		_frames = maxi(_tex.get_height() / FRAME, 1)
+		# 帧边长取纹理宽(方形帧, 256 资产; 异常纹理也不越界)
+		var fw := maxi(int(_tex.get_width()), 1)
+		_frames = maxi(int(_tex.get_height()) / fw, 1)
 		if _fallback != null:
 			_fallback.queue_free()
 			_fallback = null
@@ -122,8 +124,9 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if _tex == null:
 		return   # 回退头像子控件负责显示
+	var fw := maxi(int(_tex.get_width()), 1)
 	var dst := Rect2(Vector2.ZERO, size)
-	var src := Rect2(0.0, float(_frame) * FRAME, FRAME, FRAME)
+	var src := Rect2(0.0, float(_frame) * fw, fw, fw)
 	if flip_h:
 		draw_texture_rect_region(_tex, dst, src, Color.WHITE, true)
 	else:

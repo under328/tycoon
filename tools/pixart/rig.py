@@ -230,6 +230,9 @@ def draw_leg(rig, hip, knee, foot, pal, back=False):
     boot = pal['boot']
     rig.rrect(fx - 6.5, fy - 5.0, fx + 6.5, fy + 1.0, 2.4, boot)
     rig.rrect(fx - 6.5, fy - 1.8, fx + 6.5, fy + 1.0, 1.6, shade(boot, 0.6))
+    trim = pal.get('boot_trim')
+    if trim:   # 靴口镶边(悟空金边黑靴 / 高达红边蓝靴)
+        rig.rrect(fx - 6.5, fy - 5.0, fx + 6.5, fy - 3.4, 1.0, trim)
 
 
 def draw_torso(rig, p, pal):
@@ -299,6 +302,72 @@ def hair_spiky(rig, p, pal, spikes=7, reach=1.0):
                       (lerp(bx, tx, 0.5), lerp(by, ty, 0.5))], hi)
 
 
+def hair_goku(rig, p, pal, t=0.0):
+    """悟空式刺猬头: 后掠双层大尖刺 — 前排斜上、后排倒伏, 发际锯齿。"""
+    hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
+    h = pal['hair']
+    hi = pal.get('hair_hi', shade(h, 1.5))
+    sway = math.sin((t if t else 0.0) * math.tau) * 0.8
+    hair_dome(rig, p, 1.3, -4.5, h)
+    # 后排: 4 根粗壮大刺向右上倒伏(后掠)
+    for i in range(4):
+        a = math.radians(128 + i * 16)
+        bx = hc[0] + math.cos(a) * (rx - 1)
+        by = hc[1] - 4 + math.sin(a) * (ry - 4)
+        ln = 14 - i * 1.6
+        tx = hc[0] + math.cos(a) * (rx + 2) + ln * 0.72 + sway
+        ty = hc[1] - 6 + math.sin(a) * (ry + 4) - ln * 0.66
+        w = 4.4 - i * 0.5
+        rig.poly([(bx, by - w), (bx + w * 0.8, by + w * 0.4),
+                  (tx, ty), (bx - w * 0.5, by + w * 0.2)], h)
+    # 前排: 5 根向上冲的尖刺(额前)
+    for i in range(5):
+        a = math.radians(34 + i * 18)
+        bx = hc[0] + math.cos(a) * (rx - 3)
+        by = hc[1] - 4 + math.sin(a) * (ry - 6)
+        ln = 11 + (2 if i in (1, 2) else 0)
+        tx = hc[0] + math.cos(a) * (rx + 4)
+        ty = hc[1] - 6 - ln
+        w = 3.6
+        rig.poly([(bx - w * 0.7, by), (bx + w * 0.7, by), (tx, ty)], h)
+        if i % 2 == 0:
+            rig.poly([(bx - 0.5, by - 1), (bx + 1.4, by - 0.5),
+                      (lerp(bx, tx, 0.6), lerp(by, ty, 0.6))], hi)
+    # 发际锯齿(额头上缘)
+    for i in range(5):
+        bx = hc[0] - rx + 3 + i * (2 * rx - 6) / 4
+        rig.poly([(bx - 2.0, hc[1] - ry * 0.42), (bx + 2.0, hc[1] - ry * 0.42),
+                  (bx + 0.3, hc[1] - ry * 0.06)], h)
+
+
+def hair_curly(rig, p, pal, t=0.0):
+    """怪盗J式蓬乱卷发: 大体积圆发团 + 放射翘梢, 遮耳盖颈。"""
+    hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
+    h = pal['hair']
+    hi = pal.get('hair_hi', shade(h, 1.7))
+    sway = math.sin((t if t else 0.0) * math.tau) * 1.0
+    # 主发团(大圆 + 两侧鼓包)
+    rig.ell(hc[0], hc[1] - ry * 0.42, rx + 4.6, ry * 0.92, h)
+    rig.ell(hc[0] - rx - 2.2, hc[1] - 1, 4.6, 6.2, h)
+    rig.ell(hc[0] + rx + 2.2, hc[1] - 1, 4.6, 6.2, h)
+    # 额前蓬乱刘海(三角锯齿)
+    for i in range(4):
+        bx = hc[0] - rx + 2.5 + i * (2 * rx - 5) / 3
+        ln = 5.0 + (1.8 if i % 2 == 0 else 0)
+        rig.poly([(bx - 2.6, hc[1] - ry * 0.40), (bx + 2.6, hc[1] - ry * 0.40),
+                  (bx + 0.4, hc[1] - ry * 0.40 + ln)], h)
+    # 放射翘梢(8 向胶囊短刺)
+    for a_deg in (-118, -96, -74, -52, -30, -8, 152, 130):
+        a = math.radians(a_deg)
+        bx = hc[0] + math.cos(a) * (rx + 1.2)
+        by = hc[1] - ry * 0.42 + math.sin(a) * (ry * 0.8)
+        tipx = bx + math.cos(a) * 6.4 + (sway if a_deg < 0 else -sway) * 0.3
+        tipy = by + math.sin(a) * 6.4
+        rig.capsule((bx, by), (tipx, tipy), 2.6, h)
+    # 受光高光弧
+    rig.arc(hc[0], hc[1] - ry * 0.30, rx + 1.2, 204, 320, hi, 2.0)
+
+
 def hair_long(rig, p, pal, t=0.0, length=34, bangs=True):
     hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
     h = pal['hair']
@@ -362,18 +431,30 @@ def hair_medium(rig, p, pal, t=0.0):
 
 
 def hair_pigtails(rig, p, pal, t=0.0):
+    """飞天小女警泡泡: 金发双马尾(发根蓝色发圈) + 中分刘海"""
     hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
     h = pal['hair']
     hi = pal.get('hair_hi', shade(h, 1.5))
     hair_dome(rig, p, 1.6, -5.0, h)
     rig.arc(hc[0], hc[1] - 1, rx + 1.0, 195, 345, hi, 2.2)
     sway = math.sin(t * math.tau) * 2.5
+    band = pal.get('band', hexc('58b8e8'))
     for side in (-1, 1):
         top = (hc[0] + side * (rx + 1), hc[1] - 6)
-        tip = (hc[0] + side * (rx + 13) + side * sway * 0.5, hc[1] + 2 + sway * 0.4)
-        rig.capsule(top, tip, 6.0, h)
-        rig.ell(tip[0], tip[1], 3.4, 3.6, h)
-        rig.ell(top[0] + side * 1, top[1] + 1, 2.0, 2.0, hi)
+        tip = (hc[0] + side * (rx + 14) + side * sway * 0.5, hc[1] + 3 + sway * 0.4)
+        rig.capsule(top, tip, 6.4, h)
+        rig.ell(tip[0], tip[1], 3.6, 3.9, h)
+        rig.ell(tip[0] - side * 0.6, tip[1] + 1.2, 2.2, 2.4, shade(h, 0.82))
+        # 发圈(马尾根部蓝色环)
+        rig.ell(top[0] + side * 2.2, top[1] + 0.8, 3.0, 2.4, band)
+        rig.ell(top[0] + side * 2.2 - side * 0.5, top[1] - 0.2, 1.9, 1.4,
+                shade(band, 1.35))
+        rig.ell(top[0] + side * 0.6, top[1] + 1, 2.0, 2.0, hi)
+    # 中分刘海
+    rig.poly([(hc[0] - rx - 0.5, hc[1] - 5), (hc[0] - 1.0, hc[1] - 5),
+              (hc[0] - 1.6, hc[1] + 2), (hc[0] - 5.0, hc[1] - 1)], h)
+    rig.poly([(hc[0] + rx + 0.5, hc[1] - 5), (hc[0] + 1.0, hc[1] - 5),
+              (hc[0] + 1.6, hc[1] + 2), (hc[0] + 5.0, hc[1] - 1)], h)
 
 
 def fox_ears(rig, p, pal):
@@ -432,79 +513,107 @@ def face_anime(rig, p, pal, angry=False, pupil=None, smile=False):
 
 
 def face_ppg(rig, p, pal):
-    """飞天小女警: 超大圆眼"""
+    """飞天小女警: 超大圆眼(卡通比例, 约半脸高)"""
     hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
     for side in (-1, 1):
-        ex = hc[0] + side * rx * 0.42
-        ey = hc[1] + 2
-        rig.ell(ex, ey, 4.6, 5.2, hexc('ffffff'))
-        rig.ell(ex, ey + 0.6, 3.4, 4.2, pal.get('pupil', hexc('58a8e0')))
-        rig.ell(ex - 1.2, ey - 1.6, 1.3, 1.5, hexc('ffffff'))
-    rig.arc(hc[0], hc[1] + ry * 0.24, 3.6, 20, 160, hexc('d86078'), 2.0)
+        ex = hc[0] + side * rx * 0.40
+        ey = hc[1] + 2.2
+        rig.ell(ex, ey, 5.4, 6.2, hexc('ffffff'))
+        rig.ell(ex, ey + 0.7, 4.1, 5.1, pal.get('pupil', hexc('58a8e0')))
+        rig.ell(ex - 1.4, ey - 1.9, 1.5, 1.7, hexc('ffffff'))
+        rig.ell(ex + 1.6, ey + 2.0, 0.9, 1.1, shade(pal.get('pupil',
+                hexc('58a8e0')), 0.6))
+    rig.arc(hc[0], hc[1] + ry * 0.16, 4.4, 18, 162, hexc('d86078'), 2.2)
     for side in (-1, 1):  # 腮红
-        rig.ell(hc[0] + side * (rx * 0.72), hc[1] + ry * 0.40, 2.0, 1.4,
+        rig.ell(hc[0] + side * (rx * 0.74), hc[1] + ry * 0.42, 2.4, 1.6,
                 pal.get('blush', hexc('f8b0c0')))
 
 
 def face_mask_white(rig, p, pal):
+    """怪盗J白鸟面具: 尖角鸟喙形(外尖上挑), 红瞳缝, 深色勾边"""
     hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
-    y0 = hc[1] - 4.0
+    y0 = hc[1] - 4.4
     mask = hexc('f4f2ec')
-    # 面具底形(横贯双眼的尖角形)
-    rig.poly([(hc[0] - rx - 1.5, y0 + 3.6), (hc[0] - rx * 0.55, y0 - 2.0),
-              (hc[0] + rx * 0.55, y0 - 2.0), (hc[0] + rx + 1.5, y0 + 3.6),
-              (hc[0] + rx * 0.60, y0 + 6.4), (hc[0] - rx * 0.60, y0 + 6.4)],
+    # 面具底形: 双翼上挑的鸟形(两端尖角向外上扬)
+    rig.poly([(hc[0] - rx - 3.4, y0 + 1.8), (hc[0] - rx * 0.55, y0 - 2.6),
+              (hc[0] + rx * 0.55, y0 - 2.6), (hc[0] + rx + 3.4, y0 + 1.8),
+              (hc[0] + rx * 0.58, y0 + 6.8), (hc[0] - rx * 0.58, y0 + 6.8)],
              mask)
-    # 面具深色勾边(小尺寸下的轮廓保证)
     edge = hexc('15121c')
-    rig.poly([(hc[0] - rx - 1.5, y0 + 3.6), (hc[0] - rx * 0.55, y0 - 2.0),
-              (hc[0] - rx * 0.42, y0 - 2.0), (hc[0] - rx - 0.3, y0 + 3.4)], edge)
-    rig.poly([(hc[0] + rx + 1.5, y0 + 3.6), (hc[0] + rx * 0.55, y0 - 2.0),
-              (hc[0] + rx * 0.42, y0 - 2.0), (hc[0] + rx + 0.3, y0 + 3.4)], edge)
+    # 面具深色勾边(小尺寸下的轮廓保证)
+    rig.poly([(hc[0] - rx - 3.4, y0 + 1.8), (hc[0] - rx * 0.55, y0 - 2.6),
+              (hc[0] - rx * 0.42, y0 - 2.6), (hc[0] - rx - 0.2, y0 + 1.6)], edge)
+    rig.poly([(hc[0] + rx + 3.4, y0 + 1.8), (hc[0] + rx * 0.55, y0 - 2.6),
+              (hc[0] + rx * 0.42, y0 - 2.6), (hc[0] + rx + 0.2, y0 + 1.6)], edge)
+    rig.poly([(hc[0] - rx - 3.4, y0 + 1.8), (hc[0] - rx - 0.2, y0 + 1.6),
+              (hc[0] - rx * 0.5, y0 + 6.4), (hc[0] - rx * 0.58, y0 + 6.8)], edge)
+    rig.poly([(hc[0] + rx + 3.4, y0 + 1.8), (hc[0] + rx + 0.2, y0 + 1.6),
+              (hc[0] + rx * 0.5, y0 + 6.4), (hc[0] + rx * 0.58, y0 + 6.8)], edge)
     for side in (-1, 1):  # 大瞳缝(红瞳, 小尺寸可读)
         ex = hc[0] + side * rx * 0.44
-        rig.poly([(ex - 3.0, y0 + 1.8), (ex + 3.0, y0 + 0.6),
-                  (ex + 3.0, y0 + 4.2), (ex - 3.0, y0 + 5.0)], edge)
-        rig.poly([(ex - 2.2, y0 + 2.2), (ex + 2.2, y0 + 1.3),
-                  (ex + 2.2, y0 + 3.6), (ex - 2.2, y0 + 4.4)], hexc('c92a44'))
-    rig.capsule((hc[0] - 1.6, hc[1] + ry * 0.48), (hc[0] + 1.8, hc[1] + ry * 0.48),
+        rig.poly([(ex - 3.2, y0 + 1.6), (ex + 3.2, y0 + 0.4),
+                  (ex + 3.2, y0 + 4.4), (ex - 3.2, y0 + 5.4)], edge)
+        rig.poly([(ex - 2.4, y0 + 2.0), (ex + 2.4, y0 + 1.1),
+                  (ex + 2.4, y0 + 3.8), (ex - 2.4, y0 + 4.8)], hexc('c92a44'))
+    rig.capsule((hc[0] - 1.8, hc[1] + ry * 0.48), (hc[0] + 2.0, hc[1] + ry * 0.48),
                 1.6, hexc('9a2a3c'))
 
 
 def face_helmet(rig, p, pal, eye_col, crest=None, chin=None):
-    """全头盔五官: 复眼 + 口栅 + 可选 V 天线/脊冠/下巴甲"""
+    """全头盔五官: 复眼 + 口栅 + 可选 V 天线/脊冠/双触角/下巴甲"""
     hc, rx, ry = p['headc'], p['head_rx'], p['head_ry']
     if crest == 'vfin':
         gold = pal.get('accent', hexc('f2c838'))
-        rig.rrect(hc[0] - 1.6, hc[1] - ry - 9.0, hc[0] + 1.6, hc[1] - ry + 2.5,
+        rig.rrect(hc[0] - 1.4, hc[1] - ry - 10.5, hc[0] + 1.4, hc[1] - ry + 2.5,
                   1.2, gold)
         for side in (-1, 1):
-            for i in range(5):
-                x0 = hc[0] + side * (2.0 + i * 2.2)
-                y0 = hc[1] - ry + 1.0 - i * 2.0
-                rig.capsule((x0, y0), (x0 + side * 2.0, y0 - 2.0), 2.0, gold)
+            for i in range(6):
+                x0 = hc[0] + side * (1.8 + i * 2.1)
+                y0 = hc[1] - ry + 0.6 - i * 2.1
+                rig.capsule((x0, y0), (x0 + side * 2.1, y0 - 2.1), 1.7, gold)
+    elif crest == 'antenna':
+        # 假面骑士式双触角: 细银杆 + 红尖(微微内八, 红尖加大醒目)
+        silver = pal.get('silver', hexc('c8d0d8'))
+        tipc = pal.get('crest_gem', pal.get('accent', hexc('ff4040')))
+        for side in (-1, 1):
+            x0 = hc[0] + side * (rx * 0.52)
+            y0 = hc[1] - ry + 2.5
+            x1 = hc[0] + side * (rx * 0.52 + 2.0)
+            y1 = hc[1] - ry - 11.5
+            x2 = hc[0] + side * (rx * 0.52 + 0.6)
+            y2 = hc[1] - ry - 16.0
+            rig.capsule((x0, y0), (x1, y1), 1.8, silver)
+            rig.capsule((x1, y1), (x2, y2), 1.6, silver)
+            rig.ell(x2, y2 - 1.2, 2.4, 3.0, tipc)
+            rig.ell(x2 - side * 0.5, y2 - 2.0, 1.0, 1.2, shade(tipc, 1.5))
     elif crest == 'ridge':
         rig.capsule((hc[0], hc[1] - ry - 4.5), (hc[0], hc[1] - ry + 3.5), 3.0,
                     shade(pal['helmet'], 1.5))
         rig.ell(hc[0], hc[1] - ry - 5.5, 2.2, 2.2, pal.get('crest_gem',
                 pal.get('accent', hexc('ff4040'))))
+    es = float(pal.get('eye_scale', 1.0))
     for side in (-1, 1):
-        ex = hc[0] + side * rx * 0.46
+        ex = hc[0] + side * rx * 0.44
         ey = hc[1] + 0.5
-        rig.poly([(ex - 4.4, ey - 2.8), (ex + 4.4, ey - 3.6),
-                  (ex + 4.8, ey + 1.6), (ex - 3.8, ey + 3.0)], eye_col)
-        rig.poly([(ex - 2.4, ey - 1.7), (ex - 0.4, ey - 2.0),
-                  (ex - 0.6, ey + 0.8), (ex - 2.1, ey + 0.8)], shade(eye_col, 1.5))
+        rig.poly([(ex - 4.6 * es, ey - 3.0 * es), (ex + 4.6 * es, ey - 3.8 * es),
+                  (ex + 5.0 * es, ey + 1.9 * es), (ex - 4.0 * es, ey + 3.2 * es)],
+                 eye_col)
+        rig.poly([(ex - 2.5 * es, ey - 1.8 * es), (ex - 0.4 * es, ey - 2.1 * es),
+                  (ex - 0.6 * es, ey + 0.9 * es), (ex - 2.2 * es, ey + 0.9 * es)],
+                 shade(eye_col, 1.5))
+        rig.poly([(ex + 1.6 * es, ey - 2.0 * es), (ex + 4.3 * es, ey - 2.4 * es),
+                  (ex + 4.5 * es, ey - 0.2 * es), (ex + 1.7 * es, ey + 0.2 * es)],
+                 shade(eye_col, 1.32))
     gy = hc[1] + ry * 0.42
-    rig.rrect(hc[0] - 4.6, gy - 2.2, hc[0] + 4.6, gy + 2.4, 1.5,
+    rig.rrect(hc[0] - 4.8, gy - 2.3, hc[0] + 4.8, gy + 2.5, 1.5,
               pal.get('grille', hexc('b8c0c8')))
-    for i in range(3):
-        yy = gy - 1.2 + i * 1.6
-        rig.capsule((hc[0] - 4.0, yy), (hc[0] + 4.0, yy), 0.7,
+    for i in range(4):
+        yy = gy - 1.4 + i * 1.5
+        rig.capsule((hc[0] - 4.2, yy), (hc[0] + 4.2, yy), 0.7,
                     shade(pal.get('grille', hexc('b8c0c8')), 0.5))
     if chin:
-        cy = hc[1] + ry * 0.74
-        rig.rrect(hc[0] - 3.6, cy - 1.4, hc[0] + 3.6, cy + 1.6, 1.2, chin)
+        cy = hc[1] + ry * 0.76
+        rig.rrect(hc[0] - 3.8, cy - 1.5, hc[0] + 3.8, cy + 1.7, 1.2, chin)
 
 
 def face_forehead_band(rig, p, pal):

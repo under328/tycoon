@@ -41,6 +41,8 @@ def palette_of(skin_id, extra=()):
             pal.append(key)
 
     for v in specs.SPECS[skin_id]['pal'].values():
+        if not isinstance(v, tuple):   # 非颜色字段(eye_scale 等)跳过
+            continue
         add(v)
         for f in (0.62, 0.8, 1.3, 1.55, 1.8):
             add(shade(v, f))
@@ -55,8 +57,22 @@ def palette_of(skin_id, extra=()):
     return pal
 
 
+def _center_x(img):
+    """水平自动居中: 朝右构图的人物本体常偏右 3~5px(鼻/发/前肢), 商城/头像
+    预览里表现为"整体偏右" — 按内容 bbox 中心平移回画布中线。"""
+    bb = img.getbbox()
+    if not bb:
+        return img
+    off = (bb[0] + bb[2]) // 2 - img.width // 2
+    if abs(off) < 1:
+        return img
+    out = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    out.paste(img, (-off, 0))
+    return out
+
+
 def gen_avatar(skin_id, size=64):
-    """64×64 胸像: 128 骨架 ×0.82 缩放, 头中心落在 (32, 26)"""
+    """64×64 胸像: 128 骨架 ×0.82 缩放, 头中心落在 (32, 26), 水平自动居中"""
     pose = R.pose_idle(0.15)
     cv = Canvas(size)
     scale = 0.82
@@ -72,7 +88,7 @@ def gen_avatar(skin_id, size=64):
         specs.SPECS[skin_id]['front'] = saved_front
     img = finish(cv, palette_of(skin_id), spec['pal'].get(
         'outline', hexc('14101e')))
-    return img
+    return _center_x(img)
 
 
 def main():

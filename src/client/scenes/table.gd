@@ -59,6 +59,8 @@ var _rev_lbl: Label = null     # 革命状态徽标(图标+文字, 脉冲显眼)
 var _rev_pulse: Tween = null
 var _pass_wait := -1.0         # "要不起"自动不要倒计时(>0=进行中, 秒)
 var _pass_wait_shown := -1
+var _center_cd_active := false # 中央出牌区大数字倒计时显示中(回合末 5 秒)
+var _my_turn_now := false      # 当前是否轮到我出牌(_refresh_view 刷新)
 var pass_lbl: Label = null     # 倒计时大数字(54321)
 var _seat_skins: Array = ["skin_default", "skin_default", "skin_default", "skin_default"]
 var _opp_avatars: Array = []       # 对手头像(内嵌于信息面板)
@@ -254,6 +256,24 @@ func _process(delta: float) -> void:
 		# 倒计时已归零: 立即清空, 不残留 "⏱ 0"
 		if timer_label != null and timer_label.text != "":
 			timer_label.text = ""
+	# 出牌阶段最后 5 秒: 中央出牌区大数字倒计时(联机回合计时/本地跟牌 30s 计时)。
+	# 优先级低于"要不起"5 秒快倒(同一控件, 那边每秒跳字+归零自动不要)。
+	if _pass_wait <= 0.0 and pass_lbl != null:
+		var cd_n := -1
+		if mode == "online" and _my_turn_now \
+				and _turn_remain > 0.0 and _turn_remain <= 5.0:
+			cd_n = clampi(int(ceil(_turn_remain)), 1, 5)
+		elif mode == "local" and _my_follow_ms >= 25.0 and _my_follow_ms < 30.0:
+			cd_n = clampi(int(ceil(30.0 - _my_follow_ms)), 1, 5)
+		if cd_n >= 1:
+			if pass_lbl.text != str(cd_n):
+				pass_lbl.text = str(cd_n)
+				_sfx("tick")
+			pass_lbl.visible = true
+			_center_cd_active = true
+		elif _center_cd_active:
+			pass_lbl.visible = false
+			_center_cd_active = false
 	# 本地换牌阶段: 30s 倒计时(剩余 <10s 每秒提示音), 超时托管自动返还
 	if mode == "local" and str(state.get("phase", "")) == "exchange" 			and _turn_remain > 0.0 and _my_return_pending():
 		_turn_remain -= delta
@@ -896,7 +916,8 @@ func _close_rogue_strip() -> void:
 		_rogue_dlg = null
 
 
-## 命运二选一面板定位: 铺满中央出牌区(field_panel), 随 _relayout 同步
+## 命运二选一面板定位: 铺满中央出牌区(field_panel), 随 _relayout 同步。
+## 手机窄屏: 内容(两卡 286×2+间距)超宽时整体等比缩小, 保证完整落在出牌区内。
 func _sync_rogue_overlay() -> void:
 	if _rogue_dlg == null or not is_instance_valid(_rogue_dlg) 			or str(_rogue_dlg.get_meta("kind", "")) != "choice":
 		return
@@ -905,6 +926,11 @@ func _sync_rogue_overlay() -> void:
 	var cc: Control = _rogue_dlg.get_child(0)
 	cc.position = Vector2.ZERO
 	cc.size = _rogue_dlg.size
+	var need_x := cc.get_combined_minimum_size().x
+	if need_x > 1.0:
+		var sc := minf(1.0, (_rogue_dlg.size.x - 16.0) / need_x)
+		cc.pivot_offset = _rogue_dlg.size / 2.0
+		cc.scale = Vector2(sc, sc)
 
 
 
@@ -1008,10 +1034,17 @@ func _update_rogue_lbl() -> void:
 		rogue_lbl.visible = false
 	var v := _current_view()
 	var mod_id := str(v.get("rogue_mod", ""))
-	if field_hint == null or mod_id == "":
+	if field_hint == null:
 		return
 	var ph := str(v.get("phase", ""))
 	if ph != "play" and ph != "exchange":
+		return
+	if mod_id == "":
+		# 普通模式: 四条翻倍标记也展示(命运卡标签不存在时由 hint 承载)
+		if bool(v.get("quad_scored", false)):
+			field_hint.text = tr("💥 四条已出 — 本场积分×2")
+		elif field_hint.text != "":
+			field_hint.text = ""
 		return
 	var meta := {}
 	for m in GameStateGd.ROGUE_MODS:
@@ -1023,6 +1056,8 @@ func _update_rogue_lbl() -> void:
 	var txt := "【%s】%s" % [meta.get("name", ""), meta.get("desc", "")]
 	if int(v.get("must_include", -1)) >= 0:
 		txt += " · 首手含♦3"
+	if bool(v.get("quad_scored", false)):
+		txt += " · 💥四条积分×2"
 	field_hint.text = txt
 
 
@@ -1264,6 +1299,10 @@ func _build_ui() -> void:
 	field_panel.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed \
 				and ev.button_index == MOUSE_BUTTON_LEFT:
+			# "要不起"倒计时中: 点中央出牌区 = 立即"不要"(快捷手势)
+			if _pass_wait > 0.0:
+				_on_pass_pressed()
+				return
 			var v: Dictionary = _current_view()
 			var er: Dictionary = _my_pending_return(v)
 			if str(v.get("phase", "")) == "play" \
@@ -1974,6 +2013,7 @@ func _refresh_view(view: Dictionary) -> void:
 
 	var lead: Dictionary = view["lead"]
 	var my_turn: bool = phase == "play" and int(view["turn"]) == int(view["my_seat"])
+	_my_turn_now = my_turn
 	# 离开自己的回合/出牌阶段即取消"要不起"倒计时
 	if phase != "play" or not my_turn:
 		_cancel_pass_wait()
@@ -2061,6 +2101,14 @@ func _refresh_view(view: Dictionary) -> void:
 				"rank": my_rank, "points": pts,
 				"gold": int(reward["gold"]), "diamonds": int(reward["diamonds"]),
 			})
+		elif mode == "online":
+			# 联机结算: 按积分定输赢 — 积分×2 金币; 大富豪+2钻/富豪+1钻, 输家对应扣
+			var seat_me := int(view["my_seat"])
+			var my_rank := int(view["identities"][seat_me]) + 1
+			var pts := int(view["scores"][seat_me])
+			reward = Wallet.grant_online_match_reward(pts, my_rank)
+			reward["wallet_gold"] = Wallet.gold
+			reward["wallet_diamonds"] = Wallet.diamonds
 		var panel := GameEndPanelScript.new()
 		panel.setup(view, func(s: int) -> String: return _seat_name(view, s), reward)
 		fx_layer.add_child(panel)

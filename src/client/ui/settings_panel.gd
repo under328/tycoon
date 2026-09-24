@@ -233,7 +233,18 @@ func _ready() -> void:
 	var import_btn := AppTheme.make_button(tr("导 入"), Vector2(90, 40), 14)
 	import_btn.pressed.connect(func() -> void:
 		Audio.play("click")
-		var r: Dictionary = Wallet.import_backup(import_edit.text)
+		# 备份奖励码: TYCOON → +300 钻石(每玩家一次), 其余按备份码导入
+		var r: Dictionary = {}
+		if import_edit.text.strip_edges().to_upper() == "TYCOON":
+			r = Wallet.redeem_tycoon_code(import_edit.text)
+			if not r.has("error"):
+				import_edit.text = ""
+				_toast.text = tr("兑换成功: +300钻石!")
+				_toast.add_theme_color_override("font_color", AppTheme.GREEN)
+				nickname_changed.emit()
+				return
+		else:
+			r = Wallet.import_backup(import_edit.text)
 		if r.has("error"):
 			_toast.text = tr("导入失败: %s") % str(r["error"])
 			_toast.add_theme_color_override("font_color", AppTheme.RED)

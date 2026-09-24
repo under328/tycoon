@@ -200,6 +200,9 @@ static func _do_play(st: Dictionary, seat: int, cards: Array) -> Dictionary:
 	if bool(st["cfg"]["revolution"]) and int(combo["type"]) == ComboGd.Type.QUAD:
 		st["quads"] = int(st["quads"]) + 1
 		st["revolution"] = int(st["quads"]) % 2 == 1
+	# 四条(炸弹): 本场后续结算积分翻倍(含四条所在的当局)
+	if int(combo["type"]) == ComboGd.Type.QUAD:
+		st["quad_scored"] = true
 	# 命运卡『龙王之怒』: 出王即翻转革命
 	if _rogue_mod_id(st) == "joker_rage":
 		for c in cards:
@@ -465,6 +468,9 @@ static func _finish_player(st: Dictionary, seat: int) -> Dictionary:
 				ids[rich] = 3
 		var deltas := [0, 0, 0, 0]
 		var mult := 1
+		# 四条(炸弹)已出: 本场积分翻倍(与命运卡倍率叠乘)
+		if bool(st.get("quad_scored", false)):
+			mult *= 2
 		match _rogue_mod_id(st):
 			"double_stakes":
 				mult = 2
@@ -507,6 +513,7 @@ static func _empty_state(cfg: Dictionary, seed_v: int) -> Dictionary:
 		"field": [],
 		"revolution": false,
 		"quads": 0,
+		"quad_scored": false,
 		"finish_order": [],
 		"identities": [],
 		"last_points": [],

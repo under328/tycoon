@@ -677,7 +677,7 @@ func _show_signin(sign_btn: Button, prof_btn: Button = null) -> void:
 			# 领取后吸收签到钮宽(64)+间距(6), 右侧不留空
 			prof_btn.custom_minimum_size.x = 190
 		dlg.queue_free()
-		_toast_msg("签到成功: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])])
+		_toast_msg("签到成功: %s" % str(r.get("reward_text", "")))
 	)
 	var wrap2 := CenterContainer.new()
 	wrap2.add_child(claim)
@@ -686,12 +686,7 @@ func _show_signin(sign_btn: Button, prof_btn: Button = null) -> void:
 
 
 func _signin_reward_text(rw: Dictionary) -> String:
-	var parts: Array = []
-	if int(rw.get("gold", 0)) > 0:
-		parts.append("%d金币" % int(rw["gold"]))
-	if int(rw.get("diamonds", 0)) > 0:
-		parts.append("%d钻石" % int(rw["diamonds"]))
-	return " ".join(PackedStringArray(parts))
+	return Wallet.signin_reward_text(rw)
 
 
 func _toast_msg(text: String) -> void:

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""生成格斗精灵图(128×128/帧, 纵向拼图): 每角色每个动作一张 PNG。
+"""生成格斗精灵图(256×256/帧, 纵向拼图): 每角色每个动作一张 PNG。
 
 动作: idle(4) attack(4) skill_fire/skill_frost/skill_light(4×3)
 defend(2) ult(4) transform(6) hit(2)
 技能三系不同弹体/施法特效; 变身帧中性配色(运行时按主花色 modulate)。
+128 基准骨架 ×2 缩放绘制 — 高分辨率下矢量图元自然带出更多细节。
 """
 import os
 import sys
@@ -138,14 +139,18 @@ def _whiteout_of(action, i, n):
     return 0.0
 
 
+FRAME = 256   # 帧边长(128 骨架 ×2)
+
+
 def gen_action(skin_id, action):
     spec = specs.SPECS[skin_id]
     n = FRAMES[action]
     frames = []
     for i in range(n):
         pose = _pose_of(action, i, n)
-        cv = Canvas(128)
+        cv = Canvas(FRAME)
         rig = specs.draw_character(cv, skin_id, pose, t=i / float(n),
+                                   scale=FRAME / 128.0,
                                    whiteout=_whiteout_of(action, i, n))
         _fx_of(rig, action, i, n, pose, spec)
         frames.append(finish(cv, palette_of(skin_id),
@@ -165,9 +170,9 @@ def main():
             frames = gen_action(skin_id, action)
             save_sheet(frames, os.path.join(d, action + '.png'))
         print('sprites done:', skin_id)
-    # 联络表: 抽查两个角色(所有动作, 每行一个动作)
+    # 联络表: 抽查角色(所有动作, 每行一个动作)
     actions = list(FRAMES.keys())
-    row_h = 64
+    row_h = 96
     check_ids = ['skin_dball', 'skin_oiran', 'skin_rx']
     sheet = Image.new('RGBA', (row_h * 6 + 12 * 7, (row_h + 10) * len(actions) * 2
                                + 20), (24, 20, 38, 255))
@@ -176,7 +181,8 @@ def main():
         for action in actions:
             src = Image.open(os.path.join(base, sid, action + '.png'))
             for i in range(FRAMES[action]):
-                fr = src.crop((0, i * 128, 128, (i + 1) * 128)).resize(
+                fr = src.crop((0, i * FRAME, FRAME,
+                               (i + 1) * FRAME)).resize(
                     (row_h, row_h), Image.NEAREST)
                 sheet.paste(fr, (12 + i * (row_h + 12), yy))
             yy += row_h + 10
