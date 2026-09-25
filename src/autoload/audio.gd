@@ -47,6 +47,7 @@ func _ready() -> void:
 		_table_synth_done = true
 		apply_volumes()
 		play_bgm("lobby")
+		_connect_wallet_sfx()
 		return
 	_bgm_tracks["lobby"] = Synth.bgm_lobby()
 	_bgm_thread = Thread.new()
@@ -55,6 +56,14 @@ func _ready() -> void:
 		_synth_table_tracks()  # 降级: 主线程合成(Thread.start 失败极罕见)
 	apply_volumes()
 	play_bgm("lobby")
+
+
+## 钱包事件音: 成就解锁播报(奖励性反馈)
+func _connect_wallet_sfx() -> void:
+	var w := get_node_or_null("/root/Wallet")
+	if w != null:
+		(w as Node).connect("achievements_changed",
+			func(_newly: Array) -> void: play("ach"))
 
 
 func _synth_table_tracks() -> void:
@@ -165,6 +174,61 @@ func _build_library() -> void:
 	]))
 	library["hurt"] = Synth.wav(Synth.sweep(0.22, 320.0, 80.0, 0.32))
 	library["result"] = Synth.result_fanfare()
+	# ── 音效扩充(牌桌/经济/格斗全覆盖) ──
+	# 四条炸弹: 低频爆 + 上扬预兆 + 碎裂
+	library["bomb"] = Synth.wav(Synth.mix_over(Synth.concat([
+			Synth.riser(0.20, 90.0, 430.0, 0.26),
+			Synth.drum(0.42, 0.85),
+			Synth.sweep(0.30, 320.0, 55.0, 0.30)]),
+			Synth.snap(0.22, 0.42, 17.0), 0.20))
+	# 金币叮当(任务奖励/历史入账)
+	library["coin"] = Synth.wav(Synth.ding(1318.5, 0.26))
+	# 钻石闪亮(兑换/钻石结算)
+	library["gem"] = Synth.wav(Synth.arp([1046.5, 1318.5, 1568.0, 2093.0],
+			0.06, 0.24, 12.0))
+	# 签到领取(温暖上行)
+	library["sign"] = Synth.wav(Synth.arp([523.25, 659.25, 783.99, 1046.5],
+			0.09, 0.24, 8.0, 0.085))
+	# 成就解锁(号角短句 + 铃)
+	library["ach"] = Synth.wav(Synth.mix_over(Synth.concat([
+			Synth.tone(0.10, 659.25, 0.26, 9.0),
+			Synth.tone(0.10, 783.99, 0.26, 9.0),
+			Synth.tone(0.24, 987.77, 0.28, 6.0)]),
+			Synth.chime(0.16), 0.02))
+	# 购买成交(收银叮)
+	library["buy"] = Synth.wav(Synth.concat([
+			Synth.ding(1046.5, 0.22), Synth.snap(0.05, 0.18, 42.0)]))
+	# 非法操作(低哑短促双音, 音量克制)
+	library["error"] = Synth.wav(Synth.concat([
+			Synth.tone(0.07, 150.0, 0.16, 24.0),
+			Synth.tone(0.10, 118.0, 0.16, 20.0)]))
+	# 选牌(比 click 更轻的触感)
+	library["select"] = Synth.wav(Synth.tone(0.035, 740.0, 0.20, 44.0))
+	# 洗牌(新局发牌前的摩擦簇)
+	library["shuffle"] = Synth.wav(Synth.concat([
+			Synth.snap(0.07, 0.20, 40.0), Synth.snap(0.06, 0.22, 48.0),
+			Synth.snap(0.08, 0.20, 36.0), Synth.snap(0.10, 0.16, 26.0)]))
+	# 格斗扩充: 格挡/施法/治疗/奥义/变身/击倒/升层/闪避
+	library["guard"] = Synth.wav(Synth.mix_over(
+			Synth.tone(0.09, 1244.5, 0.24, 26.0, 0.5),
+			Synth.tone(0.12, 932.3, 0.20, 16.0), 0.02))
+	library["skill"] = Synth.wav(Synth.mix_over(Synth.riser(0.22, 320.0, 980.0, 0.24),
+			Synth.tone(0.16, 1568.0, 0.14, 14.0), 0.22))
+	library["heal"] = Synth.wav(Synth.concat([
+			Synth.tone(0.12, 523.25, 0.20, 8.0),
+			Synth.tone(0.20, 783.99, 0.20, 6.0)]))
+	library["ult"] = Synth.wav(Synth.mix_over(Synth.concat([
+			Synth.riser(0.34, 180.0, 1300.0, 0.28), Synth.drum(0.5, 0.8)]),
+			Synth.snap(0.2, 0.4, 16.0), 0.34))
+	library["transform"] = Synth.wav(Synth.mix_over(
+			Synth.riser(0.42, 240.0, 1600.0, 0.22), Synth.chime(0.22), 0.42))
+	library["ko"] = Synth.wav(Synth.mix_over(Synth.concat([
+			Synth.drum(0.5, 0.9), Synth.sweep(0.5, 420.0, 55.0, 0.32)]),
+			Synth.snap(0.28, 0.42, 14.0), 0.0))
+	library["floor"] = Synth.wav(Synth.mix_over(Synth.arp(
+			[523.25, 659.25, 783.99, 1046.5], 0.08, 0.24, 8.0, 0.075),
+			Synth.tone(0.5, 130.8, 0.14, 3.0), 0.0))
+	library["dodge"] = Synth.wav(Synth.sweep(0.12, 800.0, 1500.0, 0.20))
 
 
 

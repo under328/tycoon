@@ -34,7 +34,7 @@ const ROGUE_MODS := [
 	{"id": "no_exchange", "name": "免战之约", "glyph": "免", "cat": "规则", "rar": "common",
 		"desc": "本局跳过换牌阶段, 开局直接亮牌开打"},
 	{"id": "score_negate", "name": "福祸反转", "glyph": "反", "cat": "结算", "rar": "common",
-		"desc": "本局结算身份对调: 大富豪与大贫民互换, 富豪与贫民互换"},
+		"desc": "按上一局身份反转结算: 上局大富豪记大贫民, 大贫民记大富豪, 富豪贫民互换; 首局不生效"},
 	{"id": "eight_gift", "name": "八喜临门", "glyph": "喜", "cat": "触发", "rar": "common",
 		"desc": "本局打出 8 切时, 立即从死牌堆摸 1 张"},
 ]
@@ -475,13 +475,14 @@ static func _finish_player(st: Dictionary, seat: int) -> Dictionary:
 			"double_stakes":
 				mult = 2
 			"score_negate":
-				# 『福祸反转』: 结算身份对调(大富豪↔大贫民, 富豪↔贫民)。
-				# 旧版"积分正负反转"会鼓励全员摆烂垫底白拿分, 对局失去目标;
-				# 改为强强互换身份, 积分照常按新身份结算。
-				var flipped := [0, 0, 0, 0]
-				for s2 in SEATS:
-					flipped[s2] = {0: 3, 3: 0, 1: 2, 2: 1}.get(int(ids[s2]), int(ids[s2]))
-				ids = flipped
+				# 『福祸反转』: 按上一局结束的身份反转结算 — 上局大富豪记大贫民(-2)、
+				# 上局大贫民记大富豪(+2), 富豪↔贫民同理, 与本局名次无关;
+				# 首局没有上一局身份, 不生效(按本局名次正常结算)。
+				if (prev as Array).size() == 4:
+					var flipped := [0, 0, 0, 0]
+					for s2 in SEATS:
+						flipped[s2] = {0: 3, 3: 0, 1: 2, 2: 1}.get(int(prev[s2]), int(prev[s2]))
+					ids = flipped
 		for s in SEATS:
 			deltas[s] = ScoringGd.round_delta(int(ids[s])) * mult
 			st["scores"][s] = int(st["scores"][s]) + deltas[s]

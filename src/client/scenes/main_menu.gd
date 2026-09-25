@@ -670,7 +670,7 @@ func _show_signin(sign_btn: Button, prof_btn: Button = null) -> void:
 		var r: Dictionary = Wallet.claim_signin()
 		if r.is_empty():
 			return
-		Audio.play("win")
+		Audio.play("sign")
 		_refresh_balance()
 		sign_btn.visible = false
 		if prof_btn != null:

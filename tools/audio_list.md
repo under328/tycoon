@@ -1,43 +1,38 @@
-# 音频素材清单与替换指南
+# 音频素材清单(v3 — 音乐 3.0 / 音效 3.0)
 
-> 当前所有音频为**程序化合成占位**（`src/client/audio/synth.gd` 运行时生成）。
-> 正式 AI 生成素材到位后，按下表逐项替换，代码钩子不变。
+> BGM: `tools/pixart/gen_music.py`(音色引擎) + `tools/pixart/gen_songs.py`(谱面)
+> → `assets/music/*.ogg`(44.1k 立体声, 施罗德混响母带)。
+> SFX: `src/client/audio/synth.gd` 运行时程序化合成(`audio.gd _build_library`)。
+> 改曲后: `python tools/pixart/gen_music.py` 重生成 + 引擎 `--import` 重导入,
+> 再跑 `tools/bgm_render_check.gd` 体检。
 
-## BGM（OGG，循环，建议 90–104 BPM）
+## BGM(OGG 循环; 循环点 0.3s 淡出, 编曲上以属和弦悬回主和弦衔接)
 
-| 轨道 | 键名 | 挂载点 | 风格要求 |
-|---|---|---|---|
-| 大厅 | `lobby`（音乐 2.0） | 主菜单/大厅 | C 大调五声 112BPM：笛主旋律+拨弦琶音+律动低音(根音→五音)+反拍军鼓，明亮欢快与对局曲同语汇，无缝循环 |
-| 对局 | `table`（音乐 2.0） | 牌桌 `_ready` | A 羽调式 92BPM：古筝拨弦主奏+低音+太鼓弱拍，无缝循环 |
-| 革命变奏 | `table_rev`（音乐 2.0） | 革命期间自动切换/恢复 | A 小调 138BPM：太鼓强拍群+激进拨弦 riff+笛刺+钹 |
-| 终局结算 | `result`（音乐 2.0 凯旋短句） | game_end 演出 | 140BPM 上行号角+太鼓滚奏+钹 |
-
-替换方式：`src/autoload/audio.gd` 的 `_bgm_tracks` 处改为
-`load("res://assets/audio/bgm/<name>.ogg")`，导入设置开 loop。
-
-## SFX（WAV，16-bit，≤0.4s 为主）
-
-| 键名 | 触发点 | 内容 |
+| 轨道 | 风格 | 结构 |
 |---|---|---|
-| click | 所有按钮 | 短促嗒 |
-| deal | 发牌动画 | 纸牌滑动 |
-| play_card | 任何人出牌 | 拍牌声 |
-| pass | 玩家不要 | 低闷短音 |
-| clear | 清桌 | 下滑扫除 |
-| revolution | 革命触发 | 双音警报 |
-| exchange | 局间换牌展示 | 双音上行 |
-| win / lose | 终局演出 | 上行/下行 jingle |
-| pop | 表情 | 气泡弹出 |
-| tick | 倒计时最后 5s | 每秒滴答 |
-| turn | 轮到你（联机） | 轻铃 |
-| eight_cut | 8切清桌 | 高频下扫+爆点 |
-| fall | 一落千丈 | 下坠滑音 |
-| result | 终局结算演出 | 凯旋琶音短句 |
+| lobby 首页 73.8s | C 大调 104BPM 温暖邀约 | intro(垫弦+EP) → A 主旋律 → A' 琶音重奏 → B 扬起 → outro 属和弦回环 |
+| table 对局 64.0s | G 大调 120BPM 摇摆律动 | 鼓点 intro → A riff 钩子 → B 抒情 → A' riff+琶音对位 → 军鼓渐强桥 → 收束 |
+| table_rev 革命 51.2s | A 小调 150BPM 急进 | 八分低音 + 小调五声 riff + 铜管反拍刺击 ×3 段 + 紧张收束 |
+| rogue 肉鸽 60.0s | D 多利亚 96BPM 神秘推进 | 拨弦点描 + 手鼓 + 笛句 ×3 段递强 |
+| boss BOSS 48.6s | E 弗里几亚 158BPM 狂暴 | 双底鼓 + 力度刺击 + 高音嘶吼 riff ×3 段 |
+| fight 格斗 54.9s | A 小调 140BPM 热血摇滚 | 力度和弦 + 呼应短句 + 军鼓推进 ×3 段 |
 
-替换方式：`src/autoload/audio.gd` 的 `_build_library()` 中把
-`Synth.wav(...)` 换成 `load("res://assets/audio/sfx/<name>.wav")`，键名不变。
+## SFX 键名一览(`Audio.play(key)`)
 
-## 音量
+| 键名 | 触发点 |
+|---|---|
+| click / select | 按钮 / 点选手牌(更轻触感) |
+| deal / shuffle | 发牌 / 新一局洗牌 |
+| play_card / pass / clear | 出牌(四条自动换 bomb) / 不要 / 清桌 |
+| bomb | 四条(炸弹)落桌: 低频爆+碎裂 |
+| revolution / eight_cut / exchange / fall | 革命 / 8切 / 换牌 / 一落千丈 |
+| turn / tick | 轮到你 / 倒计时跳秒 |
+| win / lose / result | 终局胜/负/结算号角 |
+| coin / gem / sign / ach / buy | 任务奖励 / 钻石兑换 / 签到 / 成就解锁 / 商城购买 |
+| error | 非法操作(低哑短音) |
+| hit / crit / hurt / guard / dodge | 格斗: 命中/暴击/受击/格挡/闪避 |
+| skill / heal / ult / transform | 格斗: 施法/治疗/奥义/变身 |
+| ko / floor | 格斗: 回合终结(KO)/进入下一层 |
+| pop | 表情气泡等通用轻响 |
 
-- 总线：Master → BGM / SFX（`audio.gd._setup_buses`）。
-- 用户音量存 `user://settings.cfg`，主菜单"设置"面板调节。
+> 语音播报(出牌/战斗解说)走 `assets/voice/*.mp3`, 见 voice_manifest.py。

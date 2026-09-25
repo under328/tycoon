@@ -75,6 +75,7 @@ var avatar_me: Control
 var _last_hand: Array = []
 var _prev_revolution := false
 var _prev_phase := ""
+var _round_audio := -1        # 已播放洗牌音的局号(每局一次)
 var _last_round_ids: Array = []
 var _end_shown := false
 var _field_count := -1
@@ -1680,6 +1681,7 @@ func _set_emoji_tab(tab: String) -> void:
 
 
 func _flash_error(msg: String) -> void:
+	Audio.play("error")
 	error_label.text = _error_text(msg)
 	var tw := create_tween()
 	tw.tween_interval(2.0)
@@ -1994,6 +1996,11 @@ func _refresh_view(view: Dictionary) -> void:
 			"day": Time.get_date_string_from_system(),
 			"mode": "肉鸽" if rogue else "普通",
 		})
+	# 新一局发牌 → 洗牌音(每局一次; 免战之约跳过 exchange 直接 play)
+	if (phase == "exchange" or phase == "play") \
+			and int(view.get("round", 0)) != _round_audio:
+		_round_audio = int(view.get("round", 0))
+		_sfx("shuffle")
 	# 阶段切换: 交换过场 / 一落千丈(上局大富豪本轮垫底)
 	if phase != _prev_phase:
 		if phase == "exchange":
@@ -2227,7 +2234,7 @@ func _round_end_text(view: Dictionary) -> String:
 	if mod == "double_stakes":
 		parts.append("命运卡: 结算×2")
 	elif mod == "score_negate":
-		parts.append("命运卡: 身份互换")
+		parts.append("命运卡: 上局身份反转")
 	return "  ".join(parts)
 
 
@@ -2428,7 +2435,8 @@ func _refresh_field(view: Dictionary) -> void:
 		tw.tween_property(holder, "modulate:a", 1.0, 0.22)
 		tw.tween_property(holder, "scale", Vector2.ONE, 0.22)\
 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		_sfx("play_card")
+		# 四条(Combo.Type.QUAD=3)= 炸弹, 用重音效
+		_sfx("bomb" if int(entry["combo"]["type"]) == 3 else "play_card")
 	else:
 		# 手数变少(异常/回退): 全量重建兜底
 		for child in field_box.get_children():
@@ -2551,7 +2559,7 @@ func _on_hand_gui_input(event: InputEvent) -> void:
 			if not _drag_active and _drag_from >= 0:
 				var cv: Control = _hand_cards[_drag_from]
 				_set_card_selected(cv, not selected.has(cv.card))
-				_sfx("click")
+				_sfx("select")
 				_layout_hand()
 			_drag_from = -1
 			_drag_active = false

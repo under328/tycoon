@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""BGM 作曲器: 6 首风格化曲目 → assets/music/*.ogg (44.1k 立体声)。
+"""BGM 作曲器 v2: 6 首曲目 → assets/music/*.ogg (44.1k 立体声)。
 
-声部: 脉冲主旋律(颤音) + 三角波贝斯 + 十六分琶音 + 噪声鼓组 + 和声垫。
-风格: lobby(安宁五声) table(明亮大调) table_rev(小调急板) rogue(神秘多利亚)
-boss(狂暴弗里几亚) fight(格斗摇滚)。
+v2 全面升级(针对"听感差、没动力"的反馈):
+- 音色: FM 电钢(和弦)/失谐双锯主音(滤波+延迟颤音)/加压低音/垫弦/钟琴
+- 鼓组: 底鼓带瞬态击、军鼓含腔体、开闭踩镲力度分层, 每 4/8 小节过门
+- 空间: 施罗德混响(梳状+全通)黏合, 乐器声像展开, 软限幅母带
+- 结构: intro→A→B→A'→过门 分段编排, 段内乐器增减有起伏; 摇摆律动(对局曲)
+曲目: lobby(首页·温暖邀约) table(对局·轻快竞技) table_rev(革命·急进小调)
+rogue(肉鸽·神秘推进) boss(BOSS·狂暴) fight(格斗·热血摇滚)
 """
 import os
-import sys
 import math
 import numpy as np
 from scipy import signal as sg
@@ -15,427 +18,335 @@ import soundfile as sf
 SR = 44100
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    '..', '..', 'assets', 'music')
+RNG = np.random.default_rng(20260925)
 
 
-# ---------------------------------------------------------------- 合成器
+# ---------------------------------------------------------------- 音色引擎
 
-def env_ad(n, a, d, curve=2.0):
-    """AD 包络(归一)"""
-    t = np.linspace(0, 1, n, endpoint=False)
-    na = max(int(a * n), 1)
-    nd = n - na
-    e = np.empty(n)
-    e[:na] = np.linspace(0, 1, na, endpoint=False)
-    if nd > 0:
-        e[na:] = np.exp(-curve * np.linspace(0, 1, nd))
+def midi_hz(semi):
+    return 440.0 * 2 ** ((semi - 69) / 12.0)
+
+
+def lowpass(x, fc):
+    fc = min(fc, SR * 0.45)
+    b, a = sg.butter(2, fc / (SR / 2), 'low')
+    return sg.lfilter(b, a, x)
+
+
+def highpass(x, fc):
+    b, a = sg.butter(2, fc / (SR / 2), 'high')
+    return sg.lfilter(b, a, x)
+
+
+def bandpass(x, lo, hi):
+    b, a = sg.butter(2, [lo / (SR / 2), min(hi, SR * 0.45) / (SR / 2)], 'band')
+    return sg.lfilter(b, a, x)
+
+
+def _adsr(n, a_s, d_s, sustain, rel_s):
+    e = np.full(n, sustain)
+    na, nd, nr = int(a_s * SR), int(d_s * SR), int(rel_s * SR)
+    na, nd, nr = min(na, n), min(nd, max(n - na, 0)), min(nr, n)
+    if na:
+        e[:na] = np.linspace(0, 1, na)
+    if nd:
+        e[na:na + nd] = np.linspace(1, sustain, nd)
+    if nr:
+        e[n - nr:] *= np.linspace(1, 0, nr)
     return e
 
 
-def pulse(freq, dur, duty=0.5, vol=0.5, vib=0.0, vib_hz=5.5, detune=0.0):
-    """脉冲波(占空比可变) + 颤音"""
+def saw_ph(f_v, n, detune_cents=0.0):
+    """频率可随时间变的锯齿(相位累积)"""
+    ph = np.cumsum(f_v * 2 ** (detune_cents / 1200.0)) / SR
+    return 2 * (ph % 1.0) - 1
+
+
+def tri(f, n):
+    t = np.arange(n) / SR
+    ph = (f * t) % 1.0
+    return 4 * np.abs(ph - 0.5) - 1
+
+
+def inst_lead(f, dur, vel=1.0):
+    """主音: 双失谐锯 + 三角, 低通 2.4k, 0.18s 后起颤音"""
     n = int(dur * SR)
     t = np.arange(n) / SR
-    f = freq * (2 ** (detune / 1200.0))
-    if vib:
-        f = f * (1 + vib * np.sin(2 * np.pi * vib_hz * t) * np.minimum(t * 3, 1))
+    f_v = np.full(n, f) * (1 + 0.0035 * np.sin(2 * np.pi * 5.3 * t)
+                           * np.clip((t - 0.18) * 4, 0, 1))
+    x = (saw_ph(f_v, n, 7) + saw_ph(f_v, n, -7)) * 0.36 + tri(f, n) * 0.28
+    x = lowpass(x, 2400)
+    e = _adsr(n, 0.012, 0.25, 0.78, min(0.09, dur * 0.3))
+    return np.tanh(x * 1.2) * e * vel * 0.30
+
+
+def inst_ep(f, dur, vel=1.0):
+    """FM 电钢: 载波正弦 + 2 倍频调制(快衰减) — 温暖有击键感"""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    idx = 2.2 * np.exp(-t * 9.0)
+    x = np.sin(2 * np.pi * f * t + idx * np.sin(2 * np.pi * f * 2.0 * t))
+    click = RNG.uniform(-1, 1, n) * np.exp(-t * 900) * 0.22
+    e = _adsr(n, 0.004, 0.4, 0.42, min(0.12, dur * 0.3))
+    return (x + click) * e * vel * 0.26
+
+
+def inst_pluck(f, dur, vel=1.0):
+    """拨弦: FM 3 倍频, 亮而短"""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    idx = 1.6 * np.exp(-t * 14.0)
+    x = np.sin(2 * np.pi * f * t + idx * np.sin(2 * np.pi * f * 3.0 * t))
+    e = _adsr(n, 0.003, 0.22, 0.2, min(0.08, dur * 0.3))
+    return x * e * vel * 0.20
+
+
+def inst_glock(f, dur, vel=1.0):
+    """钟琴: 非整数倍频 FM 泛音, 清脆点缀"""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    idx = 1.2 * np.exp(-t * 6.0)
+    x = np.sin(2 * np.pi * f * t + idx * np.sin(2 * np.pi * f * 3.53 * t))
+    e = _adsr(n, 0.002, 0.5, 0.25, 0.1)
+    return x * e * vel * 0.12
+
+
+def inst_bass(f, dur, vel=1.0):
+    """低音: 正弦下限 + 锯齿层低通 520, 轻饱和"""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.sin(2 * np.pi * f * t) * 0.62 + saw_ph(np.full(n, f), n) * 0.38
+    x = lowpass(x, 520)
+    e = _adsr(n, 0.006, 0.18, 0.66, min(0.05, dur * 0.25))
+    return np.tanh(x * 1.6) * e * vel * 0.34
+
+
+def inst_pad(freqs, dur, vel=1.0):
+    """垫弦: 每音双失谐锯, 慢起音"""
+    n = int(dur * SR)
+    x = np.zeros(n)
+    for f in freqs:
+        x += saw_ph(np.full(n, f), n, 9) + saw_ph(np.full(n, f), n, -11)
+    x = lowpass(x / (len(freqs) * 2), 950)
+    e = _adsr(n, 0.38, 0.5, 0.8, min(0.5, dur * 0.35))
+    return x * e * vel * 0.11
+
+
+def inst_stab(freqs, dur, vel=1.0):
+    """铜管式刺击: 双失谐锯, 快起快收(单频自动包列表)"""
+    if isinstance(freqs, (int, float)):
+        freqs = [freqs]
+    n = int(dur * SR)
+    x = np.zeros(n)
+    for f in freqs:
+        x += saw_ph(np.full(n, f), n, 6) + saw_ph(np.full(n, f), n, -6)
+    x = lowpass(x / (len(freqs) * 2), 1900)
+    e = _adsr(n, 0.008, 0.14, 0.5, min(0.06, dur * 0.4))
+    return np.tanh(x * 1.3) * e * vel * 0.22
+
+
+# ---------------------------------------------------------------- 鼓组
+
+def kick(vel=1.0):
+    n = int(0.30 * SR)
+    t = np.arange(n) / SR
+    f = 150 * np.exp(-t * 30) + 44
     ph = np.cumsum(f) / SR
-    saw = 2 * (ph % 1.0) - 1
-    off = ph + duty
-    saw2 = 2 * (off % 1.0) - 1
-    wav = np.sign(saw - saw2)  # 双锯齿差分=脉冲
-    return wav * vol * env_ad(n, 0.02, 0.98)
+    x = np.sin(2 * np.pi * ph) * np.exp(-t * 9.5)
+    click = highpass(RNG.uniform(-1, 1, n), 3000) * np.exp(-t * 700) * 0.5
+    return np.tanh((x + click) * 1.4) * vel * 0.88
 
 
-def tri(freq, dur, vol=0.5):
+def snare(vel=1.0):
+    n = int(0.20 * SR)
+    t = np.arange(n) / SR
+    body = np.sin(2 * np.pi * 192 * t) * np.exp(-t * 26) * 0.5
+    noise = bandpass(RNG.uniform(-1, 1, n), 900, 7000) * np.exp(-t * 21)
+    return (body + noise) * vel * 0.52
+
+
+def hat(open_=False, vel=1.0):
+    dur = 0.24 if open_ else 0.05
     n = int(dur * SR)
     t = np.arange(n) / SR
-    ph = (freq * t) % 1.0
-    wav = 4 * np.abs(ph - 0.5) - 1  # 三角
-    return wav * vol * env_ad(n, 0.005, 0.995, curve=1.2)
+    x = highpass(RNG.uniform(-1, 1, n), 7800 + vel * 2200)
+    return x * np.exp(-t * (7 if open_ else 90)) * vel * 0.20
 
 
-def noise(dur, vol=0.4, lp=8000, hp=200):
-    n = int(dur * SR)
-    x = np.random.default_rng(7).uniform(-1, 1, n)
-    b, a = sg.butter(2, lp / (SR / 2), 'low')
-    x = sg.lfilter(b, a, x)
-    b, a = sg.butter(2, hp / (SR / 2), 'high')
-    x = sg.lfilter(b, a, x)
-    return x * vol * env_ad(n, 0.001, 0.999, curve=3.5)
-
-
-def kick(dur=0.16, vol=0.9):
-    n = int(dur * SR)
+def shaker(vel=1.0):
+    n = int(0.07 * SR)
     t = np.arange(n) / SR
-    f = 110 * np.exp(-t * 26) + 42
+    x = bandpass(RNG.uniform(-1, 1, n), 4500, 9500)
+    return x * np.exp(-t * 46) * vel * 0.13
+
+
+def tom(freq=110.0, vel=1.0):
+    n = int(0.22 * SR)
+    t = np.arange(n) / SR
+    f = freq * np.exp(-t * 9) + freq * 0.62
     ph = np.cumsum(f) / SR
-    wav = np.sin(2 * np.pi * ph)
-    wav *= np.exp(-t * 15)
-    return wav * vol
+    return np.sin(2 * np.pi * ph) * np.exp(-t * 15) * vel * 0.5
 
 
-def snare(dur=0.14, vol=0.55):
-    body = noise(dur, vol, lp=9000, hp=900)
-    tail = kick(0.06, 0.3)
-    out = np.zeros(max(len(body), len(tail)))
-    out[:len(body)] += body
-    out[:len(tail)] += tail
-    return out
+# ---------------------------------------------------------------- 混响/母带
+
+def reverb_send(x):
+    """施罗德混响(只输出湿声): 4 并联梳状 + 级联全通"""
+    y = np.zeros_like(x)
+    for d in (1116, 1188, 1277, 1356):
+        a = np.zeros(d + 1)
+        a[0], a[-1] = 1.0, -0.772
+        y += sg.lfilter([1.0], a, x)
+    y *= 0.25
+    for d, g in ((225, 0.7), (556, 0.7), (441, 0.7), (341, 0.7)):
+        a = np.zeros(d + 1)
+        a[0], a[-1] = 1.0, -g
+        b = np.zeros(d + 1)
+        b[0], b[-1] = -g, 1.0
+        y = sg.lfilter(b, a, y)
+    return y
 
 
-def hat(dur=0.05, vol=0.22):
-    return noise(dur, vol, lp=12000, hp=7000)
+# ---------------------------------------------------------------- 音序器
 
+INSTR = {'lead': inst_lead, 'ep': inst_ep, 'pluck': inst_pluck,
+         'glock': inst_glock, 'bass': inst_bass, 'stab': inst_stab}
+PAN = {'lead': 0.0, 'ep': -0.25, 'pluck': 0.3, 'glock': 0.45,
+       'bass': 0.0, 'stab': -0.1}
+WET = {'lead': 0.30, 'ep': 0.34, 'pluck': 0.30, 'glock': 0.45,
+       'bass': 0.05, 'stab': 0.22}
 
-def place(buf, snd, at):
-    i0 = int(at * SR)
-    i1 = min(i0 + len(snd), len(buf))
-    if i1 > i0:
-        buf[i0:i1] += snd[:i1 - i0]
-
-
-def midi(deg, octave=0):
-    """音级(0=C)→频率"""
-    return 440.0 * 2 ** ((deg - 9) / 12.0 + octave)
-
-
-# ---------------------------------------------------------------- 曲目结构
 
 class Song:
-    def __init__(self, bpm, bars, beats=4):
+    def __init__(self, bpm, bars, swing=0.0):
         self.bpm = bpm
         self.spb = 60.0 / bpm
         self.bars = bars
-        self.beats = beats
-        n = int(bars * beats * self.spb * SR) + SR * 2
-        self.buf = np.zeros(n)
+        self.swing = swing
+        n = int(bars * 4 * self.spb * SR) + SR
+        self.dryL = np.zeros(n)
+        self.dryR = np.zeros(n)
+        self.send = np.zeros(n)
 
-    def t(self, bar, beat=0.0):
-        return (bar * self.beats + beat) * self.spb
+    def _t(self, beat):
+        b = beat
+        if self.swing > 0:
+            frac = (b * 4) % 4
+            if abs(frac - 1.0) < 0.01:   # 16 分反拍(第 2/4 个十六分)
+                b += self.swing / 12.0
+        return b * self.spb
 
+    def _mix(self, beat, snd, pan, wet):
+        i0 = int(self._t(beat) * SR)
+        i1 = min(i0 + len(snd), len(self.dryL))
+        if i1 <= i0:
+            return
+        seg = snd[:i1 - i0]
+        l = math.cos((pan + 1) * math.pi / 4)
+        r = math.sin((pan + 1) * math.pi / 4)
+        self.dryL[i0:i1] += seg * l
+        self.dryR[i0:i1] += seg * r
+        self.send[i0:i1] += seg * wet
 
-def compose(name):
-    """按名称作曲"""
-    if name == 'lobby':
-        return _lobby()
-    if name == 'table':
-        return _table()
-    if name == 'table_rev':
-        return _table_rev()
-    if name == 'rogue':
-        return _rogue()
-    if name == 'boss':
-        return _boss()
-    if name == 'fight':
-        return _fight()
-    raise KeyError(name)
+    def note(self, beat, kind, f, dur=1.0, vel=1.0):
+        self._mix(beat, INSTR[kind](f, dur * self.spb * 1.02, vel),
+                  PAN[kind], WET[kind])
 
+    def chord(self, beat, kind, freqs, dur=1.0, vel=1.0):
+        for f in freqs:
+            self.note(beat, kind, f, dur, vel)
 
-def _render(song, chords, bass_pat, lead_pat, arp_on=True, drum_style='soft',
-            pad_on=True, lead_vol=0.30, arp_vol=0.13, bass_vol=0.34):
-    """通用渲染: chords=[(bar, [degrees...])] 贝斯/主旋律按事件列表"""
-    buf = song.buf
-    spb = song.spb
-    scale_chords = {bar: ch for bar, ch in chords}
-    # 琶音(16 分)
-    if arp_on:
-        for bar, ch in chords:
-            for i in range(16):
-                deg = ch[i % len(ch)] + (12 if i % 8 >= 4 else 0)
-                snd = pulse(midi(deg, 0), spb / 4 * 0.92, duty=0.25,
-                            vol=arp_vol)
-                place(buf, snd, song.t(bar, i / 4.0))
-    # 垫(和弦长音)
-    if pad_on:
-        for bar, ch in chords:
-            for deg in ch:
-                snd = pulse(midi(deg, -1), spb * 4 * 0.98, duty=0.5,
-                            vol=0.05, detune=8)
-                place(buf, snd, song.t(bar))
-                snd2 = pulse(midi(deg, -1), spb * 4 * 0.98, duty=0.5,
-                             vol=0.045, detune=-9)
-                place(buf, snd2, song.t(bar))
-    # 贝斯
-    for bar, beat, deg, octv, dur in bass_pat:
-        snd = tri(midi(deg, octv), dur * 0.95, vol=bass_vol)
-        place(buf, snd, song.t(bar, beat))
-    # 主旋律
-    for bar, beat, deg, octv, dur in lead_pat:
-        if deg is None:
-            continue
-        snd = pulse(midi(deg, octv), dur * 0.94, duty=0.5, vol=lead_vol,
-                    vib=0.006)
-        place(buf, snd, song.t(bar, beat))
-    # 鼓
-    for bar in range(song.bars):
-        if drum_style == 'none':
-            break
-        t0 = song.t(bar)
-        if drum_style == 'soft':
-            place(buf, kick(), t0)
-            place(buf, kick(0.12, 0.5), t0 + spb * 2.5)
-            place(buf, snare(), t0 + spb * 2)
-            for i in range(8):
-                place(buf, hat(), t0 + i * spb / 2)
-        elif drum_style == 'drive':
-            for i in range(4):
-                place(buf, kick(), t0 + i * spb)
-                place(buf, snare(), t0 + i * spb + spb / 2)
-            for i in range(16):
-                place(buf, hat(0.04, 0.16), t0 + i * spb / 4)
-        elif drum_style == 'combat':
-            place(buf, kick(), t0)
-            place(buf, kick(), t0 + spb * 0.75)
-            place(buf, snare(), t0 + spb * 0.5)
-            place(buf, kick(0.13, 0.7), t0 + spb * 1.5)
-            place(buf, snare(), t0 + spb * 2)
-            place(buf, kick(), t0 + spb * 2.5)
-            place(buf, snare(0.12, 0.5), t0 + spb * 3)
-            place(buf, kick(), t0 + spb * 3.25)
-            for i in range(8):
-                place(buf, hat(0.04, 0.2), t0 + i * spb / 2 + spb / 4)
-    return buf
+    def pad(self, beat, freqs, dur=4.0, vel=1.0):
+        self._mix(beat, inst_pad(freqs, dur * self.spb, vel), -0.05, 0.4)
 
+    def drum_pat(self, start_bar, pattern, bars=None, vel=1.0):
+        """16 步鼓 pattern(字符串列表, 每小节 16 字符)。
+        K=底鼓 S=军鼓 h=闭镲 H=开镲 b=沙锤 T=桶鼓 .=休止"""
+        bars = bars if bars is not None else len(pattern)
+        for bi in range(bars):
+            row = pattern[bi % len(pattern)]
+            for si in range(16):
+                ch = row[si % len(row)]
+                beat = (start_bar + bi) * 4 + si / 4.0
+                v = vel * (0.82 if si % 2 else 1.0)
+                if ch == 'K':
+                    self._mix(beat, kick(v), 0.0, 0.02)
+                elif ch == 'S':
+                    self._mix(beat, snare(v), 0.08, 0.16)
+                elif ch == 'h':
+                    self._mix(beat, hat(False, v), 0.3, 0.10)
+                elif ch == 'H':
+                    self._mix(beat, hat(True, v), 0.3, 0.12)
+                elif ch == 'b':
+                    self._mix(beat, shaker(v), -0.3, 0.12)
+                elif ch == 'T':
+                    self._mix(beat, tom(120 - (si % 4) * 14, v), 0.0, 0.2)
 
-def _finish(buf, name, fade_out=2.0):
-    """立体声化(轻延迟) + 软限幅 + 收尾淡出"""
-    d = int(0.16 * SR)
-    delay = np.zeros(len(buf))
-    delay[d:] = buf[:-d] * 0.22
-    left = buf + delay
-    right = buf * 0.92 + np.roll(buf, d // 2) * 0.18
-    stereo = np.stack([left, right], axis=1)
-    stereo = np.tanh(stereo * 1.25) * 0.82  # 软限幅
-    n = len(stereo)
-    fo = int(fade_out * SR)
-    stereo[n - fo:] *= np.linspace(1, 0, fo)[:, None]
-    fi = int(0.05 * SR)
-    stereo[:fi] *= np.linspace(0, 1, fi)[:, None]
-    path = os.path.join(OUT, name + '.ogg')
-    # 分块写(本机 libsndfile 大缓冲一次性写 OGG 会原生崩溃)
-    with sf.SoundFile(path, 'w', samplerate=SR, channels=2, format='OGG',
-                      subtype='VORBIS') as f:
-        step = SR * 5
-        for i in range(0, len(stereo), step):
-            f.write(stereo[i:i + step])
-    dur = n / SR
-    print('%-10s %5.1fs %6.1fKB' % (name, dur, os.path.getsize(path) / 1024))
-    return path
-
-
-# ---------------------------------------------------------------- 六首曲子
-# C=0 大调音级; 负数=低八度。和弦用音级列表。
-
-
-
-def _double(prog, bass, lead):
-    """八度内重复一遍(第二遍移高八度琶音/主旋律不变) — 曲目长度翻倍"""
-    p2 = [(b + 16, c) for b, c in prog]
-    b2 = [(b + 16, bt, d, o, du) for b, bt, d, o, du in bass]
-    l2 = [(b + 16, bt, d, o, du) for b, bt, d, o, du in lead]
-    return prog + p2, bass + b2, lead + l2
-
-
-def _lobby():
-    # D 宫五声(安宁): D E F#A B → 音级 2 4 6 9 11
-    s = Song(bpm=76, bars=32)
-    ch = [2, 6, 9]        # D F# A
-    am = [9, 12 + 4 - 12, 4]  # A C# E → 简化 [9,1,4]
-    prog = [(0, [2, 6, 9]), (2, [7, 11, 14]), (4, [9, 13, 16]),
-            (6, [4, 7, 11]), (8, [2, 6, 9]), (10, [7, 11, 14]),
-            (12, [9, 13, 16]), (14, [6, 9, 14])]
-    bass = []
-    for bar, c in prog:
-        bass.append((bar, 0.0, c[0] - 12, -1, s.spb * 3.6))
-        bass.append((bar, 3.0, c[0] - 12, -1, s.spb * 0.9))
-    lead = [
-        (0, 0.0, 14, 0, 1.0), (0, 1.5, 13, 0, 0.5), (0, 2.0, 11, 0, 2.0),
-        (2, 0.0, 9, 0, 1.5), (2, 2.0, 11, 0, 0.75), (2, 2.75, 9, 0, 1.25),
-        (4, 0.0, 13, 0, 1.0), (4, 1.5, 16, 0, 0.5), (4, 2.0, 14, 0, 2.0),
-        (6, 0.0, 11, 0, 1.0), (6, 1.0, 9, 0, 1.0), (6, 2.0, 7, 0, 2.0),
-        (8, 0.0, 14, 0, 1.0), (8, 1.5, 16, 0, 0.5), (8, 2.0, 18, 0, 2.0),
-        (10, 0.0, 16, 0, 1.5), (10, 2.0, 14, 0, 2.0),
-        (12, 0.0, 13, 0, 1.0), (12, 1.0, 11, 0, 1.0), (12, 2.0, 13, 0, 2.0),
-        (14, 0.0, 9, 0, 4.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='soft')
-    return _finish(buf, 'lobby')
-
-
-def _table():
-    # C 大调明亮(欢快牌局)
-    s = Song(bpm=126, bars=32)
-    prog = [(0, [0, 4, 7]), (2, [9, 12, 16]), (4, [5, 9, 12]), (6, [7, 11, 14]),
-            (8, [0, 4, 7]), (10, [2, 5, 9]), (12, [7, 11, 14]), (14, [0, 4, 7])]
-    prog = prog + [(b + 8, c) for b, c in prog[:4]]  # 补到16小节变化
-    bass = []
-    for bar, c in prog:
+    def fill(self, bar):
         for i in range(4):
-            bass.append((bar, i + (0.5 if i % 2 else 0), c[0] - 12, -1,
-                         s.spb * 0.42))
-    lead = [
-        (0, 0.0, 16, 0, 0.5), (0, 0.5, 14, 0, 0.5), (0, 1.0, 12, 0, 1.0),
-        (0, 2.0, 16, 0, 1.0), (0, 3.0, 19, 0, 1.0),
-        (2, 0.0, 21, 0, 0.75), (2, 0.75, 19, 0, 0.75), (2, 1.5, 16, 0, 1.5),
-        (2, 3.0, 14, 0, 1.0),
-        (4, 0.0, 17, 0, 0.5), (4, 0.5, 16, 0, 0.5), (4, 1.0, 12, 0, 1.0),
-        (4, 2.0, 17, 0, 2.0),
-        (6, 0.0, 19, 0, 1.0), (6, 1.5, 18, 0, 0.5), (6, 2.0, 14, 0, 2.0),
-        (8, 0.0, 16, 0, 0.5), (8, 0.5, 19, 0, 0.5), (8, 1.0, 24, 0, 2.0),
-        (10, 0.0, 21, 0, 1.0), (10, 1.0, 19, 0, 1.0), (10, 2.0, 16, 0, 2.0),
-        (12, 0.0, 14, 0, 0.75), (12, 0.75, 16, 0, 0.75), (12, 1.5, 19, 0, 1.5),
-        (12, 3.0, 23, 0, 1.0),
-        (14, 0.0, 24, 0, 2.0), (14, 2.0, 19, 0, 1.0), (14, 3.0, 16, 0, 1.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='drive',
-                  lead_vol=0.26)
-    return _finish(buf, 'table')
+            self._mix(bar * 4 + 3 + i / 4.0,
+                      tom(150 - i * 22, 0.9 - i * 0.12), 0.0, 0.2)
+
+    def render(self, name):
+        wet = reverb_send(self.send)
+        left = self.dryL + wet
+        right = self.dryR + wet
+        stereo = np.stack([left, right], axis=1)
+        stereo = np.tanh(stereo * 1.15) * 0.85
+        peak = np.abs(stereo).max()
+        if peak > 0:
+            stereo *= 0.90 / peak
+        n = len(stereo)
+        fo = int(0.30 * SR)
+        stereo[n - fo:] *= np.linspace(1, 0, fo)[:, None]
+        fi = int(0.02 * SR)
+        stereo[:fi] *= np.linspace(0, 1, fi)[:, None]
+        stereo = stereo[:n - SR]   # 去掉尾音余量, 循环点干净
+        path = os.path.join(OUT, name + '.ogg')
+        with sf.SoundFile(path, 'w', samplerate=SR, channels=2,
+                          format='OGG', subtype='VORBIS') as f:
+            step = SR * 5
+            for i in range(0, len(stereo), step):
+                f.write(stereo[i:i + step])
+        print('%-10s %5.1fs %6.1fKB' %
+              (name, len(stereo) / SR, os.path.getsize(path) / 1024))
+        return path
 
 
-def _table_rev():
-    # A 小调急板(革命/逆风局)
-    s = Song(bpm=140, bars=32)
-    prog = [(0, [9, 12, 16]), (2, [4, 7, 12]), (4, [0, 4, 7]), (6, [7, 11, 14]),
-            (8, [9, 12, 16]), (10, [5, 8, 12]), (12, [7, 11, 14]), (14, [11, 14, 19])]
-    prog = prog + [(b + 8, c) for b, c in prog[:4]]
-    bass = []
-    for bar, c in prog:
-        for i in range(8):
-            bass.append((bar, i * 0.5, c[0] - 24, 0, s.spb * 0.4))
-    lead = [
-        (0, 0.0, 21, 0, 0.5), (0, 0.5, 20, 0, 0.5), (0, 1.0, 16, 0, 0.5),
-        (0, 1.5, 21, 0, 0.5), (0, 2.0, 23, 0, 1.0), (0, 3.0, 21, 0, 1.0),
-        (2, 0.0, 19, 0, 0.75), (2, 0.75, 16, 0, 0.75), (2, 1.5, 12, 0, 1.5),
-        (2, 3.0, 19, 0, 1.0),
-        (4, 0.0, 24, 0, 0.5), (4, 0.5, 23, 0, 0.5), (4, 1.0, 21, 0, 0.5),
-        (4, 1.5, 19, 0, 0.5), (4, 2.0, 21, 0, 2.0),
-        (6, 0.0, 23, 0, 1.0), (6, 1.0, 26, 0, 1.0), (6, 2.0, 23, 0, 2.0),
-        (8, 0.0, 21, 0, 0.5), (8, 0.5, 24, 0, 0.5), (8, 1.0, 28, 0, 1.5),
-        (8, 2.5, 26, 0, 0.5), (8, 3.0, 24, 0, 1.0),
-        (10, 0.0, 25, 0, 1.0), (10, 1.0, 24, 0, 0.5), (10, 1.5, 21, 0, 1.5),
-        (10, 3.0, 20, 0, 1.0),
-        (12, 0.0, 19, 0, 0.5), (12, 0.5, 23, 0, 0.5), (12, 1.0, 26, 0, 1.0),
-        (12, 2.0, 23, 0, 2.0),
-        (14, 0.0, 28, 0, 2.0), (14, 2.0, 27, 0, 1.0), (14, 3.0, 23, 0, 1.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='combat',
-                  lead_vol=0.24, arp_vol=0.10)
-    return _finish(buf, 'table_rev')
+
+def new_song(bpm, bars, swing=0.0):
+    return Song(bpm, bars, swing)
 
 
-def _rogue():
-    # E 多利亚神秘(命运/肉鸽)
-    s = Song(bpm=92, bars=32)
-    prog = [(0, [4, 7, 11]), (2, [11, 14, 18]), (4, [2, 5, 9]), (6, [9, 12, 16]),
-            (8, [4, 7, 11]), (10, [6, 9, 13]), (12, [2, 5, 9]), (14, [7, 11, 14])]
-    prog = prog + [(b + 8, c) for b, c in prog[:4]]
-    bass = []
-    for bar, c in prog:
-        bass.append((bar, 0.0, c[0] - 12, -1, s.spb * 1.9))
-        bass.append((bar, 2.0, c[0] - 12, -1, s.spb * 1.9))
-    lead = [
-        (0, 0.0, 16, 0, 1.5), (0, 1.5, 14, 0, 0.5), (0, 2.0, 11, 0, 2.0),
-        (2, 0.0, 18, 0, 1.0), (2, 1.0, 16, 0, 1.0), (2, 2.0, 14, 0, 2.0),
-        (4, 0.0, 13, 0, 1.5), (4, 1.5, 12, 0, 0.5), (4, 2.0, 9, 0, 2.0),
-        (6, 0.0, 16, 0, 2.0), (6, 2.0, 12, 0, 2.0),
-        (8, 0.0, 16, 0, 1.5), (8, 1.5, 18, 0, 0.5), (8, 2.0, 19, 0, 2.0),
-        (10, 0.0, 18, 0, 1.0), (10, 1.0, 16, 0, 1.0), (10, 2.0, 13, 0, 2.0),
-        (12, 0.0, 14, 0, 1.0), (12, 1.0, 13, 0, 1.0), (12, 2.0, 11, 0, 2.0),
-        (14, 0.0, 14, 0, 4.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='soft',
-                  lead_vol=0.27, arp_vol=0.09)
-    return _finish(buf, 'rogue')
+# ---------------------------------------------------------------- 乐理工具
+
+MAJ = [0, 2, 4, 5, 7, 9, 11]
+MIN = [0, 2, 3, 5, 7, 8, 10]
+DOR = [0, 2, 3, 5, 7, 9, 10]
+PHR = [0, 1, 3, 5, 7, 8, 10]
 
 
-def _boss():
-    # 弗里几亚狂暴(BOSS)
-    s = Song(bpm=168, bars=32)
-    prog = [(0, [4, 7, 12]), (1, [4, 7, 12]), (2, [5, 8, 12]), (3, [5, 8, 12]),
-            (4, [0, 4, 7]), (5, [0, 4, 7]), (6, [2, 5, 9]), (7, [2, 5, 9]),
-            (8, [4, 7, 12]), (9, [4, 7, 12]), (10, [10, 13, 17]),
-            (11, [10, 13, 17]), (12, [5, 8, 12]), (13, [7, 11, 14]),
-            (14, [4, 7, 12]), (15, [4, 7, 12])]
-    bass = []
-    for bar, c in prog:
-        for i in range(8):
-            bass.append((bar, i * 0.5, c[0] - 24 + (12 if i in (3, 6) else 0),
-                         0, s.spb * 0.45))
-    lead = [
-        (0, 0.0, 16, 0, 0.25), (0, 0.25, 17, 0, 0.25), (0, 0.5, 16, 0, 0.5),
-        (0, 1.0, 12, 0, 0.5), (0, 1.5, 16, 0, 0.5),
-        (0, 2.0, 19, 0, 0.5), (0, 2.5, 17, 0, 0.5), (0, 3.0, 16, 0, 1.0),
-        (2, 0.0, 17, 0, 0.25), (2, 0.25, 18, 0, 0.25), (2, 0.5, 17, 0, 0.5),
-        (2, 1.0, 12, 0, 0.5), (2, 1.5, 17, 0, 0.5),
-        (2, 2.0, 20, 0, 0.75), (2, 2.75, 19, 0, 0.25), (2, 3.0, 17, 0, 1.0),
-        (4, 0.0, 12, 0, 0.5), (4, 0.5, 16, 0, 0.5), (4, 1.0, 19, 0, 0.5),
-        (4, 1.5, 24, 0, 0.5), (4, 2.0, 23, 0, 1.0), (4, 3.0, 19, 0, 1.0),
-        (6, 0.0, 21, 0, 0.5), (6, 0.5, 19, 0, 0.5), (6, 1.0, 16, 0, 1.0),
-        (6, 2.0, 14, 0, 2.0),
-        (8, 0.0, 16, 0, 0.25), (8, 0.25, 17, 0, 0.25), (8, 0.5, 16, 0, 0.5),
-        (8, 1.0, 19, 0, 0.5), (8, 1.5, 16, 0, 0.5),
-        (8, 2.0, 22, 0, 0.5), (8, 2.5, 24, 0, 0.5), (8, 3.0, 22, 0, 1.0),
-        (10, 0.0, 20, 0, 0.5), (10, 0.5, 19, 0, 0.5), (10, 1.0, 17, 0, 1.0),
-        (10, 2.0, 20, 0, 2.0),
-        (12, 0.0, 19, 0, 0.75), (12, 0.75, 20, 0, 0.75), (12, 1.5, 19, 0, 0.5),
-        (12, 2.0, 16, 0, 2.0),
-        (14, 0.0, 28, 0, 1.0), (14, 1.0, 27, 0, 1.0), (14, 2.0, 24, 0, 1.0),
-        (14, 3.0, 19, 0, 1.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='combat',
-                  lead_vol=0.24, arp_vol=0.11, bass_vol=0.4)
-    return _finish(buf, 'boss')
+def deg(scale, root, d, octv=0):
+    while d >= len(scale):
+        d -= len(scale)
+        octv += 1
+    while d < 0:
+        d += len(scale)
+        octv -= 1
+    return midi_hz(root + scale[d] + 12 * octv)
 
 
-def _fight():
-    # 格斗摇滚(战斗登场)
-    s = Song(bpm=152, bars=32)
-    prog = [(0, [7, 11, 14]), (2, [5, 9, 12]), (4, [7, 11, 14]), (6, [9, 12, 16]),
-            (8, [2, 5, 9]), (10, [4, 7, 12]), (12, [5, 9, 12]), (14, [7, 11, 14])]
-    prog = prog + [(b + 8, c) for b, c in prog[:4]]
-    bass = []
-    for bar, c in prog:
-        for i in range(8):
-            if i in (0, 3, 6):
-                bass.append((bar, i * 0.5, c[0] - 24, 0, s.spb * 0.45))
-            else:
-                bass.append((bar, i * 0.5, c[0] - 24, 0, s.spb * 0.22))
-    lead = [
-        (0, 0.0, 14, 0, 0.5), (0, 0.5, 11, 0, 0.25), (0, 0.75, 14, 0, 0.25),
-        (0, 1.0, 16, 0, 0.5), (0, 1.5, 18, 0, 0.5), (0, 2.0, 21, 0, 1.0),
-        (0, 3.0, 18, 0, 1.0),
-        (2, 0.0, 17, 0, 0.5), (2, 0.5, 12, 0, 0.5), (2, 1.0, 17, 0, 0.5),
-        (2, 1.5, 21, 0, 0.5), (2, 2.0, 19, 0, 2.0),
-        (4, 0.0, 14, 0, 0.5), (4, 0.5, 11, 0, 0.25), (4, 0.75, 14, 0, 0.25),
-        (4, 1.0, 16, 0, 0.5), (4, 1.5, 19, 0, 0.5), (4, 2.0, 23, 0, 1.0),
-        (4, 3.0, 21, 0, 1.0),
-        (6, 0.0, 21, 0, 0.75), (6, 0.75, 19, 0, 0.25), (6, 1.0, 16, 0, 1.0),
-        (6, 2.0, 21, 0, 2.0),
-        (8, 0.0, 13, 0, 0.5), (8, 0.5, 12, 0, 0.5), (8, 1.0, 9, 0, 1.0),
-        (8, 2.0, 13, 0, 2.0),
-        (10, 0.0, 12, 0, 0.75), (10, 0.75, 11, 0, 0.25), (10, 1.0, 12, 0, 1.0),
-        (10, 2.0, 16, 0, 2.0),
-        (12, 0.0, 17, 0, 0.5), (12, 0.5, 19, 0, 0.5), (12, 1.0, 21, 0, 1.0),
-        (12, 2.0, 24, 0, 2.0),
-        (14, 0.0, 23, 0, 0.5), (14, 0.5, 21, 0, 0.5), (14, 1.0, 19, 0, 0.5),
-        (14, 1.5, 18, 0, 0.5), (14, 2.0, 14, 0, 2.0),
-    ]
-    prog, bass, lead = _double(prog, bass, lead)
-    buf = _render(s, prog, bass, lead, arp_on=True, drum_style='combat',
-                  lead_vol=0.25, bass_vol=0.4)
-    return _finish(buf, 'fight')
+def ch(scale, root, d, octv=0, seventh=False):
+    ns = [d, d + 2, d + 4] + ([d + 6] if seventh else [])
+    return [deg(scale, root, x, octv) for x in ns]
 
 
 def main():
+    import gen_songs
     os.makedirs(OUT, exist_ok=True)
-    for name in ('lobby', 'table', 'table_rev', 'rogue', 'boss', 'fight'):
-        compose(name)
-    print('→', OUT)
+    for fn in gen_songs.ALL:
+        fn()
+    print('->', OUT)
 
 
 if __name__ == '__main__':

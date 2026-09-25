@@ -258,7 +258,7 @@ func _build_missions() -> void:
 		btn.pressed.connect(func() -> void:
 			var r: Dictionary = Wallet.claim_mission(mid)
 			if not r.is_empty():
-				Audio.play("win")
+				Audio.play("coin")
 				_toast.text = "任务奖励: %+d金币 %+d钻石" % [int(r["gold"]), int(r["diamonds"])]
 			_refresh())
 		h.add_child(btn)

@@ -202,28 +202,30 @@ func _mod_no_exchange(t) -> void:
 	t.expect_eq(int(st["turn"]), ids.find(3), "乞丐先出")
 
 
-## 福祸反转: 结算身份对调(大富豪↔大贫民, 富豪↔贫民), 积分按新身份结算
+## 福祸反转: 按上一局结束的身份反转结算(0↔3, 1↔2); 首局无上局身份不触发
 func _mod_score_negate(t) -> void:
+	# 首局: identities 为空 → 不触发, 按本局出完顺序正常结算
 	var st := _match_with_mod("score_negate", 11)
 	st = _finish_three(st)
-	# 本局出完顺序 0,1,2(0 第1名) → 常规身份 0=大富豪,1=富豪,2=贫民,3=大贫民;
-	# 互换后: 0 号座变大贫民(-2), 3 号座变大富豪(+2), 1↔2 互换
-	var swap_ok := true
 	var finish: Array = st["finish_order"]
-	var want := {0: 3, 3: 0, 1: 2, 2: 1}
+	var normal_ok := true
 	for seat in 4:
-		var rank_pos := finish.find(seat)
-		var normal_id: int = mini(rank_pos, 3)   # 出完顺序即常规身份
-		if normal_id >= 3:
-			normal_id = 3
-		if int(st["identities"][seat]) != int(want[normal_id]):
-			swap_ok = false
-	t.expect(swap_ok, "福祸反转身份两两互换(大富豪↔大贫民, 富豪↔贫民)")
-	# 积分: 新大富豪(原大贫民座) +2, 新大贫民(原大富豪座) -2
-	var first: int = int(finish[0])
-	var last: int = int(finish[3])
-	t.expect_eq(int(st["last_points"][last]), 2, "原垫底互换为大富豪得 +2")
-	t.expect_eq(int(st["last_points"][first]), -2, "原第一互换为大贫民得 -2")
+		var rank_pos: int = mini(finish.find(seat), 3)
+		if int(st["identities"][seat]) != rank_pos:
+			normal_ok = false
+	t.expect(normal_ok, "福祸反转首局不触发: 按本局名次正常结算")
+	# 次局(有上局身份): 结算身份 = 上局身份两两互换, 与本局名次无关
+	var st2 := _match_with_mod("score_negate", 12)
+	var prev_ids := [1, 0, 3, 2]   # 上一局: 0=富豪 1=大富豪 2=大贫民 3=贫民
+	st2["identities"] = prev_ids.duplicate()
+	st2 = _finish_three(st2)
+	var swap := {0: 3, 3: 0, 1: 2, 2: 1}
+	for seat in 4:
+		t.expect_eq(int(st2["identities"][seat]), int(swap[int(prev_ids[seat])]),
+				"福祸反转: 座位 %d 按上局身份互换结算" % seat)
+	# 积分按互换后的新身份: 大富豪位(1号座)→-2, 大贫民位(2号座)→+2
+	t.expect_eq(int(st2["last_points"][1]), -2, "上局大富豪记大贫民得 -2")
+	t.expect_eq(int(st2["last_points"][2]), 2, "上局大贫民记大富豪得 +2")
 
 
 ## 八喜临门: 8 切时从死牌堆摸 1 张(打 1 摸 1, 死牌堆 -1)

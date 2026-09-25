@@ -590,6 +590,8 @@ const DB := {
 		"无王之地": "Land Without Jokers",
 		"免战之约": "No-Swap Pact",
 		"福祸反转": "Fortune Flip",
+		"按上一局身份反转结算: 上局大富豪记大贫民, 大贫民记大富豪, 富豪贫民互换; 首局不生效": "Settle by REVERSING last match's ranks: last Magnate scores as Beggar, Beggar as Magnate, Rich↔Commoner; no effect in game 1",
+		"命运卡: 上局身份反转": "Fate card: last ranks reversed",
 		"八喜临门": "Lucky Eights",
 		"狂暴": "Enraged!",
 		"—— 自由出牌 ——": "— Free lead —",

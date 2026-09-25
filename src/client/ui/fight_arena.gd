@@ -216,6 +216,7 @@ func _apply(v: Dictionary, events: Array) -> void:
 			if now < before:
 				_hp_flash(i)
 	if phase == "round_end" and prev_phase != "round_end":
+		_sfx("ko")
 		var rw := int(v.get("round_winner", -1))
 		var won: bool = rw == _seat_at(0) and not bool(v.get("spectator", true))
 		_banner(tr("回合胜利!") if won else tr("回合落败"),
@@ -788,11 +789,11 @@ func _play_next() -> void:
 			_projectile(_avatar_home[side] + Vector2(0, -30),
 					_avatar_home[target_side] + Vector2(0, -30), col)
 			_floater(tr("技能 -%d") % v, tx, y - 20.0, col)
-			_sfx("exchange")
+			_sfx("skill")
 		"evade":
 			_dodge(target_side)
 			_floater(tr("闪避!"), tx, y - 30.0, Color("9fd8ff"), 24)
-			_sfx("pass")
+			_sfx("dodge")
 		"enrage":
 			_enrage_fx(side)
 			_sfx("crit")
@@ -802,10 +803,12 @@ func _play_next() -> void:
 		"heal":
 			_floater("+%d" % v, x, y - 20.0, Color("7dd87d"))
 			_ring(_avatar_home[side] + Vector2(0, -20), Color("7dd87d"))
+			_sfx("heal")
 		"defend":
 			_play_action(side, "defend")
 			_ring(_avatar_home[side] + Vector2(0, -20), Color("7ec8ff"))
 			_floater(tr("防御"), x, y - 20.0, Color("7ec8ff"))
+			_sfx("guard")
 		"ult":
 			_flash()
 			_shake(16.0)
@@ -816,7 +819,7 @@ func _play_next() -> void:
 			_ring(_avatar_home[target_side] + Vector2(0, -20), AppTheme.GOLD)
 			_hit_pose(target_side)
 			_floater(tr("奥义 -%d") % v, tx, y - 30.0, AppTheme.GOLD, 30)
-			_sfx("crit")
+			_sfx("ult")
 		"chill":
 			_floater("❄ " + tr("被冻结"), tx, y, Color("9fd8ff"))
 		"burn":

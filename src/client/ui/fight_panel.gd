@@ -863,7 +863,7 @@ func _run_events(evs: Array) -> void:
 			var stxt: String = str({"fire": "烈焰", "frost": "冰霜",
 					"light": "圣光"}.get(sk, "技能"))
 			_floater("%s -%d" % [stxt, int(ev["v"])], tx, ty, Color("7ec8ff"))
-			_sfx("exchange")
+			_sfx("skill")
 		"heavy":
 			_floater(tr("重击 -%d") % int(ev["v"]), tx, ty, Color("ff5050"))
 			_enemy_strike("slam" if str(fm.enemy.get("kind")) != "mob" else "lunge")
@@ -881,13 +881,14 @@ func _run_events(evs: Array) -> void:
 			_floater(tr("荆棘 -%d") % int(ev["v"]), tx, ty, Color("7dd87d"))
 		"heal":
 			_floater(tr("+%d") % int(ev["v"]), _px(0.17), _py(0.30), Color("7dd87d"))
-			_sfx("pop")
+			_sfx("heal")
 		"defend":
 			_floater(tr("🛡 格挡 80% + 回复"), _px(0.17), _py(0.30), Color("7ec8ff"), 20)
+			_sfx("guard")
 		"ult":
 			_floater(tr("奥义 -%d") % int(ev["v"]), _px(0.68), _py(0.30), AppTheme.GOLD)
 			_shake(12.0)
-			_sfx("crit")
+			_sfx("ult")
 		"parry":
 			Audio.say("f_parry", 1.0, true)
 			_floater(tr("完美格挡! 反击 -%d") % int(ev["v"]), _px(0.68), _py(0.36), Color("7ec8ff"))
@@ -918,7 +919,7 @@ func _run_events(evs: Array) -> void:
 			_sfx("hurt")
 		"evade":
 			_floater(tr("闪避!"), _px(0.17), _py(0.26), Color("9fd8ff"), 26)
-			_sfx("pass")
+			_sfx("dodge")
 		"slip":
 			_floater(tr("敌人踉跄! 无出手"), _px(0.68), _py(0.26), Color("7dd87d"), 20)
 			_sfx("pop")
@@ -933,6 +934,7 @@ func _run_events(evs: Array) -> void:
 			_floater("❄ 冻结", _px(0.68), _py(0.36), Color("9fd8ff"))
 		"die":
 			Audio.say("f_kill", 1.0, true)
+			_sfx("ko")
 			_monster_die()
 	if kind == "heavy" or kind == "spell":
 		avatar.play_once("hit")
@@ -997,7 +999,8 @@ func _show_round_banner() -> void:
 			_show_endless_choice()   # R5 通关: 无尽选择
 		else:
 			fm.advance_round()
-		_busy = false
+			_sfx("floor")
+			_busy = false
 		_render())
 
 

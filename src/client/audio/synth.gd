@@ -115,6 +115,29 @@ static func wav(samples: PackedFloat32Array) -> AudioStreamWAV:
 	return _to_wav(samples)
 
 
+## 琶音: 依次上行的一串短音(钻石/升级/楼层类奖励音)
+static func arp(freqs: Array, note_dur := 0.07, vol := 0.26,
+		decay := 10.0, gap := 0.055) -> PackedFloat32Array:
+	var step := int(gap * RATE)
+	var total: int = step * (freqs.size() - 1) + int(note_dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(maxi(total, 1))
+	for i in freqs.size():
+		var t := tone(note_dur, float(freqs[i]), vol, decay)
+		var off := i * step
+		for j in t.size():
+			var idx := off + j
+			if idx < total:
+				out[idx] += t[j]
+	return out
+
+
+## 双音撞击(金币/购买类): 高频叮 + 泛音尾
+static func ding(f: float, vol := 0.28) -> PackedFloat32Array:
+	return mix_over(tone(0.05, f, vol, 20.0, 0.6),
+			tone(0.30, f * 1.335, vol * 0.85, 7.0), 0.045)
+
+
 # ---------------------------------------------------------------- BGM
 
 ## 五声音阶氛围垫（可变调式/密度）。16 秒无缝循环。drums=对局版加太鼓。

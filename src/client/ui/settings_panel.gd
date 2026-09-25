@@ -238,6 +238,7 @@ func _ready() -> void:
 		if import_edit.text.strip_edges().to_upper() == "TYCOON":
 			r = Wallet.redeem_tycoon_code(import_edit.text)
 			if not r.has("error"):
+				Audio.play("gem")
 				import_edit.text = ""
 				_toast.text = tr("兑换成功: +300钻石!")
 				_toast.add_theme_color_override("font_color", AppTheme.GREEN)

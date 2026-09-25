@@ -276,7 +276,7 @@ func _special_panel(item: Dictionary) -> Control:
 					buy.text = "清 空")
 			return
 		if Wallet.buy_item(id):
-			Audio.play("win")
+			Audio.play("buy")
 			_refresh()
 			_toast_msg("战绩已清空!" if effect == "clearr" else "购买成功, 已生效!")
 			else:
@@ -406,7 +406,7 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 				"使用中" if equipped else "装 备", Vector2(128, 40), 15)
 		act.disabled = equipped
 		act.pressed.connect(func() -> void:
-			Audio.play("click")
+			Audio.play("select")
 			Wallet.equip(kind, id)
 			_refresh())
 		foot.add_child(act)
@@ -421,7 +421,7 @@ func _item_panel(kind: String, item: Dictionary) -> Control:
 		buy.pressed.connect(func() -> void:
 			if Wallet.buy(kind, id, price):
 				Wallet.equip(kind, id)
-				Audio.play("win")
+				Audio.play("buy")
 				_refresh()
 				_toast_msg("购买成功, 已装备!")
 			else:
